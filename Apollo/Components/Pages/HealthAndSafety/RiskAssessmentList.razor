@@ -15,11 +15,28 @@
             <p class="text-muted">Manage operational, production, and fire safety assessments.</p>
         </div>
         <div class="d-flex gap-2">
-            @* FIX: Moved navigation to a C# method to avoid '$' character error in HTML *@
+            @* Existing General RA Button *@
             <button class="btn btn-outline-primary" @onclick="CreateNewGeneral">
                 <i class="bi bi-plus-lg me-1"></i>New General RA
             </button>
-            
+    
+            @* NEW: Fire RA Button with Room Selection *@
+            <div class="dropdown">
+                <button class="btn btn-danger dropdown-toggle shadow-sm" type="button" data-bs-toggle="dropdown">
+                    <i class="bi bi-fire me-1"></i>New Fire RA
+                </button>
+                <div class="dropdown-menu shadow border-0 p-2" style="min-width: 250px; max-height: 300px; overflow-y: auto;">
+                    <h6 class="dropdown-header fw-bold text-uppercase small">Select Room/Area</h6>
+                    @foreach (var room in allRooms)
+                    {
+                        <button class="dropdown-item rounded small" @onclick="() => StartFireRA(room.Id)">
+                            @room.Name <span class="text-muted tiny">(@room.Area?.Name)</span>
+                        </button>
+                    }
+                </div>
+            </div>
+
+            @* Existing Clone Show RA Button *@
             <div class="dropdown">
                 <button class="btn btn-primary dropdown-toggle shadow-sm" type="button" data-bs-toggle="dropdown">
                     Quick Clone Show RA
@@ -136,16 +153,22 @@
 </div>
 
 @code {
+
+    
     private List<RiskAssessment> allRAs = new();
     private List<Production> upcomingProductions = new();
     private bool isLoading = true;
+    private List<Room> allRooms = new();
 
     protected override async Task OnInitializedAsync() => await LoadData();
+
+    private void StartFireRA(int roomId) => Nav.NavigateTo($"/admin/hs/fire-risk-assessment/{roomId}");
 
     private async Task LoadData()
     {
         isLoading = true;
         using var context = await DbFactory.CreateDbContextAsync();
+        
         allRAs = await context.RiskAssessments
             .Include(r => r.Production)
             .Include(r => r.Area)
@@ -156,6 +179,9 @@
             .Where(p => p.EndDate >= DateTime.Today)
             .OrderBy(p => p.StartDate)
             .ToListAsync();
+
+        // Load rooms for the Fire RA selector
+        allRooms = await context.Rooms.Include(r => r.Area).OrderBy(r => r.Name).ToListAsync();
             
         isLoading = false;
     }

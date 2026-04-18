@@ -93,6 +93,10 @@ namespace Apollo.Data
         public DbSet<RAHazard> RAHazards { get; set; }
         public DbSet<IncidentRecord> IncidentRecords { get; set; }
 
+        public DbSet<RiskAssessmentReview> RiskAssessmentReviews { get; set; }
+        public DbSet<CoshhAssessment> CoshhAssessments { get; set; }
+        public DbSet<FireRiskAssessmentDetails> FireRiskAssessmentDetails { get; set; }
+
 
         // --- THE AUTOMATIC AUDIT LISTENER ---
         // --- THE AUTOMATIC AUDIT LISTENER ---

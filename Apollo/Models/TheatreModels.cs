@@ -791,6 +791,67 @@ namespace Apollo.Models
         public DateTime? RiddorReportedDate { get; set; }
     }
 
+    // --- Add to H&S Region ---
+
+    public class RiskAssessmentReview
+    {
+        [Key]
+        public int Id { get; set; }
+        public int RiskAssessmentId { get; set; }
+        [ForeignKey("RiskAssessmentId")]
+        public RiskAssessment? RiskAssessment { get; set; }
+
+        public DateTime ReviewDate { get; set; } = DateTime.Now;
+        public string ReviewedBy { get; set; } = string.Empty;
+        public string ReviewOutcome { get; set; } = "No Changes Required"; // or "Updated Hazards"
+        public string? Comments { get; set; }
+        public DateTime NextReviewDueDate { get; set; }
+    }
+
+    public class CoshhAssessment
+    {
+        [Key]
+        public int Id { get; set; }
+        public int SubstanceId { get; set; }
+        [ForeignKey("SubstanceId")]
+        public CoshhSubstance? Substance { get; set; }
+
+        public string TaskDescription { get; set; } = string.Empty; // e.g., "Cleaning stage floor"
+        public int? RoomId { get; set; }
+        [ForeignKey("RoomId")]
+        public Room? Room { get; set; }
+
+        // HSE Control Measures
+        public string ControlMeasures { get; set; } = string.Empty;
+        public string PPE_Required { get; set; } = "Standard Workwear"; // Gloves, Mask, Goggles
+        public string DisposalInstructions { get; set; } = "General Waste";
+
+        public DateTime AssessmentDate { get; set; } = DateTime.Now;
+        public DateTime ReviewDueDate { get; set; } = DateTime.Now.AddYears(1);
+        public bool IsApproved { get; set; }
+    }
+
+    public class FireRiskAssessmentDetails
+    {
+        [Key]
+        public int Id { get; set; }
+        public int RiskAssessmentId { get; set; }
+        [ForeignKey("RiskAssessmentId")]
+        public RiskAssessment? BaseAssessment { get; set; }
+
+        // The 5 Steps Checklist
+        public string Step1_IgnitionSources { get; set; } = string.Empty;
+        public string Step1_FuelSources { get; set; } = string.Empty;
+        public string Step2_PeopleAtRisk { get; set; } = string.Empty;
+        public string Step3_EvaluationNotes { get; set; } = string.Empty;
+        public string Step4_RecordPlanTrain { get; set; } = string.Empty;
+
+        // Theatre Specifics
+        public int MaxOccupancy { get; set; }
+        public bool FireCurtainTested { get; set; }
+        public string ExitRoutesStatus { get; set; } = "Clear";
+    }
+
     #endregion
 
 }

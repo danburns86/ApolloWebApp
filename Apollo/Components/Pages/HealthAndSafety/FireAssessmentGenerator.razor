@@ -1,0 +1,87 @@
+﻿@page "/admin/hs/fire-risk-assessment/{roomId:int}"
+@using Apollo.Models
+@using Apollo.Data
+@using Microsoft.EntityFrameworkCore
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject NavigationManager Nav
+
+<div class="container py-4 max-w-5xl">
+    <div class="mb-4">
+        <h2 class="fw-bold"><i class="bi bi-fire text-danger me-2"></i>Fire Safety Assessment</h2>
+        <p class="text-muted">Assessment for: <strong>@targetRoom?.Name</strong> (@targetRoom?.Area?.Name)</p>
+    </div>
+
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-body p-4 bg-light-subtle border-start border-4 border-danger">
+            <h6 class="fw-bold text-uppercase small mb-3">Step 1: Identify Hazards</h6>
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label class="small fw-bold">Sources of Ignition</label>
+                    <textarea class="form-control" rows="3" @bind="details.Step1_IgnitionSources" placeholder="e.g. Stage lighting, heaters, workshop sparks..."></textarea>
+                </div>
+                <div class="col-md-6">
+                    <label class="small fw-bold">Sources of Fuel</label>
+                    <textarea class="form-control" rows="3" @bind="details.Step1_FuelSources" placeholder="e.g. Scenery, costumes, prop storage..."></textarea>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card border-0 shadow-sm mb-4 p-4">
+        <h6 class="fw-bold text-uppercase small mb-3">Step 2: People at Risk</h6>
+        <textarea class="form-control mb-3" @bind="details.Step2_PeopleAtRisk" placeholder="e.g. Audience, performers with disabilities, lone workers..."></textarea>
+        
+        <div class="row align-items-center">
+            <div class="col-md-4">
+                <label class="small fw-bold">Maximum Safe Occupancy</label>
+                <input type="number" class="form-control" @bind="details.MaxOccupancy" />
+            </div>
+            <div class="col-md-8">
+                <div class="p-2 bg-info bg-opacity-10 rounded border border-info small">
+                    <i class="bi bi-info-circle-fill me-2"></i>
+                    Closest Exit for this room: <strong>@targetRoom?.NearestExit</strong>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <button class="btn btn-danger fw-bold w-100 py-3 shadow" @onclick="GenerateFireRA">
+        <i class="bi bi-clipboard-check me-2"></i>Finalise & Record Fire Assessment
+    </button>
+</div>
+
+@code {
+    [Parameter] public int roomId { get; set; }
+    private Room? targetRoom;
+    private FireRiskAssessmentDetails details = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        using var context = await DbFactory.CreateDbContextAsync();
+        targetRoom = await context.Rooms.Include(r => r.Area).FirstOrDefaultAsync(r => r.Id == roomId);
+    }
+
+    private async Task GenerateFireRA()
+    {
+        using var context = await DbFactory.CreateDbContextAsync();
+        
+        // 1. Create Base RA
+        var baseRa = new RiskAssessment
+        {
+            Title = $"FIRE RA: {targetRoom?.Name}",
+            Type = RiskAssessmentType.Fire,
+            AreaId = targetRoom?.AreaId,
+            AssessmentDate = DateTime.Now,
+            AssessedBy = "Technical Manager"
+        };
+        context.RiskAssessments.Add(baseRa);
+        await context.SaveChangesAsync();
+
+        // 2. Add Fire Details
+        details.RiskAssessmentId = baseRa.Id;
+        context.FireRiskAssessmentDetails.Add(details);
+        await context.SaveChangesAsync();
+
+        Nav.NavigateTo("/admin/hs/risk-assessments");
+    }
+}

@@ -1,0 +1,100 @@
+﻿@page "/admin/hs/coshh/assessment/{id:int}"
+@using Apollo.Models
+@using Apollo.Data
+@using Microsoft.EntityFrameworkCore
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject NavigationManager Nav
+
+<div class="container py-4 max-w-5xl">
+    <div class="mb-4">
+        <h2 class="fw-bold"><i class="bi bi-droplet-half text-primary me-2"></i>COSHH Assessment</h2>
+        <p class="text-muted">Assessing usage of: <strong>@substance?.Name</strong></p>
+    </div>
+
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-body p-4">
+            <div class="row g-3">
+                <div class="col-md-12">
+                    <label class="small fw-bold">Task Description</label>
+                    <input type="text" class="form-control" @bind="assessment.TaskDescription" placeholder="e.g. Painting floor with solvent base" />
+                </div>
+                <div class="col-md-6">
+                    <label class="small fw-bold">Specific Area/Room</label>
+                    <select class="form-select" @bind="assessment.RoomId">
+                        <option value="">-- Everywhere / All Areas --</option>
+                        @foreach (var r in allRooms)
+                        {
+                            <option value="@r.Id">@r.Name</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-6">
+                    <label class="small fw-bold">Review Date</label>
+                    <input type="date" class="form-control" @bind="assessment.ReviewDueDate" />
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-header bg-primary text-white py-3">
+            <h6 class="mb-0 fw-bold">HSE Control Measures</h6>
+        </div>
+        <div class="card-body p-4">
+            <div class="mb-3">
+                <label class="small fw-bold">How will the risk be controlled?</label>
+                <textarea class="form-control" rows="4" @bind="assessment.ControlMeasures" placeholder="e.g. Work in ventilated area, no smoking nearby..."></textarea>
+            </div>
+            <div class="row">
+                <div class="col-md-6">
+                    <label class="small fw-bold">PPE Required</label>
+                    <input type="text" class="form-control" @bind="assessment.PPE_Required" placeholder="Gloves, Eye protection, Mask..." />
+                </div>
+                <div class="col-md-6">
+                    <label class="small fw-bold">Disposal Instructions</label>
+                    <input type="text" class="form-control" @bind="assessment.DisposalInstructions" />
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <button class="btn btn-primary fw-bold w-100 py-3 shadow" @onclick="SaveAssessment">
+        <i class="bi bi-shield-check me-2"></i>Finalise COSHH Assessment
+    </button>
+</div>
+
+@code {
+    [Parameter] public int id { get; set; }
+    [SupplyParameterFromQuery] public int subId { get; set; }
+
+    private CoshhAssessment assessment = new();
+    private CoshhSubstance? substance;
+    private List<Room> allRooms = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        using var context = await DbFactory.CreateDbContextAsync();
+        allRooms = await context.Rooms.OrderBy(r => r.Name).ToListAsync();
+
+        if (id != 0)
+        {
+            assessment = await context.CoshhAssessments.Include(a => a.Substance).FirstAsync(a => a.Id == id);
+            substance = assessment.Substance;
+        }
+        else
+        {
+            substance = await context.CoshhSubstances.FindAsync(subId);
+            assessment = new CoshhAssessment { SubstanceId = subId, ReviewDueDate = DateTime.Today.AddYears(1) };
+        }
+    }
+
+    private async Task SaveAssessment()
+    {
+        using var context = await DbFactory.CreateDbContextAsync();
+        if (assessment.Id == 0) context.CoshhAssessments.Add(assessment);
+        else context.CoshhAssessments.Update(assessment);
+
+        await context.SaveChangesAsync();
+        Nav.NavigateTo("/admin/hs/coshh");
+    }
+}

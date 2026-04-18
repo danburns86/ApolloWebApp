@@ -1,0 +1,195 @@
+﻿@page "/admin/hs/coshh"
+@using Apollo.Models
+@using Apollo.Data
+@using Microsoft.EntityFrameworkCore
+@using Microsoft.AspNetCore.Hosting
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject IWebHostEnvironment Environment
+@inject NavigationManager Nav
+
+<PageTitle>COSHH Substance Registry</PageTitle>
+
+<div class="container-fluid px-4 py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="fw-bold mb-0">COSHH Registry</h2>
+            <p class="text-muted">Hazardous substances and Safety Data Sheets (SDS).</p>
+        </div>
+        <button class="btn btn-primary shadow-sm" @onclick="() => OpenModal()">
+            <i class="bi bi-plus-lg me-1"></i>Add Substance
+        </button>
+    </div>
+
+    @if (isLoading)
+    {
+        <div class="text-center py-5"><div class="spinner-border text-primary"></div></div>
+    }
+    else
+    {
+        <div class="row g-4">
+            @foreach (var sub in substances)
+            {
+                <div class="col-xl-4 col-md-6">
+                    <div class="card border-0 shadow-sm h-100">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between mb-2">
+                                <h5 class="fw-bold mb-0">@sub.Name</h5>
+                                <div class="dropdown">
+                                    <button class="btn btn-sm btn-light" data-bs-toggle="dropdown"><i class="bi bi-three-dots-vertical"></i></button>
+                                    <ul class="dropdown-menu">
+                                        <li><button class="dropdown-item" @onclick="() => OpenModal(sub)">Edit Details</button></li>
+                                        <li><button class="dropdown-item text-primary" @onclick="() => CreateAssessment(sub.Id)">New Assessment</button></li>
+                                    </ul>
+                                </div>
+                            </div>
+                            <p class="small text-muted mb-3">Manufacturer: @sub.Manufacturer</p>
+
+                            <div class="d-flex flex-wrap gap-1 mb-3">
+                                @if (!string.IsNullOrEmpty(sub.HazardPictograms))
+                                {
+                                    @foreach (var pic in sub.HazardPictograms.Split(','))
+                                    {
+                                        <span class="badge bg-warning text-dark border border-dark tiny">@pic.Trim()</span>
+                                    }
+                                }
+                            </div>
+
+                            @if (!string.IsNullOrEmpty(sub.MsdsFilePath))
+                            {
+                                <a href="@sub.MsdsFilePath" target="_blank" class="btn btn-sm btn-outline-danger w-100 mb-2">
+                                    <i class="bi bi-file-earmark-pdf me-1"></i>View Safety Data Sheet
+                                </a>
+                            }
+                            else
+                            {
+                                <div class="alert alert-warning py-1 px-2 mb-2 small"><i class="bi bi-exclamation-triangle me-1"></i>No MSDS Uploaded</div>
+                            }
+                        </div>
+                        <div class="card-footer bg-light border-0 text-center">
+                            <button class="btn btn-sm btn-link text-decoration-none" @onclick="() => ViewAssessments(sub.Id)">
+                                <i class="bi bi-clipboard2-check me-1"></i>Assessments for this product
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@* --- ADD/EDIT MODAL --- *@
+@if (showModal)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content border-0 shadow-lg">
+                <div class="modal-header bg-dark text-white">
+                    <h5 class="modal-title fw-bold">Substance Information</h5>
+                    <button type="button" class="btn-close btn-close-white" @onclick="() => showModal = false"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="small fw-bold">Substance/Product Name</label>
+                            <input type="text" class="form-control" @bind="editingSub.Name" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="small fw-bold">Manufacturer</label>
+                            <input type="text" class="form-control" @bind="editingSub.Manufacturer" />
+                        </div>
+                        <div class="col-12">
+                            <label class="small fw-bold">Hazard Pictograms (Comma Separated)</label>
+                            <input type="text" class="form-control" @bind="editingSub.HazardPictograms" placeholder="Flammable, Toxic, Irritant..." />
+                        </div>
+                        <div class="col-12">
+                            <label class="small fw-bold">MSDS Expiry (optional)</label>
+                            <input type="date" class="form-control" @bind="editingSub.MsdsExpiry" />
+                        </div>
+                        <div class="col-12">
+                            <label class="small fw-bold">Standard Use Instructions</label>
+                            <textarea class="form-control" rows="3" @bind="editingSub.UseInstructions"></textarea>
+                        </div>
+                        <div class="col-12">
+                            <label class="small fw-bold">Upload Safety Data Sheet (PDF)</label>
+                            <InputFile OnChange="HandleFileSelected" class="form-control" accept=".pdf" />
+                            @if (isUploading)
+                            {
+                                <div class="mt-2 small text-info"><div class="spinner-border spinner-border-sm"></div> Uploading...</div>
+                            }
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" @onclick="() => showModal = false">Cancel</button>
+                    <button class="btn btn-primary px-4 fw-bold" @onclick="SaveSubstance">Save Substance</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<CoshhSubstance> substances = new();
+    private bool isLoading = true;
+    private bool showModal = false;
+    private bool isUploading = false;
+    private CoshhSubstance editingSub = new();
+    private IBrowserFile? selectedFile;
+
+    protected override async Task OnInitializedAsync() => await LoadData();
+
+    private async Task LoadData()
+    {
+        isLoading = true;
+        using var context = await DbFactory.CreateDbContextAsync();
+        substances = await context.CoshhSubstances.OrderBy(s => s.Name).ToListAsync();
+        isLoading = false;
+    }
+
+    private void OpenModal(CoshhSubstance? sub = null)
+    {
+        editingSub = sub ?? new CoshhSubstance();
+        showModal = true;
+    }
+
+    private void HandleFileSelected(InputFileChangeEventArgs e) => selectedFile = e.File;
+
+    private async Task SaveSubstance()
+    {
+        if (string.IsNullOrWhiteSpace(editingSub.Name)) return;
+
+        if (selectedFile != null)
+        {
+            isUploading = true;
+            var uploadsPath = Path.Combine(Environment.WebRootPath, "uploads", "msds");
+            if (!Directory.Exists(uploadsPath)) Directory.CreateDirectory(uploadsPath);
+
+            var fileName = $"{Guid.NewGuid()}_{selectedFile.Name}";
+            var path = Path.Combine(uploadsPath, fileName);
+
+            await using var stream = selectedFile.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024);
+            await using var fileStream = new FileStream(path, FileMode.Create);
+            await stream.CopyToAsync(fileStream);
+
+            editingSub.MsdsFilePath = $"/uploads/msds/{fileName}";
+        }
+
+        using var context = await DbFactory.CreateDbContextAsync();
+        if (editingSub.Id == 0) context.CoshhSubstances.Add(editingSub);
+        else context.CoshhSubstances.Update(editingSub);
+
+        await context.SaveChangesAsync();
+        showModal = false;
+        isUploading = false;
+        await LoadData();
+    }
+
+    private void CreateAssessment(int subId) => Nav.NavigateTo($"/admin/hs/coshh/assessment/0?subId={subId}");
+    private void ViewAssessments(int subId) => Nav.NavigateTo($"/admin/hs/coshh/assessments-list?subId={subId}");
+}
+
+<style>
+    .tiny {
+        font-size: 0.65rem;
+    }
+</style>
