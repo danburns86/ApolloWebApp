@@ -581,6 +581,8 @@ namespace Apollo.Models
         public string? InternalNotes { get; set; }
         public string? DriveLink { get; set; }
 
+        public List<Performance> Performances { get; set; } = new();
+
         public List<ProductionCrew> CrewAssignments { get; set; } = new();
         public List<ProductionCredit> Credits { get; set; } = new();
         public List<ProductionEvent> Events { get; set; } = new();
@@ -608,6 +610,8 @@ namespace Apollo.Models
         public Member? Member { get; set; }
         public string? ExternalName { get; set; }
         public bool IsFullRun { get; set; } = true;
+
+        public Production? Production { get; set; }
     }
 
     public class ProductionEvent

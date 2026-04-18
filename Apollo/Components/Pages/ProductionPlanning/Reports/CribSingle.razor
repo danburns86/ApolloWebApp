@@ -157,18 +157,20 @@
 
     private async Task Print() => await JS.InvokeVoidAsync("window.print");
 
-    private async Task ExportToWord()
-    {
-        var filename = $"{selectedProd?.Title.Replace(" ", "_")}_Crib_Sheet.doc";
-        await JS.InvokeVoidAsync("eval", $@"
-            var header = '<html xmlns:o=""urn:schemas-microsoft-com:office:office"" xmlns:w=""urn:schemas-microsoft-com:office:word"" xmlns=""http://www.w3.org/TR/REC-html40""><head><meta charset=""utf-8""></head><body>';
-            var footer = '</body></html>';
-            var sourceHTML = header + document.getElementById('reportContent').innerHTML + footer;
-            var source = 'data:application/vnd.ms-word;charset=utf-8,' + encodeURIComponent(sourceHTML);
-            var fileLink = document.createElement('a');
-            fileLink.href = source;
-            fileLink.download = '{filename}';
-            fileLink.click();
-        ");
-    }
+private async Task ExportToWord()
+{
+    var filename = $"{(selectedProd?.Title ?? "Production")}_Crib_Sheet.doc";
+    
+    // We use @ and triple-quotes to keep the JavaScript clean for the compiler
+    await JS.InvokeVoidAsync("eval", $@"
+        var header = '<html xmlns:o=""urn:schemas-microsoft-com:office:office"" xmlns:w=""urn:schemas-microsoft-com:office:word"" xmlns=""http://www.w3.org/TR/REC-html40""><head><meta charset=""utf-8""></head><body>';
+        var footer = '</body></html>';
+        var sourceHTML = header + document.getElementById('reportContent').innerHTML + footer;
+        var source = 'data:application/vnd.ms-word;charset=utf-8,' + encodeURIComponent(sourceHTML);
+        var fileLink = document.createElement('a');
+        fileLink.href = source;
+        fileLink.download = '{filename}';
+        fileLink.click();
+    ");
+}
 }

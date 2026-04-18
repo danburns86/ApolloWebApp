@@ -13,8 +13,8 @@
             <p class="text-muted">Combined technical data for upcoming productions.</p>
         </div>
         <div class="d-flex gap-2">
-            <button class="btn btn-outline-dark" @onclick="() => JS.InvokeVoidAsync("window.print")"><i class="bi bi-printer me-2"></i>Print</button>
-            <a href="/reports/Production/Crib" class="btn btn-secondary">Single Select View</a>
+<button class="btn btn-outline-dark" @onclick="PrintReport"><i class="bi bi-printer me-2"></i>Print</button>
+<a href="/reports/Production/Crib" class="btn btn-secondary">Single Select View</a>
         </div>
     </div>
 
@@ -97,4 +97,7 @@
             .OrderBy(p => p.StartDate)
             .ToListAsync();
     }
+
+    private async Task PrintReport() => await JS.InvokeVoidAsync("window.print");
+
 }
