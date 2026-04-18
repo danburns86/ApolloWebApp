@@ -1,0 +1,212 @@
+﻿@page "/reports/Production/Gaps"
+@using Apollo.Models
+@using Apollo.Data
+@using Microsoft.EntityFrameworkCore
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject IJSRuntime JS
+
+<PageTitle>Crew Gaps Report</PageTitle>
+
+<div class="container py-4 max-w-6xl no-print">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="fw-bold mb-0 text-danger">Crew Gaps Report</h2>
+            <p class="text-muted">Identifying required roles with no assigned personnel.</p>
+        </div>
+        <div class="d-flex gap-2">
+            <button class="btn btn-outline-dark" @onclick="PrintReport"><i class="bi bi-printer me-2"></i>Print / PDF</button>
+            <button class="btn btn-outline-primary" @onclick="ExportToWord"><i class="bi bi-file-earmark-word me-2"></i>Word</button>
+        </div>
+    </div>
+
+    @* --- FILTER BAR --- *@
+    <div class="card border-0 shadow-sm mb-4 bg-light">
+        <div class="card-body">
+            <div class="row g-3 align-items-end">
+                <div class="col-md-3">
+                    <label class="small fw-bold">From</label>
+                    <input type="date" class="form-control" @bind="dateFrom" />
+                </div>
+                <div class="col-md-3">
+                    <label class="small fw-bold">To</label>
+                    <input type="date" class="form-control" @bind="dateTo" />
+                </div>
+                <div class="col-md-4">
+                    <label class="small fw-bold">Categories</label>
+                    <div class="dropdown">
+                        <button class="btn btn-white border w-100 text-start dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                            @(selectedCategoryIds.Any() ? $"{selectedCategoryIds.Count} Selected" : "All Categories")
+                        </button>
+                        <div class="dropdown-menu p-3" style="min-width: 250px;">
+                            @foreach (var cat in categories)
+                            {
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="cat_@cat.Id" 
+                                           checked="@selectedCategoryIds.Contains(cat.Id)"
+                                           @onchange="(e) => ToggleCategory(cat.Id, e)" />
+                                    <label class="form-check-label" for="cat_@cat.Id">@cat.Name</label>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <button class="btn btn-dark w-100" @onclick="LoadReport">Run Report</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@* --- THE REPORT VIEW --- *@
+<div id="reportContent" class="report-paper shadow-lg p-5 mx-auto bg-white mb-5">
+    <div class="report-header text-center border-bottom pb-4 mb-4">
+        <h1 class="fw-bold">CREW GAPS REPORT</h1>
+        <p class="mb-0">Run Date: @DateTime.Now.ToString("dd MMM yyyy")</p>
+        <p class="text-muted small">Range: @dateFrom.ToShortDateString() to @dateTo.ToShortDateString()</p>
+    </div>
+
+    @if (reportData == null)
+    {
+        <div class="text-center py-5 no-print"><div class="spinner-border text-primary"></div></div>
+    }
+    else if (!reportData.Any())
+    {
+        <div class="alert alert-success text-center py-5">
+            <i class="bi bi-check-circle fs-1 d-block mb-3"></i>
+            <h5 class="fw-bold">No Gaps Found!</h5>
+            <p class="mb-0">All required roles are currently filled for the selected range.</p>
+        </div>
+    }
+    else
+    {
+        <table class="table table-bordered align-middle">
+            <thead class="table-dark">
+                <tr>
+                    <th>Show / Performance</th>
+                    <th>Category</th>
+                    <th>Missing Required Role</th>
+                    <th>Tech Requirements Note</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var item in reportData)
+                {
+                    <tr>
+                        <td>
+                            <div class="fw-bold">@item.ProductionTitle</div>
+                            <div class="small text-muted">Starts: @item.StartDate.ToString("dd MMM")</div>
+                        </td>
+                        <td><span class="badge bg-secondary">@item.CategoryName</span></td>
+                        <td class="text-danger fw-bold">
+                            <i class="bi bi-exclamation-triangle me-2"></i>@item.RoleName
+                        </td>
+                        <td class="small text-muted">@(item.TechNote?.Length > 50 ? item.TechNote.Substring(0, 50) + "..." : item.TechNote)</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+    
+    <div class="report-footer mt-5 pt-4 border-top text-center small text-muted">
+        Apollo Theatre Management System - Personnel Integrity Report
+    </div>
+</div>
+
+<style>
+    @@media print {
+        .no-print { display: none !important; }
+        .report-paper { 
+            box-shadow: none !important; 
+            padding: 0 !important; 
+            margin: 0 !important; 
+            width: 100% !important; 
+        }
+        body { background: white !important; }
+    }
+
+    .report-paper {
+        max-width: 210mm; /* A4 Width */
+        min-height: 297mm;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+
+    .btn-white { background: white; border-color: #dee2e6; }
+</style>
+
+@code {
+    private DateTime dateFrom = DateTime.Today;
+    private DateTime dateTo = DateTime.Today.AddDays(30);
+    private List<int> selectedCategoryIds = new();
+    private List<ProductionCategory> categories = new();
+    private List<GapReportItem>? reportData;
+
+    protected override async Task OnInitializedAsync()
+    {
+        using var context = await DbFactory.CreateDbContextAsync();
+        categories = await context.ProductionCategories.ToListAsync();
+        await LoadReport();
+    }
+
+    private void ToggleCategory(int id, ChangeEventArgs e)
+    {
+        if ((bool)e.Value!) selectedCategoryIds.Add(id);
+        else selectedCategoryIds.Remove(id);
+    }
+
+    private async Task LoadReport()
+    {
+        reportData = null;
+        using var context = await DbFactory.CreateDbContextAsync();
+
+        var query = context.ProductionCrews
+            .Include(c => c.Production).ThenInclude(p => p!.Category)
+            .Include(c => c.Role)
+            .Where(c => c.IsRequired)
+            .Where(c => c.MemberId == null && string.IsNullOrEmpty(c.ExternalName))
+            .Where(c => c.Production!.StartDate >= dateFrom && c.Production.StartDate <= dateTo);
+
+        if (selectedCategoryIds.Any())
+        {
+            query = query.Where(c => selectedCategoryIds.Contains(c.Production!.CategoryId));
+        }
+
+        var results = await query.ToListAsync();
+
+        reportData = results.Select(c => new GapReportItem {
+            ProductionTitle = c.Production!.Title,
+            StartDate = c.Production.StartDate,
+            CategoryName = c.Production.Category?.Name ?? "N/A",
+            RoleName = c.Role?.Name ?? c.CustomRoleName ?? "Unknown Role",
+            TechNote = c.Production.TechRequirements
+        }).OrderBy(r => r.StartDate).ToList();
+    }
+
+    private async Task PrintReport() => await JS.InvokeVoidAsync("window.print");
+
+    private async Task ExportToWord()
+    {
+        // A simple JS function to wrap HTML in Word-friendly XML and trigger download
+        await JS.InvokeVoidAsync("eval", @"
+            var header = '<html xmlns:o=""urn:schemas-microsoft-com:office:office"" xmlns:w=""urn:schemas-microsoft-com:office:word"" xmlns=""http://www.w3.org/TR/REC-html40""><head><meta charset=""utf-8""><title>Export</title></head><body>';
+            var footer = '</body></html>';
+            var sourceHTML = header + document.getElementById('reportContent').innerHTML + footer;
+            
+            var source = 'data:application/vnd.ms-word;charset=utf-8,' + encodeURIComponent(sourceHTML);
+            var fileLink = document.createElement('a');
+            fileLink.href = source;
+            fileLink.download = 'Crew_Gaps_Report.doc';
+            fileLink.click();
+        ");
+    }
+
+    public class GapReportItem
+    {
+        public string ProductionTitle { get; set; } = "";
+        public DateTime StartDate { get; set; }
+        public string CategoryName { get; set; } = "";
+        public string RoleName { get; set; } = "";
+        public string? TechNote { get; set; }
+    }
+}

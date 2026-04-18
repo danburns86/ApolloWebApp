@@ -1,0 +1,100 @@
+﻿@page "/reports/Production/CribBulk"
+@using Apollo.Models
+@using Apollo.Data
+@using Microsoft.EntityFrameworkCore
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject IJSRuntime JS
+
+<div class="container py-4 max-w-6xl no-print">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="fw-bold mb-0 text-primary">Bulk Tech Overview</h2>
+            <p class="text-muted">Combined technical data for upcoming productions.</p>
+        </div>
+        <div class="d-flex gap-2">
+            <button class="btn btn-outline-dark" @onclick="() => JS.InvokeVoidAsync("window.print")"><i class="bi bi-printer me-2"></i>Print</button>
+            <a href="/reports/Production/Crib" class="btn btn-secondary">Single Select View</a>
+        </div>
+    </div>
+
+    <div class="card border-0 shadow-sm bg-light mb-4">
+        <div class="card-body row g-3 align-items-end">
+            <div class="col-md-4">
+                <label class="small fw-bold">From</label>
+                <input type="date" class="form-control" @bind="dateFrom" />
+            </div>
+            <div class="col-md-4">
+                <label class="small fw-bold">To</label>
+                <input type="date" class="form-control" @bind="dateTo" />
+            </div>
+            <div class="col-md-4">
+                <button class="btn btn-dark w-100" @onclick="LoadReport">Filter Shows</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="reportContent" class="mx-auto" style="max-width: 210mm;">
+    @foreach (var p in reportData)
+    {
+        <div class="report-paper shadow-sm p-4 bg-white mb-5 border-start border-5 border-primary page-break">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h3 class="fw-bold mb-0">@p.Title</h3>
+                <span class="badge bg-dark">@p.Category?.Name</span>
+            </div>
+            
+            <div class="row small">
+                <div class="col-md-7">
+                    <p class="mb-1"><strong>Dates:</strong> @p.StartDate.ToShortDateString() - @p.EndDate.ToShortDateString()</p>
+                    <p class="mb-3"><strong>Tech Summary:</strong> @(p.TechRequirements?.Length > 200 ? p.TechRequirements.Substring(0,200) + "..." : p.TechRequirements)</p>
+                    
+                    <h6 class="fw-bold x-small text-uppercase">Lead Crew</h6>
+                    <ul class="list-unstyled">
+                        @foreach(var c in p.CrewAssignments.Take(4))
+                        {
+                            <li><strong>@(c.Role?.Name ?? "Crew"):</strong> @(c.Member?.FullName ?? c.ExternalName ?? "TBC")</li>
+                        }
+                    </ul>
+                </div>
+                <div class="col-md-5 bg-light p-2 rounded">
+                    <h6 class="fw-bold x-small text-uppercase">Upcoming Schedule</h6>
+                    @foreach(var ev in p.Events.OrderBy(e => e.EventDate).Take(5))
+                    {
+                        <div class="x-small border-bottom py-1">
+                            <span class="text-muted">@ev.EventDate.ToString("dd/MM HH:mm")</span> - <strong>@ev.EventType?.Name</strong>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+<style>
+    .report-paper { page-break-inside: avoid; }
+    .page-break { page-break-after: always; }
+    .x-small { font-size: 11px; }
+    @@media print { .no-print { display: none !important; } }
+</style>
+
+@code {
+    private DateTime dateFrom = DateTime.Today;
+    private DateTime dateTo = DateTime.Today.AddDays(14);
+    private List<Production> reportData = new();
+
+    protected override async Task OnInitializedAsync() => await LoadReport();
+
+    private async Task LoadReport()
+    {
+        using var context = await DbFactory.CreateDbContextAsync();
+        reportData = await context.Productions
+            .Include(p => p.Category)
+            .Include(p => p.CrewAssignments).ThenInclude(c => c.Role)
+            .Include(p => p.CrewAssignments).ThenInclude(c => c.Member)
+            .Include(p => p.Events).ThenInclude(ev => ev.EventType)
+            .Where(p => p.StartDate >= dateFrom && p.StartDate <= dateTo)
+            .OrderBy(p => p.StartDate)
+            .ToListAsync();
+    }
+}

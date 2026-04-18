@@ -1,0 +1,174 @@
+﻿@page "/reports/Production/Crib"
+@using Apollo.Models
+@using Apollo.Data
+@using Microsoft.EntityFrameworkCore
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject IJSRuntime JS
+
+<div class="container py-4 max-w-6xl no-print">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="fw-bold mb-0">Tech Crib Sheet</h2>
+            <p class="text-muted">Generate a dedicated technical briefing for a specific production.</p>
+        </div>
+        <div class="d-flex gap-2">
+            <button class="btn btn-outline-dark" @onclick="Print"><i class="bi bi-printer me-2"></i>Print</button>
+            <button class="btn btn-outline-primary" @onclick="ExportToWord"><i class="bi bi-file-earmark-word me-2"></i>Word</button>
+            <a href="/reports/Production/CribBulk" class="btn btn-secondary">Switch to Bulk View</a>
+        </div>
+    </div>
+
+    <div class="card border-0 shadow-sm mb-4 bg-light">
+        <div class="card-body">
+            <label class="small fw-bold">Select Production</label>
+            <select class="form-select form-select-lg" @onchange="OnProductionSelected">
+                <option value="0">-- Choose a Production --</option>
+                @foreach (var p in allProductions)
+                {
+                    <option value="@p.Id">@p.Title (@p.StartDate.ToString("MMM yyyy"))</option>
+                }
+            </select>
+        </div>
+    </div>
+</div>
+
+@if (selectedProd != null)
+{
+    <div id="reportContent" class="report-paper shadow-lg p-5 mx-auto bg-white mb-5">
+        <div class="d-flex justify-content-between align-items-start border-bottom pb-3 mb-4">
+            <div>
+                <h1 class="fw-bold mb-0">@selectedProd.Title</h1>
+                <h5 class="text-primary">@selectedProd.Category?.Name</h5>
+            </div>
+            <div class="text-end">
+                <div class="fw-bold">@selectedProd.StartDate.ToString("dd MMM") - @selectedProd.EndDate.ToString("dd MMM yyyy")</div>
+                <div class="small text-muted">Generated: @DateTime.Now.ToString("g")</div>
+            </div>
+        </div>
+
+        @if (selectedProd.Category?.IsExternal == true)
+        {
+            <div class="alert alert-info border-0 rounded-0 mb-4 py-3">
+                <h6 class="fw-bold text-uppercase small mb-2"><i class="bi bi-info-circle me-2"></i>External Hire Details</h6>
+                <div class="row">
+                    <div class="col-4"><strong>Hirer:</strong> @selectedProd.HirerName</div>
+                    <div class="col-4"><strong>Access:</strong> @(selectedProd.AccessTime.HasValue ? selectedProd.AccessTime.Value.ToString("HH:mm") : "TBC")</div>
+                    <div class="col-4"><strong>Our Crew:</strong> @(selectedProd.OurCrew ? "YES" : "NO (Hirer Providing)")</div>
+                </div>
+            </div>
+        }
+
+        <div class="row g-4">
+            <div class="col-12">
+                <h6 class="fw-bold border-bottom pb-1 text-uppercase small">Technical Summary & Requirements</h6>
+                <div class="p-3 bg-light rounded" style="white-space: pre-wrap;">
+                    @(string.IsNullOrWhiteSpace(selectedProd.TechRequirements) ? "No specific technical notes provided." : selectedProd.TechRequirements)
+                </div>
+            </div>
+
+            <div class="col-md-6">
+                <h6 class="fw-bold border-bottom pb-1 text-uppercase small">Production Team / Crew</h6>
+                <table class="table table-sm small">
+                    <thead><tr><th>Role</th><th>Assignee</th><th>Contact</th></tr></thead>
+                    <tbody>
+                        @foreach (var crew in selectedProd.CrewAssignments)
+                        {
+                            <tr>
+                                <td class="fw-bold">@(crew.Role?.Name ?? crew.CustomRoleName)</td>
+                                <td>@(crew.Member?.FullName ?? crew.ExternalName ?? "VACANT")</td>
+                                <td>
+                                    @if (crew.Member != null)
+                                    {
+                                        <div class="x-small">@crew.Member.Email</div>
+                                        <div class="x-small">@crew.Member.MobileNumber</div>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="col-md-6">
+                <h6 class="fw-bold border-bottom pb-1 text-uppercase small">Schedule & Key Events</h6>
+                <table class="table table-sm small">
+                    <thead><tr><th>Date</th><th>Event</th><th>Note</th></tr></thead>
+                    <tbody>
+                        @foreach (var ev in selectedProd.Events.OrderBy(e => e.EventDate))
+                        {
+                            <tr>
+                                <td>@ev.EventDate.ToString("ddd dd MMM HH:mm")</td>
+                                <td class="fw-bold">@ev.EventType?.Name</td>
+                                <td>@ev.Notes</td>
+                            </tr>
+                        }
+                        @foreach (var perf in selectedProd.Performances.OrderBy(p => p.CurtainUp))
+                        {
+                            <tr class="table-primary">
+                                <td>@perf.CurtainUp.ToString("ddd dd MMM HH:mm")</td>
+                                <td class="fw-bold">SHOW: @perf.PerformanceTitle</td>
+                                <td>@perf.ScheduleNotes</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="mt-5 pt-3 border-top small text-muted text-center">
+            Apollo Theatre Management System - Technical Department
+        </div>
+    </div>
+}
+
+<style>
+    .report-paper { max-width: 210mm; min-height: 297mm; font-size: 14px; }
+    .x-small { font-size: 10px; color: #666; }
+    @@media print { .no-print { display: none !important; } .shadow-lg { box-shadow: none !important; } }
+</style>
+
+@code {
+    private List<Production> allProductions = new();
+    private Production? selectedProd;
+
+    protected override async Task OnInitializedAsync()
+    {
+        using var context = await DbFactory.CreateDbContextAsync();
+        allProductions = await context.Productions
+            .OrderByDescending(p => p.StartDate)
+            .ToListAsync();
+    }
+
+    private async Task OnProductionSelected(ChangeEventArgs e)
+    {
+        int id = int.Parse(e.Value?.ToString() ?? "0");
+        if (id == 0) { selectedProd = null; return; }
+
+        using var context = await DbFactory.CreateDbContextAsync();
+        selectedProd = await context.Productions
+            .Include(p => p.Category)
+            .Include(p => p.CrewAssignments).ThenInclude(c => c.Role)
+            .Include(p => p.CrewAssignments).ThenInclude(c => c.Member)
+            .Include(p => p.Events).ThenInclude(ev => ev.EventType)
+            .Include(p => p.Performances)
+            .FirstOrDefaultAsync(p => p.Id == id);
+    }
+
+    private async Task Print() => await JS.InvokeVoidAsync("window.print");
+
+    private async Task ExportToWord()
+    {
+        var filename = $"{selectedProd?.Title.Replace(" ", "_")}_Crib_Sheet.doc";
+        await JS.InvokeVoidAsync("eval", $@"
+            var header = '<html xmlns:o=""urn:schemas-microsoft-com:office:office"" xmlns:w=""urn:schemas-microsoft-com:office:word"" xmlns=""http://www.w3.org/TR/REC-html40""><head><meta charset=""utf-8""></head><body>';
+            var footer = '</body></html>';
+            var sourceHTML = header + document.getElementById('reportContent').innerHTML + footer;
+            var source = 'data:application/vnd.ms-word;charset=utf-8,' + encodeURIComponent(sourceHTML);
+            var fileLink = document.createElement('a');
+            fileLink.href = source;
+            fileLink.download = '{filename}';
+            fileLink.click();
+        ");
+    }
+}
