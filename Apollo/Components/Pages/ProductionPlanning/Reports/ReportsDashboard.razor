@@ -17,91 +17,76 @@
               </ol>
             </nav>
             <h2 class="fw-bold mb-0 text-dark">Production Reporting</h2>
-            <p class="text-muted mb-0">Specialized exports for show personnel, marketing, and technical riders.</p>
+            <p class="text-muted mb-0">Operational, technical, and marketing exports.</p>
         </div>
         <div class="text-end">
-            <i class="bi bi-bar-chart-line fs-1 text-primary opacity-25"></i>
+            <i class="bi bi-file-earmark-bar-graph fs-1 text-primary opacity-25"></i>
         </div>
     </div>
 
     <div class="row g-4">
-        @* 1. THE TECH WING *@
-        <div class="col-md-6">
-            <h6 class="fw-bold mb-3 text-uppercase small text-muted"><i class="bi bi-wrench-adjustable me-2"></i>Technical & Logistics</h6>
+        @* --- 1. TECHNICAL & BACKSTAGE --- *@
+        <div class="col-md-4">
+            <h6 class="fw-bold mb-3 text-uppercase small text-muted"><i class="bi bi-tools me-2"></i>Technical & Stage</h6>
             <div class="list-group shadow-sm border-0">
-                <a href="/reports/Production/Crib" class="list-group-item list-group-item-action p-4">
-                    <div class="d-flex w-100 justify-content-between align-items-center">
-                        <div>
-                            <h6 class="fw-bold mb-1">Production Crib Sheet</h6>
-                            <p class="mb-0 small text-muted">A "one-pager" for Duty Techs/SMs. Includes hire info, access times, and full tech rider.</p>
-                        </div>
-                        <i class="bi bi-printer fs-4 text-primary"></i>
-                    </div>
+                <a href="/reports/Production/Crib" class="list-group-item list-group-item-action p-3">
+                    <h6 class="fw-bold mb-1">Tech Crib Sheet</h6>
+                    <p class="mb-0 small text-muted">Single-show "bible" with rider and contacts.</p>
                 </a>
-                <a href="/reports/Production/Rota" class="list-group-item list-group-item-action p-4">
-                    <div class="d-flex w-100 justify-content-between align-items-center">
-                        <div>
-                            <h6 class="fw-bold mb-1">Crew Rota & Dep List</h6>
-                            <p class="mb-0 small text-muted">Master crew assignments vs. night-by-night performance overrides.</p>
-                        </div>
-                        <i class="bi bi-people fs-4 text-primary"></i>
-                    </div>
+                <a href="/reports/Production/CribBulk" class="list-group-item list-group-item-action p-3">
+                    <h6 class="fw-bold mb-1">Bulk Tech Overview</h6>
+                    <p class="mb-0 small text-muted">Technical summaries for a date range.</p>
+                </a>
+                <a href="/reports/Production/Rota" class="list-group-item list-group-item-action p-3">
+                    <h6 class="fw-bold mb-1">Crew Rota & Deps</h6>
+                    <p class="mb-0 small text-muted">Master lists vs. nightly stand-ins.</p>
+                </a>
+                <a href="/reports/Production/KeyIssueLog" class="list-group-item list-group-item-action p-3 bg-light-subtle">
+                    <h6 class="fw-bold mb-1 text-primary">Key Issue Log</h6>
+                    <p class="mb-0 small text-muted">Daily signature sheet for Stage Door security.</p>
                 </a>
             </div>
         </div>
 
-        @* 2. THE MARKETING WING *@
-        <div class="col-md-6">
-            <h6 class="fw-bold mb-3 text-uppercase small text-muted"><i class="bi bi-megaphone me-2"></i>Programme & Marketing</h6>
+        @* --- 2. FRONT OF HOUSE & MARKETING --- *@
+        <div class="col-md-4">
+            <h6 class="fw-bold mb-3 text-uppercase small text-muted"><i class="bi bi-person-badge me-2"></i>FOH & Marketing</h6>
             <div class="list-group shadow-sm border-0">
-                <a href="/reports/Production/Programme" class="list-group-item list-group-item-action p-4">
-                    <div class="d-flex w-100 justify-content-between align-items-center">
-                        <div>
-                            <h6 class="fw-bold mb-1">Programme Export</h6>
-                            <p class="mb-0 small text-muted">High-density text list of crew and programme extras for the designer.</p>
-                        </div>
-                        <i class="bi bi-file-earmark-text fs-4 text-success"></i>
-                    </div>
+                <a href="/reports/Production/FOHBriefing" class="list-group-item list-group-item-action p-3 border-start-info">
+                    <h6 class="fw-bold mb-1 text-info">FOH Briefing Sheet</h6>
+                    <p class="mb-0 small text-muted">Times, duration, and content warnings for Bar/Ushers.</p>
                 </a>
-                <a href="/reports/Production/Overview" class="list-group-item list-group-item-action p-4">
-                    <div class="d-flex w-100 justify-content-between align-items-center">
-                        <div>
-                            <h6 class="fw-bold mb-1">Seasonal Overview</h6>
-                            <p class="mb-0 small text-muted">A headline-only list of all upcoming shows across all categories.</p>
-                        </div>
-                        <i class="bi bi-calendar3 fs-4 text-success"></i>
-                    </div>
+                <a href="/reports/Production/Programme" class="list-group-item list-group-item-action p-3">
+                    <h6 class="fw-bold mb-1">Programme Export</h6>
+                    <p class="mb-0 small text-muted">Clean text list of credits for designers.</p>
                 </a>
             </div>
         </div>
 
-        @* 3. THE MANAGEMENT WING *@
-        <div class="col-12 mt-2">
-             <h6 class="fw-bold mb-3 text-uppercase small text-muted"><i class="bi bi-shield-lock me-2"></i>Management & Gaps</h6>
-             <div class="row g-3">
-                 <div class="col-md-6">
-                    <div class="card border-0 shadow-sm">
-                        <div class="card-body d-flex justify-content-between align-items-center">
-                            <div>
-                                <h6 class="fw-bold mb-1">Gaps Report</h6>
-                                <p class="mb-0 small text-muted">Filterable list of uncrewed 'Required' roles.</p>
-                            </div>
-                            <a href="/reports/Production/Gaps" class="btn btn-sm btn-danger px-3 fw-bold">Run Report</a>
-                        </div>
-                    </div>
-                 </div>
-                 <div class="col-md-6">
-                    <div class="card border-0 shadow-sm">
-                        <div class="card-body d-flex justify-content-between align-items-center">
-                            <div>
-                                <h6 class="fw-bold mb-1">Upcoming Crewing Status</h6>
-                                <p class="mb-0 small text-muted">Detailed view of who is doing what in the coming weeks.</p>
-                            </div>
-                            <a href="/reports/Production/UpcomingCrewing" class="btn btn-sm btn-outline-dark px-3 fw-bold">Run Report</a>
-                        </div>
-                    </div>
-                 </div>
-             </div>
+        @* --- 3. MANAGEMENT & OVERSIGHT --- *@
+        <div class="col-md-4">
+            <h6 class="fw-bold mb-3 text-uppercase small text-muted"><i class="bi bi-clipboard-data me-2"></i>Management</h6>
+            <div class="list-group shadow-sm border-0">
+                <a href="/reports/Production/SeasonView" class="list-group-item list-group-item-action p-3">
+                    <h6 class="fw-bold mb-1">Season Overview</h6>
+                    <p class="mb-0 small text-muted">Combined headline list and crewing status.</p>
+                </a>
+                <a href="/reports/Production/Gaps" class="list-group-item list-group-item-action p-3 border-start-danger">
+                    <h6 class="fw-bold mb-1 text-danger">Gaps Report</h6>
+                    <p class="mb-0 small text-muted">Identify uncrewed 'Required' roles.</p>
+                </a>
+            </div>
+        </div>
+    </div>
+
+    @* --- ROADMAP PREVIEW --- *@
+    <div class="mt-5 p-4 bg-light rounded-3 border border-dashed border-primary">
+        <div class="d-flex align-items-center">
+            <i class="bi bi-shield-lock-fill fs-3 text-primary me-3"></i>
+            <div>
+                <h6 class="fw-bold mb-0">Upcoming: Personnel Compliance Module</h6>
+                <p class="mb-0 small text-muted">Tracking DBS, Personal Licences, First Aid, and Training Expiry logs.</p>
+            </div>
         </div>
     </div>
 </div>
@@ -114,6 +99,8 @@
     .list-group-item:hover {
         border-left-color: var(--bs-primary);
         background-color: #fcfcfc;
-        transform: translateX(5px);
     }
+    .border-start-danger { border-left-color: var(--bs-danger) !important; }
+    .border-start-info { border-left-color: var(--bs-info) !important; }
+    .border-dashed { border-style: dashed !important; }
 </style>

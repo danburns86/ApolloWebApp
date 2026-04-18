@@ -322,18 +322,63 @@
     private async Task SaveHub()
     {
         using var context = await DbFactory.CreateDbContextAsync();
+    
+        // 1. Update the main production record
         context.Productions.Update(prod!);
 
+        // 2. Sync Master Crew (Same pattern as before, ensure Id is 0)
         var oldCrew = await context.ProductionCrews.Where(c => c.ProductionId == id).ToListAsync();
         context.ProductionCrews.RemoveRange(oldCrew);
-        context.ProductionCrews.AddRange(crewList.Select(c => new ProductionCrew { ProductionId = id, RoleId = c.RoleId, CustomRoleName = c.CustomRoleName, MemberId = c.MemberId, ExternalName = c.ExternalName, IsRequired = c.IsRequired }));
+        context.ProductionCrews.AddRange(crewList.Select(c => new ProductionCrew
+        {
+            ProductionId = id,
+            RoleId = c.RoleId,
+            CustomRoleName = c.CustomRoleName,
+            MemberId = c.MemberId,
+            ExternalName = c.ExternalName,
+            IsRequired = c.IsRequired
+        }));
 
+        // 3. Sync Performances & Overrides (THE FIX)
         var oldPerf = await context.Performances.Include(p => p.Overrides).Where(p => p.ProductionId == id).ToListAsync();
         context.Performances.RemoveRange(oldPerf);
-        context.Performances.AddRange(performances);
+
+        foreach (var p in performances)
+        {
+            var newPerf = new Performance
+            {
+                ProductionId = id,
+                CurtainUp = p.CurtainUp,
+                PerformanceTitle = p.PerformanceTitle,
+                ScheduleNotes = p.ScheduleNotes,
+                // We recreate the overrides for this performance as well
+                Overrides = p.Overrides.Select(o => new PerformanceCrewOverride
+                {
+                    RoleId = o.RoleId,
+                    CustomRoleName = o.CustomRoleName,
+                    MemberId = o.MemberId,
+                    ExternalName = o.ExternalName
+                }).ToList()
+            };
+            context.Performances.Add(newPerf);
+        }
+
+        // 4. Sync Credits
+        var oldCred = await context.ProductionCredits.Where(c => c.ProductionId == id).ToListAsync();
+        context.ProductionCredits.RemoveRange(oldCred);
+        context.ProductionCredits.AddRange(credits.Where(c => !string.IsNullOrEmpty(c.Label)).Select(c => new ProductionCredit
+        {
+            ProductionId = id,
+            Label = c.Label,
+            Value = c.Value
+        }));
 
         await context.SaveChangesAsync();
-        showSavedAlert = true; StateHasChanged();
-        await Task.Delay(2000); showSavedAlert = false; StateHasChanged();
+    
+        showSavedAlert = true;
+        StateHasChanged();
+        await Task.Delay(2000);
+        showSavedAlert = false;
+        StateHasChanged();
     }
 }
