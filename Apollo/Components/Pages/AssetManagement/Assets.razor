@@ -1,0 +1,480 @@
+﻿@page "/admin/assets"
+@using Apollo.Models
+@using Apollo.Data
+@using Microsoft.EntityFrameworkCore
+@using Microsoft.AspNetCore.Components.Authorization
+@using System.Text
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Policy = SystemPermissions.ManageAssets)]
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject IJSRuntime JS
+@inject Apollo.Services.ExportService ExportService
+@inject NavigationManager Nav
+
+<PageTitle>Asset Registry</PageTitle>
+
+<div class="container-fluid px-4 py-4 max-w-7xl">
+    <div class="row align-items-center mb-4">
+        <div class="col-md-4">
+            <h2 class="fw-bold mb-0">Asset Registry</h2>
+            <p class="text-muted mb-0">Compliance and inventory management.</p>
+        </div>
+        <div class="col-md-8 text-end">
+            <div class="d-flex justify-content-end align-items-center gap-2">
+                <input type="text" class="form-control w-auto" placeholder="Search..." @bind="SearchQuery" @bind:event="oninput" @onkeyup="ApplyFilter" />
+                
+                @if (selectedIds.Any())
+                {
+                    <div class="btn-group me-2 border-end pe-2">
+                        <button class="btn btn-warning fw-bold shadow-sm" @onclick="OpenBulkEdit">
+                            <i class="bi bi-pencil-square me-2"></i>Bulk Edit (@selectedIds.Count)
+                        </button>
+                    </div>
+                }
+
+                <a href="/admin/assets/import" class="btn btn-outline-secondary"><i class="bi bi-upload me-2"></i>Import Wizard</a>
+                <button class="btn btn-outline-primary" @onclick="ExportCsv"><i class="bi bi-download"></i></button>
+                <button class="btn btn-primary fw-bold shadow-sm" @onclick="OpenAddForm">
+                    <i class="bi bi-plus-lg me-2"></i>Log Asset
+                </button>
+                <button class="btn btn-outline-success shadow-sm" @onclick="DownloadPatRegister">
+                    <i class="bi bi-file-earmark-excel me-2"></i>PAT Register
+                </button>
+            </div>
+        </div>
+    </div>
+
+    @if (isLoading)
+    {
+        <div class="text-center py-5"><div class="spinner-border text-primary"></div></div>
+    }
+    else
+    {
+        <div class="card shadow-sm border-0 border-top border-primary border-4">
+            <div class="card-body p-0">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th class="px-4" style="width: 40px;">
+                                <input type="checkbox" class="form-check-input" checked="@IsAllSelected" @onchange="ToggleAll" />
+                            </th>
+                            <th>Tag</th>
+                            <th>Name / Model</th>
+                            <th>Location</th>
+                            <th>Status</th>
+                            <th>Compliance</th>
+                            <th class="text-end px-4">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var asset in filteredAssets)
+                        {
+                            var id = asset.Id;
+                            <tr class="@(selectedIds.Contains(id) ? "table-warning" : "")">
+                                <td class="px-4">
+                                    <input type="checkbox" class="form-check-input"
+                                           checked="@selectedIds.Contains(id)"
+                                           @onchange="@((ChangeEventArgs e) => ToggleSelection(id, e))" />
+                                </td>
+                                <td class="fw-bold text-primary font-monospace px-4">@asset.AssetTag</td>
+                                <td>
+                                    <div class="fw-bold">@asset.Name</div>
+                                    <div class="small text-muted">@asset.Manufacturer @asset.Model</div>
+                                </td>
+                                <td>@(asset.IsOffsite? asset.AssignedTo: asset.Room?.Name ?? "Unassigned")</td>
+                                <td><span class="badge @(asset.Status == AssetStatus.Quarantined ? "bg-danger" : "bg-secondary")">@asset.Status</span></td>
+                                <td>
+                                    <div class="d-flex gap-1">
+                                        @if (asset.RequiresPAT)
+                                        {
+                                            <span class="badge @GetClass(asset.PATStatus)">PAT: @asset.PATStatus</span>
+                                        }
+                                        @if (asset.RequiresLOLER)
+                                        {
+                                            <span class="badge @GetClass(asset.LOLERStatus)">LOLER: @asset.LOLERStatus</span>
+                                        }
+                                    </div>
+                                </td>
+                                <td class="text-end px-4">
+                                    <div class="btn-group">
+                                        <a href="/admin/assets/inspect/@asset.Id" class="btn btn-sm btn-outline-success"><i class="bi bi-clipboard-check"></i></a>
+                                        <button class="btn btn-sm btn-outline-secondary" @onclick="() => OpenEditForm(asset)"><i class="bi bi-pencil"></i></button>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+</div>
+
+@* 1. POWER-USER BULK EDIT MODAL *@
+@if (showBulkEditForm)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5); overflow-y: auto; z-index: 1060;">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content border-0 shadow-lg">
+                <div class="modal-header bg-warning text-dark border-0">
+                    <h5 class="modal-title fw-bold"><i class="bi bi-pencil-square me-2"></i>Bulk Update (@selectedIds.Count Items)</h5>
+                    <button type="button" class="btn-close" @onclick="() => showBulkEditForm = false"></button>
+                </div>
+                <div class="modal-body p-4 bg-light">
+                    <div class="alert alert-warning small mb-4">
+                        <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                        Only fields with a <strong>checked toggle</strong> will be updated on the selected assets.
+                    </div>
+
+                    <div class="row g-4">
+                        <div class="col-md-6">
+                            <div class="card border-0 shadow-sm p-3 mb-3">
+                                <h6 class="fw-bold mb-3 border-bottom pb-2">Location & Status</h6>
+                                <div class="mb-3">
+                                    <div class="form-check form-switch mb-1">
+                                        <input class="form-check-input" type="checkbox" @bind="enableStatusUpdate" id="upSt" />
+                                        <label class="form-label small fw-bold" for="upSt">Change Status</label>
+                                    </div>
+                                    <select class="form-select form-select-sm" @bind="bulkStatusUpdate" disabled="@(!enableStatusUpdate)">
+                                        @foreach (var s in Enum.GetValues<AssetStatus>())
+                                        {
+                                            <option value="@s">@s</option>
+                                        }
+                                    </select>
+                                </div>
+                                <div class="mb-0">
+                                    <div class="form-check form-switch mb-1">
+                                        <input class="form-check-input" type="checkbox" @bind="enableRoomUpdate" id="upRm" />
+                                        <label class="form-label small fw-bold" for="upRm">Move to Room/Location</label>
+                                    </div>
+                                    <select class="form-select form-select-sm" @bind="bulkRoomUpdate" disabled="@(!enableRoomUpdate)">
+                                        <option value="0">-- Select Room --</option>
+                                        @foreach (var r in rooms)
+                                        {
+                                            <option value="@r.Id">@r.Name</option>
+                                        }
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="card border-0 shadow-sm p-3">
+                                <h6 class="fw-bold mb-3 border-bottom pb-2">Identity & Cost</h6>
+                                <div class="mb-3">
+                                    <div class="form-check form-switch mb-1">
+                                        <input class="form-check-input" type="checkbox" @bind="enableMakeModelUpdate" id="upMk" />
+                                        <label class="form-label small fw-bold" for="upMk">Manufacturer/Model</label>
+                                    </div>
+                                    <div class="input-group input-group-sm">
+                                        <input type="text" class="form-control" placeholder="Make" @bind="bulkManufacturer" disabled="@(!enableMakeModelUpdate)" />
+                                        <input type="text" class="form-control" placeholder="Model" @bind="bulkModel" disabled="@(!enableMakeModelUpdate)" />
+                                    </div>
+                                </div>
+                                <div class="mb-0">
+                                    <div class="form-check form-switch mb-1">
+                                        <input class="form-check-input" type="checkbox" @bind="enableCostUpdate" id="upCs" />
+                                        <label class="form-label small fw-bold" for="upCs">Replacement Cost (£)</label>
+                                    </div>
+                                    <input type="number" class="form-control form-control-sm" @bind="bulkCost" disabled="@(!enableCostUpdate)" />
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <div class="card border-0 shadow-sm p-3 h-100">
+                                <h6 class="fw-bold mb-3 border-bottom pb-2">Compliance Requirements</h6>
+                                <div class="form-check form-switch mb-3">
+                                    <input class="form-check-input" type="checkbox" @bind="enableComplianceUpdate" id="upCp" />
+                                    <label class="form-check-label fw-bold text-primary" for="upCp">Update Compliance Flags</label>
+                                </div>
+                                <div class="@(enableComplianceUpdate ? "" : "opacity-50 text-muted")">
+                                    <div class="form-check mb-2"><input class="form-check-input" type="checkbox" @bind="bulkRequiresPAT" id="bPat" disabled="@(!enableComplianceUpdate)" /><label class="small fw-bold ms-2" for="bPat">Requires PAT</label></div>
+                                    <div class="form-check mb-2"><input class="form-check-input" type="checkbox" @bind="bulkRequiresLOLER" id="bLol" disabled="@(!enableComplianceUpdate)" /><label class="small fw-bold ms-2" for="bLol">Requires LOLER</label></div>
+                                    <div class="form-check mb-3"><input class="form-check-input" type="checkbox" @bind="bulkVisualOnly" id="bVis" disabled="@(!enableComplianceUpdate)" /><label class="small fw-bold ms-2" for="bVis">Visual Only</label></div>
+                                    <label class="small fw-bold">Class</label>
+                                    <select class="form-select form-select-sm mb-3" @bind="bulkApplianceClass" disabled="@(!enableComplianceUpdate)">
+                                        @foreach (var cls in Enum.GetValues<EquipmentClass>())
+                                        {
+                                            <option value="@cls">@cls</option>
+                                        }
+                                    </select>
+                                    <label class="small fw-bold">Risk Override</label>
+                                    <select class="form-select form-select-sm" @bind="bulkRiskOverride" disabled="@(!enableComplianceUpdate)">
+                                        <option value="">-- No Override --</option>
+                                        @foreach (var rsk in Enum.GetValues<EnvironmentRisk>())
+                                        {
+                                            <option value="@rsk">@rsk</option>
+                                        }
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer bg-white border-0">
+                    <button class="btn btn-secondary" @onclick="() => showBulkEditForm = false">Cancel</button>
+                    <button class="btn btn-warning fw-bold px-4 shadow-sm" @onclick="ApplyBulkUpdate">Update @selectedIds.Count Selected Items</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@* 2. STANDARD ASSET EDITOR MODAL *@
+@if (showForm)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5); overflow-y: auto; z-index: 1050;">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content border-0 shadow">
+                <div class="modal-header bg-light border-0">
+                    <h5 class="modal-title fw-bold">@(editingAsset.Id == 0 ? "Log New Asset(s)" : "Edit Asset Details")</h5>
+                    <button type="button" class="btn-close" @onclick="CloseForm"></button>
+                </div>
+                <EditForm Model="editingAsset" OnValidSubmit="SaveAsset">
+                    <DataAnnotationsValidator />
+                    <div class="modal-body p-4">
+                        <div class="row mb-4 bg-light p-3 rounded-3 border">
+                            <div class="col-md-5">
+                                <label class="small fw-bold">Category</label>
+                                <InputSelect @bind-Value="editingAsset.CategoryId" class="form-select" @oninput="OnCategoryChanged" disabled="@(editingAsset.Id != 0)">
+                                    <option value="0">-- Select Category --</option>
+                                    @foreach (var cat in categories)
+                                    {
+                                        <option value="@cat.Id">@cat.Name</option>
+                                    }
+                                </InputSelect>
+                            </div>
+                            @if (editingAsset.Id == 0)
+                            {
+                                <div class="col-md-3"><label class="small fw-bold">Quantity</label><InputNumber @bind-Value="bulkQuantity" class="form-control" min="1" max="100" /></div>
+                            }
+                            <div class="col-md-4 text-end"><label class="small fw-bold">Tag Preview</label><div class="fs-4 fw-bold text-primary font-monospace">@generatedTagPreview</div></div>
+                        </div>
+                        <div class="row mb-3">
+                            <div class="col-md-8"><label class="small fw-bold">Asset Name</label><InputText @bind-Value="editingAsset.Name" class="form-control" /></div>
+                            <div class="col-md-4"><label class="small fw-bold">Replacement Cost (£)</label><InputNumber @bind-Value="editingAsset.ReplacementCost" class="form-control" /></div>
+                        </div>
+                        <div class="row mb-4">
+                            <div class="col-md-4"><label class="small fw-bold">Manufacturer</label><InputText @bind-Value="editingAsset.Manufacturer" class="form-control" /></div>
+                            <div class="col-md-4"><label class="small fw-bold">Model</label><InputText @bind-Value="editingAsset.Model" class="form-control" /></div>
+                            <div class="col-md-4"><label class="small fw-bold">Serial Number</label><InputText @bind-Value="editingAsset.SerialNumber" class="form-control" /></div>
+                        </div>
+                        <div class="p-3 border-start border-primary border-4 rounded bg-white shadow-sm mb-4">
+                            <h6 class="fw-bold text-primary small text-uppercase mb-3">Compliance Hub</h6>
+                            <div class="row g-3">
+                                <div class="col-md-6"><div class="form-check form-switch"><InputCheckbox @bind-Value="editingAsset.RequiresPAT" class="form-check-input" id="pat" /><label class="form-check-label fw-bold" for="pat">Electrical (PAT)</label></div></div>
+                                <div class="col-md-6"><div class="form-check form-switch"><InputCheckbox @bind-Value="editingAsset.RequiresLOLER" class="form-check-input" id="lol" /><label class="form-check-label fw-bold" for="lol">Lifting (LOLER)</label></div></div>
+                            </div>
+                            @if (editingAsset.RequiresPAT || editingAsset.RequiresLOLER)
+                            {
+                                <div class="row g-3 bg-light p-3 rounded mt-2">
+                                    <div class="col-md-4"><label class="small fw-bold">Class</label><InputSelect @bind-Value="editingAsset.ApplianceClass" class="form-select form-select-sm">@foreach (var cls in Enum.GetValues<EquipmentClass>()) {
+                                        <option value="@cls">@cls</option>
+                                    }
+                                </InputSelect></div>
+                                <div class="col-md-4"><label class="small fw-bold">Risk Override</label><InputSelect @bind-Value="editingAsset.RiskOverride" class="form-select form-select-sm"><option value="">Default</option>@foreach (var rsk in Enum.GetValues<EnvironmentRisk>()) {
+                                    <option value="@rsk">@rsk</option>
+                                }
+                            </InputSelect></div>
+                            <div class="col-md-4 pt-4"><InputCheckbox @bind-Value="editingAsset.VisualOnly" id="vo_single" /> <label for="vo_single" class="small fw-bold">Visual Only</label></div>
+                        </div>
+                    }
+                </div>
+                <div class="row">
+                    <div class="col-md-6"><label class="small fw-bold">Status</label><InputSelect @bind-Value="editingAsset.Status" class="form-select">@foreach (var s in Enum.GetValues<AssetStatus>()) {
+                        <option value="@s">@s</option>
+                    }
+                </InputSelect></div>
+                <div class="col-md-6"><label class="small fw-bold">Location</label><InputSelect @bind-Value="editingAsset.RoomId" class="form-select"><option value="">-- Unassigned --</option>@foreach (var r in rooms) {
+                    <option value="@r.Id">@r.Name</option>
+                }
+            </InputSelect></div>
+        </div>
+    </div>
+    <div class="modal-footer border-0 bg-light d-flex justify-content-between">
+        @if (editingAsset.Id != 0)
+        {
+            <a href="/admin/maintenance/new?assetId=@editingAsset.Id" class="btn btn-warning fw-bold text-dark"><i class="bi bi-tools me-2"></i>Report Fault</a>
+        }
+        else
+        {
+
+            <div></div>
+        }
+        <div><button type="button" class="btn btn-secondary me-2" @onclick="CloseForm">Cancel</button><button type="submit" class="btn btn-primary fw-bold px-4">Save Changes</button></div>
+    </div>
+</EditForm>
+</div>
+</div>
+</div>
+}
+
+@code {
+    private List<Asset> allAssets = new();
+    private List<Asset> filteredAssets = new();
+    private List<AssetCategory> categories = new();
+    private List<Room> rooms = new();
+    private bool isLoading = true;
+    private string SearchQuery = "";
+    private HashSet<int> selectedIds = new();
+
+    private bool IsAllSelected => filteredAssets.Any() && filteredAssets.All(a => selectedIds.Contains(a.Id));
+
+    private bool showForm = false;
+    private bool showBulkEditForm = false;
+    private Asset editingAsset = new();
+    private int bulkQuantity = 1;
+    private string generatedTagPreview = "---";
+
+    // --- BULK EDITOR STATE ---
+    private bool enableStatusUpdate;
+    private bool enableRoomUpdate;
+    private bool enableMakeModelUpdate;
+    private bool enableCostUpdate;
+    private bool enableComplianceUpdate;
+
+    private AssetStatus bulkStatusUpdate = AssetStatus.Active;
+    private int bulkRoomUpdate;
+    private string bulkManufacturer = "";
+    private string bulkModel = "";
+    private decimal bulkCost;
+    private bool bulkRequiresPAT;
+    private bool bulkRequiresLOLER;
+    private bool bulkVisualOnly;
+    private EquipmentClass bulkApplianceClass = EquipmentClass.ClassI;
+    private EnvironmentRisk? bulkRiskOverride;
+
+    protected override async Task OnInitializedAsync() => await LoadData();
+
+    private async Task LoadData()
+    {
+        isLoading = true;
+        using var context = await DbFactory.CreateDbContextAsync();
+        allAssets = await context.Assets.Include(a => a.Category).Include(a => a.Room).OrderBy(a => a.AssetTag).ToListAsync();
+        categories = await context.AssetCategories.ToListAsync();
+        rooms = await context.Rooms.OrderBy(r => r.Name).ToListAsync();
+        ApplyFilter();
+        isLoading = false;
+    }
+
+    private void ApplyFilter()
+    {
+        if (string.IsNullOrWhiteSpace(SearchQuery)) filteredAssets = allAssets.ToList();
+        else
+        {
+            var q = SearchQuery.ToLower();
+            filteredAssets = allAssets.Where(a => (a.AssetTag?.ToLower().Contains(q) ?? false) || (a.Name?.ToLower().Contains(q) ?? false)).ToList();
+        }
+    }
+
+    private void ToggleSelection(int id, ChangeEventArgs e)
+    {
+        if (e.Value is bool val && val) selectedIds.Add(id);
+        else selectedIds.Remove(id);
+        StateHasChanged();
+    }
+
+    private void ToggleAll(ChangeEventArgs e)
+    {
+        if (e.Value is bool val && val) foreach (var a in filteredAssets) selectedIds.Add(a.Id);
+        else selectedIds.Clear();
+        StateHasChanged();
+    }
+
+    private void OpenAddForm() { editingAsset = new Asset { Status = AssetStatus.Active }; bulkQuantity = 1; generatedTagPreview = "---"; showForm = true; }
+    private void OpenEditForm(Asset asset) { editingAsset = asset; generatedTagPreview = asset.AssetTag; showForm = true; }
+    private void CloseForm() => showForm = false;
+    
+    private void OpenBulkEdit()
+    {
+        enableStatusUpdate = enableRoomUpdate = enableMakeModelUpdate = enableCostUpdate = enableComplianceUpdate = false;
+        showBulkEditForm = true;
+    }
+
+    private async Task ApplyBulkUpdate()
+    {
+        using var context = await DbFactory.CreateDbContextAsync();
+        var targets = await context.Assets.Where(a => selectedIds.Contains(a.Id)).ToListAsync();
+
+        foreach (var t in targets)
+        {
+            if (enableStatusUpdate) t.Status = bulkStatusUpdate;
+            if (enableRoomUpdate && bulkRoomUpdate > 0) t.RoomId = bulkRoomUpdate;
+            if (enableMakeModelUpdate) { t.Manufacturer = bulkManufacturer; t.Model = bulkModel; }
+            if (enableCostUpdate) t.ReplacementCost = bulkCost;
+            if (enableComplianceUpdate)
+            {
+                t.RequiresPAT = bulkRequiresPAT;
+                t.RequiresLOLER = bulkRequiresLOLER;
+                t.VisualOnly = bulkVisualOnly;
+                t.ApplianceClass = bulkApplianceClass;
+                t.RiskOverride = bulkRiskOverride;
+            }
+        }
+
+        await context.SaveChangesAsync();
+        showBulkEditForm = false;
+        selectedIds.Clear();
+        await LoadData();
+    }
+
+    private async Task SaveAsset()
+    {
+        using var context = await DbFactory.CreateDbContextAsync();
+        if (editingAsset.Id == 0)
+        {
+            var cat = await context.AssetCategories.FindAsync(editingAsset.CategoryId);
+            if (cat != null)
+            {
+                for (int i = 0; i < bulkQuantity; i++)
+                {
+                    context.Assets.Add(new Asset
+                    {
+                        CategoryId = editingAsset.CategoryId,
+                        AssetTag = $"{cat.Prefix}-{cat.NextSequenceNumber.ToString($"D{cat.PaddingLength}")}",
+                        Name = editingAsset.Name,
+                        Status = editingAsset.Status,
+                        RoomId = editingAsset.RoomId,
+                        Manufacturer = editingAsset.Manufacturer,
+                        Model = editingAsset.Model,
+                        SerialNumber = editingAsset.SerialNumber,
+                        ReplacementCost = editingAsset.ReplacementCost,
+                        RequiresPAT = editingAsset.RequiresPAT,
+                        RequiresLOLER = editingAsset.RequiresLOLER,
+                        VisualOnly = editingAsset.VisualOnly,
+                        ApplianceClass = editingAsset.ApplianceClass,
+                        RiskOverride = editingAsset.RiskOverride,
+                        SWL = editingAsset.SWL,
+                        LastWeightTestDate = editingAsset.LastWeightTestDate
+                    });
+                    cat.NextSequenceNumber++;
+                }
+                context.AssetCategories.Update(cat);
+            }
+        }
+        else context.Assets.Update(editingAsset);
+        await context.SaveChangesAsync();
+        await LoadData();
+        showForm = false;
+    }
+
+    private void OnCategoryChanged(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out int id))
+        {
+            var c = categories.FirstOrDefault(x => x.Id == id);
+            if (c != null) generatedTagPreview = $"{c.Prefix}-{c.NextSequenceNumber.ToString($"D{c.PaddingLength}")}";
+        }
+    }
+
+    private string GetClass(string? s) => (s ?? "").ToUpper() == "VALID" ? "bg-success bg-opacity-10 text-success border border-success" : "bg-warning text-dark";
+    private async Task ExportCsv() { /* Code... */ }
+    private void OpenBulkDeleteConfirm() { }
+
+    private async Task DownloadPatRegister()
+    {
+        var fileBytes = await ExportService.GeneratePatRegisterAsync();
+        var fileName = $"PAT_Register_{DateTime.Now:yyyy-MM-dd}.xlsx";
+
+        // This uses the download helper we fixed in app.js
+        await JS.InvokeVoidAsync("downloadFile", fileName,
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileBytes);
+    }
+}

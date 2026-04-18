@@ -1,0 +1,180 @@
+﻿@page "/admin/production/settings"
+@using Apollo.Models
+@using Apollo.Data
+@using Microsoft.EntityFrameworkCore
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+
+<div class="container py-4 max-w-5xl">
+    @* --- HEADER --- *@
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="fw-bold mb-0">Production Hub Settings</h2>
+            <p class="text-muted mb-0">Manage global types and categories.</p>
+        </div>
+        <div class="d-flex align-items-center gap-3">
+            @if (showSavedMessage)
+            {
+                <div class="text-success fw-bold animate__animated animate__fadeIn">
+                    <i class="bi bi-check-all me-1"></i>All Settings Saved!
+                </div>
+            }
+            <button class="btn btn-primary fw-bold px-4 shadow-sm" @onclick="SaveAll">
+                <i class="bi bi-save me-2"></i>Save All Changes
+            </button>
+        </div>
+    </div>
+
+    <div class="row g-4">
+        @* --- PRODUCTION CATEGORIES --- *@
+        <div class="col-md-7">
+            <div class="card shadow-sm border-0">
+                <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0">Production Types (Dashboard Columns)</h6>
+                    <button class="btn btn-sm btn-outline-light" @onclick="() => categories.Add(new ProductionCategory())">
+                        <i class="bi bi-plus-lg me-1"></i>Add Type
+                    </button>
+                </div>
+                <div class="card-body p-0">
+                    <table class="table table-sm align-middle mb-0">
+                        <thead class="bg-light small">
+                            <tr>
+                                <th class="ps-3">Name</th>
+                                <th>Icon</th>
+                                <th class="text-center">External?</th>
+                                <th style="width: 50px;"></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var cat in categories)
+                            {
+                                <tr>
+                                    <td class="ps-3"><input type="text" class="form-control form-control-sm" @bind="cat.Name" /></td>
+                                    <td><input type="text" class="form-control form-control-sm" @bind="cat.IconClass" placeholder="bi-star" /></td>
+                                    <td class="text-center">
+                                        <input type="checkbox" class="form-check-input" @bind="cat.IsExternal" />
+                                    </td>
+                                    <td class="text-end pe-3">
+                                        <button class="btn btn-sm text-danger" @onclick="() => categories.Remove(cat)">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                    @if (!categories.Any())
+                    {
+                        <div class="p-4 text-center text-muted small italic">No categories defined.</div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        @* --- REHEARSAL / MEETING TYPES --- *@
+        <div class="col-md-5">
+            <div class="card shadow-sm border-0">
+                <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0">Meeting & Rehearsal Types</h6>
+                    <button class="btn btn-sm btn-outline-light" @onclick="() => eventTypes.Add(new ProductionEventType())">
+                        <i class="bi bi-plus-lg me-1"></i>Add Event
+                    </button>
+                </div>
+                <div class="card-body p-0">
+                    <table class="table table-sm mb-0 align-middle">
+                        <tbody>
+                            @foreach (var et in eventTypes)
+                            {
+                                <tr>
+                                    <td class="ps-3"><input type="text" class="form-control form-control-sm border-0" @bind="et.Name" placeholder="Event name..." /></td>
+                                    <td class="text-end pe-3">
+                                        <button class="btn btn-sm text-danger" @onclick="() => eventTypes.Remove(et)">
+                                            <i class="bi bi-x"></i>
+                                        </button>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                    @if (!eventTypes.Any())
+                    {
+                        <div class="p-4 text-center text-muted small italic">No event types defined.</div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private List<ProductionCategory> categories = new();
+    private List<ProductionEventType> eventTypes = new();
+    private bool showSavedMessage = false;
+
+    protected override async Task OnInitializedAsync() => await Load();
+
+    async Task Load()
+    {
+        using var context = await DbFactory.CreateDbContextAsync();
+        // Load clean copies without tracking to prevent memory conflicts
+        categories = await context.ProductionCategories.AsNoTracking().ToListAsync();
+        eventTypes = await context.ProductionEventTypes.AsNoTracking().ToListAsync();
+    }
+
+    async Task SaveAll()
+    {
+        using var context = await DbFactory.CreateDbContextAsync();
+
+        // 1. SYNC CATEGORIES
+        var dbCats = await context.ProductionCategories.ToListAsync();
+        
+        // Remove ones deleted in UI
+        context.ProductionCategories.RemoveRange(dbCats.Where(db => !categories.Any(ui => ui.Id == db.Id)));
+        
+        // Update or Add
+        foreach (var uiCat in categories)
+        {
+            if (uiCat.Id == 0)
+            {
+                context.ProductionCategories.Add(uiCat);
+            }
+            else
+            {
+                var dbCat = dbCats.FirstOrDefault(db => db.Id == uiCat.Id);
+                if (dbCat != null) context.Entry(dbCat).CurrentValues.SetValues(uiCat);
+            }
+        }
+
+        // 2. SYNC EVENT TYPES
+        var dbETs = await context.ProductionEventTypes.ToListAsync();
+        
+        context.ProductionEventTypes.RemoveRange(dbETs.Where(db => !eventTypes.Any(ui => ui.Id == db.Id)));
+        
+        foreach (var uiET in eventTypes)
+        {
+            if (uiET.Id == 0)
+            {
+                context.ProductionEventTypes.Add(uiET);
+            }
+            else
+            {
+                var dbET = dbETs.FirstOrDefault(db => db.Id == uiET.Id);
+                if (dbET != null) context.Entry(dbET).CurrentValues.SetValues(uiET);
+            }
+        }
+
+        await context.SaveChangesAsync();
+        
+        // Refresh to get any new IDs and reset tracking
+        await Load();
+
+        // Trigger Confirmation Message
+        showSavedMessage = true;
+        StateHasChanged();
+        
+        await Task.Delay(3000);
+        
+        showSavedMessage = false;
+        StateHasChanged();
+    }
+}

@@ -1,0 +1,208 @@
+﻿@page "/admin/reports/outstanding-audit"
+@rendermode InteractiveServer
+@using Apollo.Models
+@using Apollo.Data
+@using Microsoft.EntityFrameworkCore
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+
+<PageTitle>Printable Audit Sheet</PageTitle>
+
+<div class="d-print-none mb-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <h2>Outstanding Items Audit Sheet</h2>
+            <p class="text-muted mb-0">Generate a physical sign-off sheet for all currently issued inventory.</p>
+        </div>
+        <button class="btn btn-dark fw-bold shadow-sm" onclick="window.print()">
+            <i class="bi bi-printer me-2"></i> Print Sheets
+        </button>
+    </div>
+
+    <div class="card shadow-sm border-0 bg-light">
+        <div class="card-body d-flex align-items-center gap-3">
+            <label class="fw-bold mb-0">Group Report By:</label>
+            <select class="form-select w-auto shadow-sm" @bind="GroupBy" @bind:after="OrganizeData">
+                <option value="Person">Person (Holder Name)</option>
+                <option value="Department">Department (Bunch Home)</option>
+            </select>
+        </div>
+    </div>
+</div>
+
+<div class="print-container">
+    @if (!GroupedItems.Any())
+    {
+        <div class="alert alert-success text-center">There are no outstanding keys currently issued.</div>
+    }
+    else
+    {
+        @foreach (var group in GroupedItems.OrderBy(g => g.Key))
+        {
+            <div class="mb-5" style="page-break-inside: avoid;">
+                <div class="border-bottom border-dark border-2 pb-2 mb-3 d-flex justify-content-between align-items-end">
+                    <h3 class="fw-bold mb-0 text-uppercase">
+                        <i class="bi @(GroupBy == "Person" ? "bi-person-badge" : "bi-building") me-2"></i> @group.Key
+                    </h3>
+                    <span class="text-muted small">Generated: @DateTime.Now.ToString("dd MMM yyyy - HH:mm")</span>
+                </div>
+
+                <table class="table table-bordered table-sm align-middle">
+                    <thead class="table-light text-uppercase small">
+                        <tr>
+                            <th style="width: 25%;">Item</th>
+                            <th style="width: 35%;">Details / Attached Keys</th>
+                            <th style="width: 15%;">Issue Date</th>
+                            <th style="width: 25%; text-align: center;">Holder Signature</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var item in group.Value.OrderBy(i => i.IssueDate))
+                        {
+                            <tr>
+                                <td class="fw-bold">
+                                    @if (item.IsBunch)
+                                    {
+                                        <span class="badge bg-dark me-1 print-badge">Bunch</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-secondary me-1 print-badge">Key</span>
+                                    }
+                                    @item.ItemName
+                                </td>
+                                <td class="small">
+                                    @if (item.IsBunch && item.ContainedKeys.Any())
+                                    {
+                                        <ul class="mb-0 ps-3">
+                                            @foreach(var key in item.ContainedKeys)
+                                            {
+                                                <li>@key</li>
+                                            }
+                                        </ul>
+                                    }
+                                    else if (item.IsBunch)
+                                    {
+                                        <span class="fst-italic text-muted">No keys attached</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted">@item.LockName</span>
+                                    }
+                                </td>
+                                <td class="small">@item.IssueDate.ToString("dd/MM/yy HH:mm")</td>
+                                <td></td> </tr>
+                        }
+                    </tbody>
+                </table>
+                
+                @if (GroupBy == "Department")
+                {
+                    <div class="mt-3 text-end small">
+                        <strong>Department Head Sign-off:</strong> ____________________________________
+                    </div>
+                }
+            </div>
+        }
+    }
+</div>
+
+<style>
+    /* Styling specifically for printing */
+    @@media print {
+        body { background-color: white !important; }
+        .page { flex-direction: column !important; }
+        .sidebar { display: none !important; }
+        .top-row { display: none !important; }
+        .print-badge { border: 1px solid #000; color: #000; background: none !important; }
+        .table-light th { background-color: #f8f9fa !important; -webkit-print-color-adjust: exact; }
+    }
+</style>
+
+@code {
+    private string GroupBy = "Person"; // Default
+
+    public class PrintItemDto
+    {
+        public string ItemName { get; set; } = "";
+        public string HolderName { get; set; } = "";
+        public string DepartmentName { get; set; } = "";
+        public DateTime IssueDate { get; set; }
+        public bool IsBunch { get; set; }
+        public string LockName { get; set; } = "";
+        public List<string> ContainedKeys { get; set; } = new();
+    }
+
+    private List<PrintItemDto> AllOutstandingItems = new();
+    private Dictionary<string, List<PrintItemDto>> GroupedItems = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        using var context = await DbFactory.CreateDbContextAsync();
+        
+        // Grab all active checkouts to get exact issue dates and current holders
+        var activeCheckouts = await context.CheckoutTransactions
+            .Include(t => t.Bunch).ThenInclude(b => b!.Department)
+            .Include(t => t.Bunch).ThenInclude(b => b!.KeyAssignments!).ThenInclude(ka => ka.KeyRecord).ThenInclude(k => k!.Lock)
+            .Include(t => t.KeyRecord).ThenInclude(k => k!.Lock)
+            .Where(t => t.ReturnDate == null)
+            .ToListAsync();
+
+        AllOutstandingItems.Clear();
+
+        foreach (var tx in activeCheckouts)
+        {
+            if (tx.Bunch != null)
+            {
+                var keys = tx.Bunch.KeyAssignments?
+                    .Where(ka => ka.RemovedDate == null && ka.KeyRecord != null)
+                    .Select(ka => $"{ka.KeyRecord!.Lock?.LockCode} {ka.KeyRecord.SequenceNumber} - {ka.KeyRecord.Lock?.Name}")
+                    .ToList() ?? new List<string>();
+
+                AllOutstandingItems.Add(new PrintItemDto
+                {
+                    ItemName = tx.Bunch.Name,
+                    HolderName = tx.IssuedToName,
+                    DepartmentName = tx.Bunch.Department?.Name ?? "General / Unassigned",
+                    IssueDate = tx.IssueDate,
+                    IsBunch = true,
+                    ContainedKeys = keys
+                });
+            }
+            else if (tx.KeyRecord != null)
+            {
+                AllOutstandingItems.Add(new PrintItemDto
+                {
+                    ItemName = $"{tx.KeyRecord.Lock?.LockCode} {tx.KeyRecord.SequenceNumber}",
+                    HolderName = tx.IssuedToName,
+                    DepartmentName = "Individual Checkouts (Loose)", // Loose keys don't belong to a department
+                    IssueDate = tx.IssueDate,
+                    IsBunch = false,
+                    LockName = tx.KeyRecord.Lock?.Name ?? ""
+                });
+            }
+        }
+
+        OrganizeData();
+    }
+
+    private void OrganizeData()
+    {
+        if (GroupBy == "Person")
+        {
+            GroupedItems = AllOutstandingItems
+                .GroupBy(i => i.HolderName)
+                .ToDictionary(g => g.Key, g => g.ToList());
+        }
+        else // By Department
+        {
+            GroupedItems = AllOutstandingItems
+                .GroupBy(i => i.DepartmentName)
+                .ToDictionary(g => g.Key, g => g.ToList());
+        }
+    }
+}

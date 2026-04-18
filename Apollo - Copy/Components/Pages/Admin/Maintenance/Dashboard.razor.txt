@@ -1,0 +1,232 @@
+﻿@page "/admin/maintenance"
+@rendermode InteractiveServer
+@using Apollo.Models
+@using Apollo.Data
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Policy = SystemPermissions.ManageMaintenance)]
+@inject IMaintenanceService MaintenanceService
+@inject IJSRuntime JS
+
+<PageTitle>Maintenance Dashboard</PageTitle>
+
+<div class="container-fluid px-4 py-4 max-w-7xl">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="fw-bold mb-0">Maintenance Hub</h2>
+            <p class="text-muted">Review and triage reported theatre issues.</p>
+        </div>
+        <button class="btn btn-outline-primary" @onclick="LoadSnags">
+            <i class="bi bi-arrow-clockwise me-1"></i>Refresh
+        </button>
+    </div>
+
+    @if (isLoading)
+    {
+        <div class="text-center py-5"><div class="spinner-border text-danger"></div></div>
+    }
+    else if (!issues.Any())
+    {
+        <div class="alert alert-success shadow-sm text-center py-5 border-0">
+            <i class="bi bi-check2-circle display-4 text-success d-block mb-3"></i>
+            <h4>All Clear!</h4>
+            <p class="text-muted">There are no pending maintenance issues.</p>
+        </div>
+    }
+    else
+    {
+        <div class="row g-4">
+            @foreach (var issue in issues)
+            {
+                <div class="col-md-6 col-xl-4">
+                    <div class="card h-100 shadow-sm border-0 border-start border-4 @GetSeverityBorderClass(issue.Severity)">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between mb-2">
+                                <span class="badge @GetSeverityBadgeClass(issue.Severity)">@issue.Severity</span>
+                                <small class="text-muted">@issue.ReportedAt.ToString("MMM dd, HH:mm")</small>
+                            </div>
+                            <h5 class="card-title fw-bold mb-1">@issue.Room?.Name</h5>
+                            <h6 class="card-subtitle mb-3 text-muted small">
+                                <i class="bi bi-geo-alt me-1"></i>@(issue.Room?.Area?.Name ?? "Unknown Area")
+                            </h6>
+                            <p class="card-text">
+                                @(issue.Description.Length > 100 ? issue.Description.Substring(0, 100) + "..." : issue.Description)
+                            </p>
+                        </div>
+                        <div class="card-footer bg-white border-0 pt-0 pb-3">
+                            <button class="btn btn-sm btn-dark w-100 shadow-sm" @onclick="() => OpenTriageModal(issue)">
+                                <i class="bi bi-tools me-2"></i>Triage Issue
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@if (selectedIssue != null)
+{
+    <div class="modal fade show d-block" style="background-color: rgba(0,0,0,0.6); z-index: 1050;" tabindex="-1">
+        <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-content shadow-lg border-0">
+                <div class="modal-header @GetSeverityBgClass(selectedIssue.Severity) text-white border-0">
+                    <h5 class="modal-title fw-bold"><i class="bi bi-clipboard-pulse me-2"></i>Triage Issue #@selectedIssue.Id</h5>
+                    <button type="button" class="btn-close btn-close-white" @onclick="CloseModal"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <div class="row g-4">
+                        <div class="col-md-7">
+                            <h6 class="fw-bold text-muted text-uppercase small mb-1">Location</h6>
+                            <p class="fs-5 mb-4">@selectedIssue.Room?.Area?.Name &gt; <strong>@selectedIssue.Room?.Name</strong></p>
+
+                            <h6 class="fw-bold text-muted text-uppercase small mb-1">Description</h6>
+                            <p class="mb-4 p-3 bg-light rounded border">@selectedIssue.Description</p>
+
+                            <div class="row mb-4">
+                                <div class="col-6">
+                                    <h6 class="fw-bold text-muted text-uppercase small mb-1">Reported By</h6>
+                                    <p class="mb-0">@(string.IsNullOrEmpty(selectedIssue.ReportedByName) ? "Anonymous" : selectedIssue.ReportedByName)</p>
+                                </div>
+                                <div class="col-6">
+                                    <h6 class="fw-bold text-muted text-uppercase small mb-1">Time Logged</h6>
+                                    <p class="mb-0">@selectedIssue.ReportedAt.ToString("g")</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-md-5">
+                            <h6 class="fw-bold text-muted text-uppercase small mb-2">Attached Evidence</h6>
+                            @if (!string.IsNullOrEmpty(selectedIssue.ImagePath))
+                            {
+                                <a href="@selectedIssue.ImagePath" target="_blank" title="Click to view full size">
+                                    <img src="@selectedIssue.ImagePath" class="img-fluid rounded shadow-sm border w-100" alt="Snag Photo" style="max-height: 250px; object-fit: cover;" />
+                                </a>
+                                <div class="text-muted small mt-2 text-center"><i class="bi bi-zoom-in me-1"></i>Click image to expand</div>
+                            }
+                            else
+                            {
+                                <div class="bg-light rounded border d-flex align-items-center justify-content-center flex-column text-muted" style="height: 200px;">
+                                    <i class="bi bi-camera-fill fs-1 mb-2"></i>
+                                    <span>No Photo Provided</span>
+                                </div>
+                            }
+                        </div>
+                    </div>
+
+                    <hr class="my-4" />
+
+                    <div class="bg-light p-4 rounded border">
+                        <h6 class="fw-bold mb-3"><i class="bi bi-arrow-repeat me-2"></i>Update Status</h6>
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold text-uppercase">New Status</label>
+                            <select class="form-select form-select-lg" @bind="newStatus">
+                                @foreach (var status in Enum.GetValues<SnagStatus>())
+                                {
+                                    <option value="@status">@status.ToString().Replace("ContractorRequired", "Contractor Required")</option>
+                                }
+                            </select>
+                        </div>
+
+                        <div class="mb-3 p-3 bg-white border rounded">
+                            <label class="form-label small fw-bold text-uppercase text-primary">Assign To (In-House)</label>
+                            <input type="text" class="form-control form-control-sm mb-3" @bind="assignedTo" placeholder="e.g. Dave (Electrics)" />
+
+                            @if (newStatus == SnagStatus.ContractorRequired)
+                            {
+                                <div class="p-2 bg-warning bg-opacity-10 border border-warning rounded">
+                                    <h6 class="fw-bold text-warning-emphasis small text-uppercase mb-2">Contractor Details</h6>
+                                    <div class="mb-2">
+                                        <input type="text" class="form-control form-control-sm" @bind="contractorName" placeholder="Company Name" />
+                                    </div>
+                                    <div>
+                                        <input type="text" class="form-control form-control-sm" @bind="quoteRef" placeholder="Quote or Job Reference #" />
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                        <div class="mb-2">
+                            <label class="form-label small fw-bold text-uppercase">Admin Notes / Action Taken</label>
+                            <textarea class="form-control" @bind="adminNotes" rows="2" placeholder="e.g. Called out electrician, expected Tuesday..."></textarea>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light border-top-0">
+                    <button type="button" class="btn btn-secondary" @onclick="CloseModal">Cancel</button>
+                    <button type="button" class="btn btn-primary px-4 fw-bold shadow-sm" @onclick="SaveTriage">Save & Update</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<MaintenanceIssue> issues = new();
+    private bool isLoading = true;
+
+    private MaintenanceIssue? selectedIssue;
+    private SnagStatus newStatus;
+    private string adminNotes = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadSnags();
+    }
+
+    private async Task LoadSnags()
+    {
+        isLoading = true;
+        issues = await MaintenanceService.GetPendingSnags();
+        isLoading = false;
+    }
+
+    private string? assignedTo = "";
+    private string? contractorName = "";
+    private string? quoteRef = "";
+
+    private void OpenTriageModal(MaintenanceIssue issue) // Called OpenTriageModal in Dashboard.razor
+    {
+        selectedIssue = issue;
+        newStatus = issue.Status;
+        adminNotes = issue.AdminNotes ?? "";
+        assignedTo = issue.AssignedTo;
+        contractorName = issue.ContractorCompany;
+        quoteRef = issue.QuoteReference;
+    }
+
+    private void CloseModal()
+    {
+        selectedIssue = null;
+    }
+
+    private async Task SaveTriage() // Called SaveTriage in Dashboard.razor
+    {
+        if (selectedIssue != null)
+        {
+            await MaintenanceService.UpdateSnagStatus(selectedIssue.Id, newStatus, adminNotes, assignedTo, contractorName, quoteRef); await LoadSnags();
+            CloseModal();
+        }
+    }
+
+    // --- VISUAL HELPERS ---
+    private string GetSeverityBorderClass(SnagSeverity severity) => severity switch
+    {
+        SnagSeverity.Emergency => "border-danger",
+        SnagSeverity.High => "border-warning",
+        SnagSeverity.Medium => "border-primary",
+        _ => "border-secondary"
+    };
+
+    private string GetSeverityBadgeClass(SnagSeverity severity) => severity switch
+    {
+        SnagSeverity.Emergency => "bg-danger",
+        SnagSeverity.High => "bg-warning text-dark",
+        SnagSeverity.Medium => "bg-primary",
+        _ => "bg-secondary"
+    };
+
+    private string GetSeverityBgClass(SnagSeverity severity) => severity switch
+    {
+        SnagSeverity.Emergency => "bg-danger",
+        SnagSeverity.High => "bg-warning text-dark",
+        _ => "bg-dark"
+    };
+}

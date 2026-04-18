@@ -1,0 +1,158 @@
+﻿using Apollo.Models;
+using Microsoft.EntityFrameworkCore;
+using System.IO;
+
+namespace Apollo.Data;
+
+
+public class MaintenanceService : IMaintenanceService
+{
+    private readonly IDbContextFactory<ApplicationDbContext> _dbFactory;
+
+    public MaintenanceService(IDbContextFactory<ApplicationDbContext> dbFactory)
+    {
+        _dbFactory = dbFactory;
+    }
+
+    public async Task<bool> VerifyPasscode(string passcode)
+    {
+        using var context = _dbFactory.CreateDbContext();
+        var config = await context.PortalConfigurations.OrderBy(c => c.Id).FirstOrDefaultAsync();
+        return config?.StageDoorPasscode == passcode;
+    }
+
+    public async Task SubmitPublicSnag(MaintenanceIssue issue, string attemptedPasscode, Stream? fileStream = null, string? fileName = null)
+    {
+        using var context = _dbFactory.CreateDbContext();
+        var config = await context.PortalConfigurations.OrderBy(c => c.Id).FirstOrDefaultAsync();
+
+        if (config?.StageDoorPasscode != attemptedPasscode)
+            throw new UnauthorizedAccessException("Invalid Passcode.");
+
+        if (fileStream != null && fileName != null)
+        {
+            var folderPath = Path.Combine("wwwroot", "uploads", "snags");
+            var directory = Path.Combine(Directory.GetCurrentDirectory(), folderPath);
+            if (!Directory.Exists(directory)) Directory.CreateDirectory(directory);
+
+            var uniqueName = $"{Guid.NewGuid()}_{Path.GetFileName(fileName)}";
+            var fullPath = Path.Combine(directory, uniqueName);
+
+            using var fs = new FileStream(fullPath, FileMode.Create);
+            await fileStream.CopyToAsync(fs);
+            issue.ImagePath = $"/uploads/snags/{uniqueName}";
+        }
+
+        issue.Status = SnagStatus.Pending;
+        issue.ReportedAt = DateTime.Now;
+
+        context.MaintenanceIssues.Add(issue);
+        await context.SaveChangesAsync();
+    }
+
+    public async Task<List<MaintenanceIssue>> GetPendingSnags()
+    {
+        using var context = _dbFactory.CreateDbContext();
+        return await context.MaintenanceIssues
+            .Include(i => i.Room).ThenInclude(r => r!.Area)
+            .Include(i => i.Notes)
+            .Include(i => i.Parts)
+            .Where(i => i.Status == SnagStatus.Pending || i.Status == SnagStatus.PartsRequired || i.Status == SnagStatus.InProgress)
+            .OrderByDescending(i => i.Severity)
+            .ToListAsync();
+    }
+
+    public async Task<List<MaintenanceIssue>> GetAllIssuesAsync()
+    {
+        using var context = _dbFactory.CreateDbContext();
+        return await context.MaintenanceIssues
+            .Include(i => i.Room).ThenInclude(r => r!.Area)
+            .Include(i => i.Notes)
+            .Include(i => i.Parts)
+            .OrderByDescending(i => i.ReportedAt)
+            .ToListAsync();
+    }
+
+    public async Task UpdateSnagStatus(int id, SnagStatus newStatus, string? adminNotes = null, string? assignedTo = null, string? contractor = null, string? quote = null, string? description = null)
+    {
+        using var context = _dbFactory.CreateDbContext();
+        var issue = await context.MaintenanceIssues.FindAsync(id);
+        if (issue != null)
+        {
+            // Auto-generate a note if the status changes!
+            if (issue.Status != newStatus)
+            {
+                context.MaintenanceNotes.Add(new MaintenanceNote
+                {
+                    MaintenanceIssueId = id,
+                    NoteText = $"Status changed from {issue.Status} to {newStatus}.",
+                    CreatedBy = "System",
+                    StatusChange = newStatus
+                });
+            }
+
+            issue.Status = newStatus;
+
+            // If an admin note was typed in the main box, save it as a timeline note
+            if (!string.IsNullOrWhiteSpace(adminNotes))
+            {
+                context.MaintenanceNotes.Add(new MaintenanceNote
+                {
+                    MaintenanceIssueId = id,
+                    NoteText = adminNotes,
+                    CreatedBy = "Admin"
+                });
+            }
+
+            issue.AssignedTo = assignedTo;
+            issue.ContractorCompany = contractor;
+            issue.QuoteReference = quote;
+            if (!string.IsNullOrWhiteSpace(description)) issue.Description = description;
+
+            if (newStatus == SnagStatus.Resolved && issue.ResolvedAt == null)
+                issue.ResolvedAt = DateTime.Now;
+
+            await context.SaveChangesAsync();
+        }
+    }
+
+    public async Task AddNoteAsync(int issueId, string noteText, string? user = "Admin", SnagStatus? statusChange = null)
+    {
+        using var context = _dbFactory.CreateDbContext();
+        context.MaintenanceNotes.Add(new MaintenanceNote
+        {
+            MaintenanceIssueId = issueId,
+            NoteText = noteText,
+            CreatedBy = user,
+            StatusChange = statusChange
+        });
+        await context.SaveChangesAsync();
+    }
+
+    public async Task AddPartAsync(int issueId, string description, int quantity, bool inStock)
+    {
+        using var context = _dbFactory.CreateDbContext();
+        context.MaintenanceParts.Add(new MaintenancePart
+        {
+            MaintenanceIssueId = issueId,
+            Description = description,
+            Quantity = quantity,
+            InStock = inStock,
+            NeedsOrdering = !inStock
+        });
+        await context.SaveChangesAsync();
+    }
+
+    public async Task TogglePartStatusAsync(int partId, bool inStock, bool isOrdered)
+    {
+        using var context = _dbFactory.CreateDbContext();
+        var part = await context.MaintenanceParts.FindAsync(partId);
+        if (part != null)
+        {
+            part.InStock = inStock;
+            part.IsOrdered = isOrdered;
+            part.NeedsOrdering = !inStock && !isOrdered;
+            await context.SaveChangesAsync();
+        }
+    }
+}

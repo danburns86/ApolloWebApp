@@ -1,0 +1,183 @@
+﻿@page "/bunches"
+@rendermode InteractiveServer
+@using Apollo.Models
+@using Apollo.Data
+@using Microsoft.EntityFrameworkCore
+@inject ApplicationDbContext Db
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Administrator")]
+
+<PageTitle>Manage Bunches</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h2>Key Bunches</h2>
+        <p class="text-muted mb-0">Group keys into sets for departments or specific staff members.</p>
+    </div>
+    <button class="btn btn-primary shadow-sm" @onclick="OpenCreateModal">
+        <i class="bi bi-plus-circle me-1"></i> Create New Bunch
+    </button>
+</div>
+<hr />
+
+<div class="row">
+    @if (!BunchesList.Any())
+    {
+        <div class="col-12 text-center py-5">
+            <i class="bi bi-layers text-muted display-1"></i>
+            <p class="mt-3 text-muted fs-5">No bunches created yet. Start by clicking "Create New Bunch".</p>
+        </div>
+    }
+    else
+    {
+        @foreach (var b in BunchesList)
+        {
+            <div class="col-xl-4 col-md-6 mb-4">
+                <div class="card h-100 shadow-sm border-0">
+                    <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+                        <span class="fw-bold">@b.Name</span>
+                        <span class="badge @(b.IsLost ? "bg-danger" : "bg-success")">
+                            @(b.IsLost ? "Lost" : "Active")
+                        </span>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-2 small">
+                            <i class="bi bi-building me-2 text-muted"></i> <strong>Dept:</strong> @(b.Department?.Name ?? "General")
+                        </div>
+                        <div class="mb-3 small">
+                            <i class="bi bi-box-seam me-2 text-muted"></i> <strong>Home:</strong> @(b.StorageLocation?.Name ?? "In Stock")
+                        </div>
+
+                        <h6 class="fw-bold border-bottom pb-1 small text-uppercase text-muted">Keys on Bunch:</h6>
+                        <ul class="list-unstyled mb-0">
+                            @foreach (var ka in b.KeyAssignments.Where(a => a.RemovedDate == null))
+                            {
+                                <li class="small mb-1">
+                                    <i class="bi bi-key-fill text-primary me-1"></i>
+                                    @ka.KeyRecord!.Lock!.LockCode @ka.KeyRecord.SequenceNumber - <span class="text-muted">@ka.KeyRecord.Lock.Name</span>
+                                </li>
+                            }
+                            @if (!b.KeyAssignments.Any(a => a.RemovedDate == null))
+                            {
+                                <li class="text-muted small fst-italic">No keys attached.</li>
+                            }
+                        </ul>
+                    </div>
+                    <div class="card-footer bg-white border-top-0 d-flex gap-2">
+                        <a href="/bunches/manage/@b.Id" class="btn btn-sm btn-outline-primary flex-grow-1">
+                            <i class="bi bi-gear"></i> Manage Keys
+                        </a>
+                        <button class="btn btn-sm btn-outline-secondary" @onclick="() => OpenEditModal(b)">
+                            <i class="bi bi-pencil"></i> Edit Details
+                        </button>
+                    </div>
+                </div>
+            </div>
+        }
+    }
+</div>
+
+@if (ShowModal)
+{
+    <div class="modal fade show d-block" style="background-color: rgba(0,0,0,0.5);" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content shadow-lg">
+                <div class="modal-header bg-dark text-white">
+                    <h5 class="modal-title">@(IsEditMode ? "Edit Bunch Details" : "Create New Bunch")</h5>
+                    <button type="button" class="btn-close btn-close-white" @onclick="CloseModal"></button>
+                </div>
+                <div class="modal-body">
+                    <EditForm Model="CurrentBunch" OnValidSubmit="SaveBunch">
+                        <DataAnnotationsValidator />
+                        
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Bunch Name</label>
+                            <InputText @bind-Value="CurrentBunch.Name" class="form-control" placeholder="e.g. Tech Master, Bar Shift A" />
+                            <ValidationMessage For="() => CurrentBunch.Name" class="text-danger" />
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Responsible Department</label>
+                            <InputSelect @bind-Value="CurrentBunch.DepartmentId" class="form-select">
+                                <option value="">-- Select Department --</option>
+                                @foreach (var d in Departments)
+                                {
+                                    <option value="@d.Id">@d.Name</option>
+                                }
+                            </InputSelect>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Home Storage Location</label>
+                            <InputSelect @bind-Value="CurrentBunch.StorageLocationId" class="form-select">
+                                <option value="">-- Select Location --</option>
+                                @foreach (var loc in Locations)
+                                {
+                                    <option value="@loc.Id">@loc.Name</option>
+                                }
+                            </InputSelect>
+                        </div>
+
+                        <div class="mt-4">
+                            <button type="submit" class="btn btn-primary w-100">@(IsEditMode ? "Update Bunch" : "Create Bunch")</button>
+                        </div>
+                    </EditForm>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<Bunch> BunchesList = new();
+    private List<Department> Departments = new();
+    private List<StorageLocation> Locations = new();
+
+    private Bunch CurrentBunch = new();
+    private bool ShowModal = false;
+    private bool IsEditMode = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        BunchesList = await Db.Bunches
+            .Include(b => b.Department)
+            .Include(b => b.StorageLocation)
+            .Include(b => b.KeyAssignments).ThenInclude(ka => ka.KeyRecord).ThenInclude(k => k.Lock)
+            .Where(b => b.IsActive)
+            .OrderBy(b => b.Name)
+            .ToListAsync();
+
+        Departments = await Db.Departments.Where(d => d.IsActive).ToListAsync();
+        Locations = await Db.StorageLocations.Where(l => l.IsActive).ToListAsync();
+    }
+
+    private void OpenCreateModal()
+    {
+        CurrentBunch = new Bunch();
+        IsEditMode = false;
+        ShowModal = true;
+    }
+
+    private void OpenEditModal(Bunch b)
+    {
+        CurrentBunch = b;
+        IsEditMode = true;
+        ShowModal = true;
+    }
+
+    private void CloseModal() => ShowModal = false;
+
+    private async Task SaveBunch()
+    {
+        if (IsEditMode) Db.Bunches.Update(CurrentBunch);
+        else Db.Bunches.Add(CurrentBunch);
+
+        await Db.SaveChangesAsync();
+        ShowModal = false;
+        await LoadData();
+    }
+}

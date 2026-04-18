@@ -1,0 +1,87 @@
+﻿@page "/admin/maintenance/reports/contractor"
+@rendermode InteractiveServer
+@using Apollo.Models
+@using Apollo.Data
+@using Apollo.Security  
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Policy = SystemPermissions.ManageMaintenance)]
+@inject IMaintenanceService MaintenanceService
+@inject IJSRuntime JS
+
+<div class="container-fluid px-4 py-4 d-print-none">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div class="d-flex align-items-center gap-3">
+            <a href="/admin/maintenance/reports" class="btn btn-outline-secondary"><i class="bi bi-arrow-left"></i></a>
+            <h2 class="fw-bold mb-0">Contractor Referrals</h2>
+        </div>
+        <button class="btn btn-dark shadow-sm" @onclick="PrintReport"><i class="bi bi-printer me-2"></i>Print Job List</button>
+    </div>
+</div>
+
+<div class="container-fluid px-4 print-area">
+    @if (isLoading) { <div class="text-center py-5 d-print-none"><div class="spinner-border text-warning"></div></div> }
+    else
+    {
+        <div class="print-header d-none d-print-block mb-4">
+            <h2>Contractor / External Referrals</h2>
+            <p class="text-muted">Generated: @DateTime.Now.ToString("dd MMM yyyy HH:mm")</p>
+            <hr />
+        </div>
+
+        var contractors = allIssues.Where(i => i.Status == SnagStatus.ContractorRequired)
+                                   .GroupBy(i => string.IsNullOrWhiteSpace(i.ContractorCompany) ? "Awaiting Assignment" : i.ContractorCompany)
+                                   .ToList();
+        
+        @foreach (var group in contractors)
+        {
+            <h5 class="fw-bold mt-4 mb-2">Company: <span class="text-primary">@group.Key</span></h5>
+            <table class="table table-bordered table-sm mb-4">
+                <thead class="table-light">
+                    <tr>
+                        <th style="width: 10%;">Job ID</th>
+                        <th style="width: 20%;">Quote Ref</th>
+                        <th style="width: 25%;">Location</th>
+                        <th style="width: 45%;">Description</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var issue in group)
+                    {
+                        <tr>
+                            <td class="fw-bold">#@issue.Id</td>
+                            <td>@(string.IsNullOrEmpty(issue.QuoteReference) ? "N/A" : issue.QuoteReference)</td>
+                            <td><strong>@issue.Room?.Name</strong></td>
+                            <td>@issue.Description</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+        @if(!contractors.Any()) { <p class="text-center text-muted py-4 fst-italic">No jobs currently requiring contractors.</p> }
+    }
+</div>
+
+<style>
+    @@media print {
+        body * { visibility: hidden; }
+        .print-area, .print-area * { visibility: visible; }
+        .print-area { position: absolute; left: 0; top: 0; width: 100%; }
+        .d-print-none { display: none !important; }
+        .d-print-block { display: block !important; }
+        .table { border-color: #000 !important; }
+        th, td { border-color: #000 !important; padding: 8px !important; }
+    }
+</style>
+
+@code {
+    private List<MaintenanceIssue> allIssues = new();
+    private bool isLoading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        isLoading = true;
+        allIssues = await MaintenanceService.GetAllIssuesAsync();
+        isLoading = false;
+    }
+
+    private async Task PrintReport() => await JS.InvokeVoidAsync("window.print");
+}

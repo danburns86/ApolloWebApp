@@ -1,0 +1,269 @@
+﻿@page "/admin/reports/campaign-audit"
+@using Apollo.Models
+@using Apollo.Data
+@using Microsoft.EntityFrameworkCore
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+
+<PageTitle>Campaign Audit Sheet</PageTitle>
+
+<div class="d-print-none mb-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <h2>Campaign Audit Sheet</h2>
+            <p class="text-muted mb-0">Generate physical checklists for your formal audit campaigns.</p>
+        </div>
+        <button class="btn btn-dark fw-bold shadow-sm" onclick="window.print()" disabled="@(ActiveCampaignId == 0)">
+            <i class="bi bi-printer me-2"></i> Print Audit Sheets
+        </button>
+    </div>
+
+    <div class="card shadow-sm border-0 bg-light border-start border-primary border-4">
+        <div class="card-body d-flex flex-wrap align-items-center gap-4">
+            
+            <div>
+                <label class="fw-bold mb-1 small text-primary">Target Campaign:</label>
+                <select class="form-select shadow-sm" @bind="ActiveCampaignId" @bind:after="LoadData">
+                    <option value="0">-- Select a Campaign --</option>
+                    @foreach (var camp in Campaigns)
+                    {
+                        <option value="@camp.Id">@camp.Name</option>
+                    }
+                </select>
+            </div>
+
+            <div>
+                <label class="fw-bold mb-1 small text-muted">Filter By Status:</label>
+                <select class="form-select shadow-sm" @bind="FilterStatus" @bind:after="OrganizeData">
+                    <option value="Pending">Outstanding (Pending) Only</option>
+                    <option value="All">All Items in System</option>
+                    <option value="Completed">Completed Only</option>
+                </select>
+            </div>
+
+            <div>
+                <label class="fw-bold mb-1 small text-muted">Group Report By:</label>
+                <select class="form-select shadow-sm" @bind="GroupBy" @bind:after="OrganizeData">
+                    <option value="LocationHolder">Location / Holder</option>
+                    <option value="Department">Department (Bunches Only)</option>
+                </select>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<div class="print-container">
+    @if (ActiveCampaignId == 0)
+    {
+        <div class="alert alert-info text-center d-print-none">
+            <i class="bi bi-arrow-up-circle-fill me-2"></i> Please select an Audit Campaign from the dropdown above to generate the report.
+        </div>
+    }
+    else if (!GroupedItems.Any())
+    {
+        <div class="alert alert-success text-center">
+            <i class="bi bi-check-circle-fill me-2"></i> No items match the current filter. (If filtering by "Outstanding", you might be 100% finished!)
+        </div>
+    }
+    else
+    {
+        <div class="d-none d-print-block mb-4 text-center">
+            <h2 class="fw-bold text-uppercase border-bottom border-2 border-dark pb-2">@SelectedCampaignName - Official Audit Log</h2>
+        </div>
+
+        @foreach (var group in GroupedItems.OrderBy(g => g.Key))
+        {
+            <div class="mb-5" style="page-break-inside: avoid;">
+                <div class="border-bottom border-dark border-2 pb-1 mb-3 d-flex justify-content-between align-items-end">
+                    <h4 class="fw-bold mb-0 text-uppercase">
+                        <i class="bi @(GroupBy == "LocationHolder" ? "bi-geo-alt-fill" : "bi-building") me-2"></i> @group.Key
+                    </h4>
+                    <span class="text-muted small">Printed: @DateTime.Now.ToString("dd MMM yyyy")</span>
+                </div>
+
+                <table class="table table-bordered table-sm align-middle">
+                    <thead class="table-light text-uppercase small">
+                        <tr>
+                            <th style="width: 25%;">Item</th>
+                            <th style="width: 35%;">Details / Attached Keys</th>
+                            <th style="width: 15%; text-align: center;">Audit Status</th>
+                            <th style="width: 25%; text-align: center;">Auditor Sign-off</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var item in group.Value.OrderBy(i => i.ItemName))
+                        {
+                            <tr>
+                                <td class="fw-bold">
+                                    @if (item.IsBunch)
+                                    {
+                                        <span class="badge bg-dark me-1 print-badge">Bunch</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-secondary me-1 print-badge">Key</span>
+                                    }
+                                    @item.ItemName
+                                </td>
+                                <td class="small">
+                                    <span class="text-muted">@item.Details</span>
+                                </td>
+                                <td class="text-center fw-bold small">
+                                    @if (item.IsAudited)
+                                    {
+                                        <span class="text-success"><i class="bi bi-check-circle-fill"></i> VERIFIED</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-danger"><i class="bi bi-circle"></i> PENDING</span>
+                                    }
+                                </td>
+                                <td>
+                                    @if (!item.IsAudited)
+                                    {
+                                        <div style="height: 20px;"></div>
+                                    }
+                                    else
+                                    {
+                                        <div class="text-center text-muted small fst-italic">Signed off digitally</div>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    }
+</div>
+
+<style>
+    /* Styling specifically for printing */
+    @@media print {
+        body { background-color: white !important; }
+        .page { flex-direction: column !important; }
+        .sidebar { display: none !important; }
+        .top-row { display: none !important; }
+        .print-badge { border: 1px solid #000; color: #000; background: none !important; }
+        .table-light th { background-color: #f8f9fa !important; -webkit-print-color-adjust: exact; }
+    }
+</style>
+
+@code {
+    private int ActiveCampaignId = 0;
+    private string SelectedCampaignName = "";
+    private string FilterStatus = "Pending"; 
+    private string GroupBy = "LocationHolder"; 
+
+    private List<AuditCampaign> Campaigns = new();
+
+    public class CampaignPrintDto
+    {
+        public string ItemName { get; set; } = "";
+        public string LocationOrHolder { get; set; } = "";
+        public string DepartmentName { get; set; } = "";
+        public bool IsAudited { get; set; }
+        public bool IsBunch { get; set; }
+        public string Details { get; set; } = "";
+    }
+
+    private List<CampaignPrintDto> RawData = new();
+    private Dictionary<string, List<CampaignPrintDto>> GroupedItems = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        using var context = await DbFactory.CreateDbContextAsync();
+        Campaigns = await context.AuditCampaigns.OrderByDescending(c => c.CreatedAt).ToListAsync();
+        
+        if (Campaigns.Any()) 
+        {
+            ActiveCampaignId = Campaigns.First().Id;
+            await LoadData();
+        }
+    }
+
+    private async Task LoadData()
+    {
+        if (ActiveCampaignId == 0) return;
+
+        SelectedCampaignName = Campaigns.FirstOrDefault(c => c.Id == ActiveCampaignId)?.Name ?? "Audit Campaign";
+
+        using var context = await DbFactory.CreateDbContextAsync();
+        RawData.Clear();
+
+        // 1. Gather Bunches
+        var allBunches = await context.Bunches
+            .Include(b => b.Department)
+            .Include(b => b.StorageLocation)
+            .Include(b => b.KeyAssignments!).ThenInclude(ka => ka.KeyRecord).ThenInclude(k => k!.Lock)
+            .Where(b => b.IsActive && !b.IsLost)
+            .ToListAsync();
+
+        foreach (var b in allBunches)
+        {
+            var activeKeys = b.KeyAssignments?.Where(ka => ka.RemovedDate == null && ka.KeyRecord != null).Select(ka => ka.KeyRecord!).ToList() ?? new();
+            if (!activeKeys.Any()) continue; 
+
+            // A bunch is audited if the oldest audit stamp matches the campaign
+            var oldestCampaign = activeKeys.Min(k => k.LastAuditCampaignId);
+            bool isAudited = oldestCampaign == ActiveCampaignId;
+
+            RawData.Add(new CampaignPrintDto
+            {
+                ItemName = b.Name,
+                LocationOrHolder = !string.IsNullOrEmpty(b.IssuedToName) ? b.IssuedToName : (b.StorageLocation?.Name ?? "In Stock"),
+                DepartmentName = b.Department?.Name ?? "General / Unassigned",
+                IsAudited = isAudited,
+                IsBunch = true,
+                Details = string.Join(", ", activeKeys.Select(k => $"{k.Lock?.LockCode} {k.SequenceNumber}"))
+            });
+        }
+
+        // 2. Gather Loose Keys
+        var attachedKeyIds = await context.KeyBunchAssignments.Where(ka => ka.RemovedDate == null).Select(ka => ka.KeyRecordId).ToListAsync();
+        
+        var looseKeys = await context.Keys
+            .Include(k => k.Lock)
+            .Include(k => k.StorageLocation)
+            .Where(k => k.Status != "Lost" && !attachedKeyIds.Contains(k.Id))
+            .ToListAsync();
+
+        foreach (var k in looseKeys)
+        {
+            bool isAudited = k.LastAuditCampaignId == ActiveCampaignId;
+
+            RawData.Add(new CampaignPrintDto
+            {
+                ItemName = $"{k.Lock?.LockCode} {k.SequenceNumber}",
+                LocationOrHolder = !string.IsNullOrEmpty(k.IssuedToName) ? k.IssuedToName : (k.StorageLocation?.Name ?? "In Stock"),
+                DepartmentName = "Loose Keys (Undepartmentalized)",
+                IsAudited = isAudited,
+                IsBunch = false,
+                Details = k.Lock?.Name ?? ""
+            });
+        }
+
+        OrganizeData();
+    }
+
+    private void OrganizeData()
+    {
+        var filteredList = RawData.AsEnumerable();
+
+        if (FilterStatus == "Pending") filteredList = filteredList.Where(x => !x.IsAudited);
+        else if (FilterStatus == "Completed") filteredList = filteredList.Where(x => x.IsAudited);
+
+        if (GroupBy == "LocationHolder")
+        {
+            GroupedItems = filteredList
+                .GroupBy(i => i.LocationOrHolder)
+                .ToDictionary(g => g.Key, g => g.ToList());
+        }
+        else // By Department
+        {
+            GroupedItems = filteredList
+                .GroupBy(i => i.DepartmentName)
+                .ToDictionary(g => g.Key, g => g.ToList());
+        }
+    }
+}

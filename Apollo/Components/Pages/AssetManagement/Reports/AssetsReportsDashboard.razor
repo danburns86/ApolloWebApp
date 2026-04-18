@@ -1,0 +1,73 @@
+﻿@page "/admin/assets/reports"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Policy = SystemPermissions.ViewAssets)]
+
+<PageTitle>Asset Reports Dashboard</PageTitle>
+
+<div class="container-fluid px-4 py-4 max-w-7xl">
+    <div class="mb-4">
+        <h2 class="fw-bold mb-0">Asset Reports Dashboard</h2>
+        <p class="text-muted mb-0">Select a specific report to generate, filter, and export.</p>
+    </div>
+
+    <div class="row g-4">
+        <div class="col-md-4">
+            <div class="card border-0 shadow-sm h-100 border-top border-primary border-4">
+                <div class="card-body">
+                    <h5 class="fw-bold"><i class="bi bi-cash-stack text-primary me-2"></i>Finance & Value</h5>
+                    <div class="list-group list-group-flush mt-3">
+                        <a href="/admin/assets/reports/value" class="list-group-item list-group-item-action py-3 d-flex justify-content-between align-items-center">
+                            <div><div class="fw-bold">Replacement Value Report</div><div class="small text-muted">Filter by Room or Category</div></div>
+                            <i class="bi bi-chevron-right text-muted"></i>
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-4">
+            <div class="card border-0 shadow-sm h-100 border-top border-success border-4">
+                <div class="card-body">
+                    <h5 class="fw-bold"><i class="bi bi-geo-alt text-success me-2"></i>Status & Location</h5>
+                    <div class="list-group list-group-flush mt-3">
+                        <a href="/admin/assets/reports/offsite" class="list-group-item list-group-item-action py-3 d-flex justify-content-between align-items-center">
+                            <div><div class="fw-bold">Offsite & Loaned Assets</div><div class="small text-muted">Sort by Holder, Tag, or Type</div></div><i class="bi bi-chevron-right text-muted"></i>
+                        </a>
+                        <a href="/admin/assets/reports/inservice" class="list-group-item list-group-item-action py-3 d-flex justify-content-between align-items-center">
+                            <div><div class="fw-bold">Assets In Service</div><div class="small text-muted">All active onsite equipment</div></div><i class="bi bi-chevron-right text-muted"></i>
+                        </a>
+                        <a href="/admin/assets/reports/storage" class="list-group-item list-group-item-action py-3 d-flex justify-content-between align-items-center">
+                            <div><div class="fw-bold">Assets In Storage</div><div class="small text-muted">Decommissioned or archived items</div></div><i class="bi bi-chevron-right text-muted"></i>
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-4">
+            <div class="card border-0 shadow-sm h-100 border-top border-danger border-4">
+                <div class="card-body">
+                    <h5 class="fw-bold"><i class="bi bi-tools text-danger me-2"></i>Maintenance & Action</h5>
+                    <div class="list-group list-group-flush mt-3">
+                        <a href="/admin/assets/reports/repair" class="list-group-item list-group-item-action py-3 d-flex justify-content-between align-items-center">
+                            <div><div class="fw-bold">Awaiting Repair</div><div class="small text-muted">Items marked as broken/snagged</div></div><i class="bi bi-chevron-right text-muted"></i>
+                        </a>
+                        <a href="/admin/assets/reports/compliance" class="list-group-item list-group-item-action py-3 d-flex justify-content-between align-items-center">
+                            <div><div class="fw-bold">Safety Compliance</div><div class="small text-muted">Overdue PAT or LOLER inspections</div></div><i class="bi bi-chevron-right text-muted"></i>
+                        </a>
+                        <a href="/admin/assets/reports/lemon" class="list-group-item list-group-item-action py-3 d-flex justify-content-between align-items-center">
+                            <div>
+                                <div class="fw-bold text-danger">The "Lemon" Report</div>
+                                <div class="small text-muted">Identify equipment with high failure rates</div>
+                            </div>
+                            <i class="bi bi-chevron-right text-muted"></i>
+                        </a>
+
+                        <a href="/admin/assets/reports/disposed" class="list-group-item list-group-item-action py-3 d-flex justify-content-between align-items-center">
+                            <div><div class="fw-bold">Disposed Assets</div><div class="small text-muted">Historical discarded inventory</div></div><i class="bi bi-chevron-right text-muted"></i>
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

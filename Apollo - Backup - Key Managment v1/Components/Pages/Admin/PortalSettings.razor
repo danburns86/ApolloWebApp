@@ -1,0 +1,279 @@
+﻿@page "/admin/settings/portal"
+@rendermode InteractiveServer
+@using Apollo.Models
+@using Apollo.Data
+@using Microsoft.EntityFrameworkCore
+@using Microsoft.AspNetCore.Hosting
+@using System.IO
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject IWebHostEnvironment Env
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Administrator")]
+
+<PageTitle>Portal Configuration</PageTitle>
+
+<div class="container-fluid px-4 max-w-5xl">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="fw-bold">Portal Configuration</h2>
+            <p class="text-muted">Manage global branding, welcome messages, and quick links.</p>
+        </div>
+    </div>
+
+    @if (ShowSuccess)
+    {
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+            <i class="bi bi-check-circle-fill me-2"></i> Settings saved successfully. Refresh the page to see updates.
+            <button type="button" class="btn-close" @onclick="() => ShowSuccess = false"></button>
+        </div>
+    }
+
+    @if (Config == null)
+    {
+        <div class="text-center py-5"><div class="spinner-border text-primary"></div></div>
+    }
+    else
+    {
+        <EditForm Model="Config" OnValidSubmit="SaveSettings">
+            <DataAnnotationsValidator />
+
+            <div class="row g-4">
+                <div class="col-md-6">
+                    <div class="card border-0 shadow-sm h-100">
+                        <div class="card-header bg-white py-3 border-bottom">
+                            <h5 class="mb-0 fw-bold text-primary"><i class="bi bi-palette me-2"></i>Branding & Welcome</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="mb-3">
+                                <label class="form-label fw-bold small">Theatre / Organization Name</label>
+                                <InputText @bind-Value="Config.TheatreName" class="form-control" />
+                                <ValidationMessage For="() => Config.TheatreName" class="text-danger small" />
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label fw-bold small">Welcome Heading</label>
+                                <InputText @bind-Value="Config.WelcomeHeading" class="form-control" />
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label fw-bold small">Welcome Sub-Message</label>
+                                <InputTextArea @bind-Value="Config.WelcomeMessage" class="form-control" rows="2" />
+                            </div>
+                            
+                            <div class="mb-3 p-3 bg-light border rounded">
+                                <label class="form-label fw-bold small d-block">Navigation Logo</label>
+                                @if (!string.IsNullOrEmpty(Config.NavbarLogoUrl))
+                                {
+                                    <img src="@Config.NavbarLogoUrl" class="mb-2" style="max-height: 40px;" />
+                                }
+                                <InputFile OnChange="HandleLogoUpload" class="form-control form-control-sm" accept="image/*" />
+                                <div class="form-text small text-muted">Max file size: 10MB. Ideal format: PNG with transparent background.</div>
+                                @if (IsUploadingLogo)
+                                {
+                                    <span class="small text-muted"><span class="spinner-border spinner-border-sm me-1"></span> Uploading...</span>
+                                }
+                            </div>
+
+                            <div class="mb-3 p-3 bg-light border rounded">
+                                <label class="form-label fw-bold small d-block">Browser Favicon</label>
+                                @if (!string.IsNullOrEmpty(Config.FaviconUrl))
+                                {
+                                    <img src="@Config.FaviconUrl" class="mb-2" style="max-height: 32px;" />
+                                }
+                                <InputFile OnChange="HandleFaviconUpload" class="form-control form-control-sm" accept=".ico,.png" />
+                                <div class="form-text small text-muted">Max file size: 10MB. Ideal format: .ICO or square .PNG.</div>
+                                @if (IsUploadingFavicon)
+                                {
+                                    <span class="small text-muted"><span class="spinner-border spinner-border-sm me-1"></span> Uploading...</span>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-6">
+                    <div class="card border-0 shadow-sm mb-4">
+                        <div class="card-header bg-white py-3 border-bottom">
+                            <h5 class="mb-0 fw-bold text-success"><i class="bi bi-toggle-on me-2"></i>Module Toggles</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="form-check form-switch mb-3">
+                                <InputCheckbox @bind-Value="Config.IsKeyManagementEnabled" class="form-check-input" id="toggleKey" />
+                                <label class="form-check-label fw-bold" for="toggleKey">Enable Key Management</label>
+                            </div>
+                            <div class="form-check form-switch mb-3">
+                                <InputCheckbox @bind-Value="Config.IsReportsEnabled" class="form-check-input" id="toggleReports" />
+                                <label class="form-check-label fw-bold" for="toggleReports">Enable Reports & Analytics</label>
+                            </div>
+                            <div class="form-check form-switch mb-3">
+                                <InputCheckbox @bind-Value="Config.IsAdminEnabled" class="form-check-input" id="toggleAdmin" />
+                                <label class="form-check-label fw-bold" for="toggleAdmin">Enable Admin Dashboard</label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card border-0 shadow-sm border-top border-info border-4">
+                        <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0 fw-bold text-info"><i class="bi bi-link-45deg me-2"></i>Top Bar Quick Links</h5>
+                            <span class="badge bg-secondary">@CustomLinks.Count / 8</span>
+                        </div>
+                        <div class="card-body p-0">
+                            <ul class="list-group list-group-flush">
+                                @if (!CustomLinks.Any())
+                                {
+                                    <li class="list-group-item text-muted text-center py-3 small fst-italic">No custom links added.</li>
+                                }
+                                @foreach (var link in CustomLinks)
+                                {
+                                    <li class="list-group-item d-flex justify-content-between align-items-center py-2">
+                                        <div>
+                                            <i class="bi @link.IconClass text-primary me-2 fs-5"></i>
+                                            <span class="fw-bold">@link.Title</span>
+                                            <div class="small text-muted text-truncate" style="max-width: 200px;">@link.Url</div>
+                                        </div>
+                                        <button type="button" class="btn btn-sm btn-outline-danger border-0" @onclick="() => RemoveLink(link)"><i class="bi bi-trash"></i></button>
+                                    </li>
+                                }
+                            </ul>
+                        </div>
+                        <div class="card-footer bg-light text-center border-top-0">
+                            <button type="button" class="btn btn-sm btn-outline-primary fw-bold" disabled="@(CustomLinks.Count >= 8)" @onclick="OpenLinkModal">
+                                <i class="bi bi-plus-circle me-1"></i> Add Link
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mt-4 text-end">
+                <button type="submit" class="btn btn-primary px-4 fw-bold shadow-sm">
+                    <i class="bi bi-save me-2"></i> Save Configuration
+                </button>
+            </div>
+        </EditForm>
+    }
+</div>
+
+@if (ShowLinkModal)
+{
+    <div class="modal fade show d-block" style="background-color: rgba(0,0,0,0.5); z-index: 1050;" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content shadow-lg">
+                <div class="modal-header bg-dark text-white">
+                    <h5 class="modal-title">Add Quick Link</h5>
+                    <button type="button" class="btn-close btn-close-white" @onclick="() => ShowLinkModal = false"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-bold small">Link Title</label>
+                        <input type="text" class="form-control" @bind="NewLink.Title" placeholder="e.g. Staff Handbook" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold small">URL (Web Address)</label>
+                        <input type="text" class="form-control" @bind="NewLink.Url" placeholder="https://..." />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold small">Bootstrap Icon Class</label>
+                        <div class="input-group">
+                            <span class="input-group-text bg-white text-primary fs-5"><i class="bi @NewLink.IconClass"></i></span>
+                            <input type="text" class="form-control" @bind="NewLink.IconClass" @bind:event="oninput" placeholder="e.g. bi-book" />
+                        </div>
+                        <div class="form-text small">
+                            Find icon names at <a href="https://icons.getbootstrap.com/" target="_blank">icons.getbootstrap.com</a>. (Preview on the left!)
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="() => ShowLinkModal = false">Cancel</button>
+                    <button type="button" class="btn btn-primary" @onclick="SaveNewLink" disabled="@string.IsNullOrWhiteSpace(NewLink.Title)">Add to List</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private PortalConfiguration? Config;
+    private bool ShowSuccess = false;
+    private List<TopBarLink> CustomLinks = new();
+    
+    // Link Modal State
+    private bool ShowLinkModal = false;
+    private TopBarLink NewLink = new();
+
+    private bool IsUploadingLogo = false;
+    private bool IsUploadingFavicon = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        using var context = await DbFactory.CreateDbContextAsync();
+        Config = await context.PortalConfigurations.FirstOrDefaultAsync();
+        
+        if (Config == null)
+        {
+            Config = new PortalConfiguration();
+            context.PortalConfigurations.Add(Config);
+            await context.SaveChangesAsync();
+        }
+
+        if (!string.IsNullOrWhiteSpace(Config.CustomLinksJson))
+        {
+            try { CustomLinks = System.Text.Json.JsonSerializer.Deserialize<List<TopBarLink>>(Config.CustomLinksJson) ?? new(); }
+            catch { CustomLinks = new(); }
+        }
+    }
+
+    // --- UPLOAD LOGIC ---
+    private async Task HandleLogoUpload(InputFileChangeEventArgs e)
+    {
+        IsUploadingLogo = true;
+        try
+        {
+            var file = e.File;
+            var ext = Path.GetExtension(file.Name);
+            var newFileName = $"custom_logo_{DateTime.Now.Ticks}{ext}";
+            var folderPath = Path.Combine(Env.WebRootPath, "images");
+            Directory.CreateDirectory(folderPath); // Ensure folder exists
+
+            var fullPath = Path.Combine(folderPath, newFileName);
+            await using FileStream fs = new(fullPath, FileMode.Create);
+            await file.OpenReadStream(1024 * 1024 * 10).CopyToAsync(fs); // 10MB limit
+
+            if (Config != null) Config.NavbarLogoUrl = $"/images/{newFileName}";
+        }
+        finally { IsUploadingLogo = false; }
+    }
+
+    private async Task HandleFaviconUpload(InputFileChangeEventArgs e)
+    {
+        IsUploadingFavicon = true;
+        try
+        {
+            var file = e.File;
+            var ext = Path.GetExtension(file.Name);
+            var newFileName = $"custom_favicon_{DateTime.Now.Ticks}{ext}";
+            var folderPath = Path.Combine(Env.WebRootPath, "images");
+            Directory.CreateDirectory(folderPath);
+
+            var fullPath = Path.Combine(folderPath, newFileName);
+            await using FileStream fs = new(fullPath, FileMode.Create);
+            await file.OpenReadStream(1024 * 1024 * 10).CopyToAsync(fs); // 10MB limit
+
+            if (Config != null) Config.FaviconUrl = $"/images/{newFileName}";
+        }
+        finally { IsUploadingFavicon = false; }
+    }
+
+    // --- LINK LOGIC ---
+    private void OpenLinkModal() { NewLink = new TopBarLink(); ShowLinkModal = true; }
+    private void SaveNewLink() { if (CustomLinks.Count < 8) CustomLinks.Add(NewLink); ShowLinkModal = false; }
+    private void RemoveLink(TopBarLink link) { CustomLinks.Remove(link); }
+
+    private async Task SaveSettings()
+    {
+        if (Config == null) return;
+        Config.CustomLinksJson = System.Text.Json.JsonSerializer.Serialize(CustomLinks);
+
+        using var context = await DbFactory.CreateDbContextAsync();
+        context.PortalConfigurations.Update(Config);
+        await context.SaveChangesAsync();
+        ShowSuccess = true;
+    }
+}

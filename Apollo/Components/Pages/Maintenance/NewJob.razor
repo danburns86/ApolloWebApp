@@ -1,0 +1,151 @@
+﻿@page "/admin/maintenance/new"
+@using Apollo.Models
+@using Apollo.Data
+@using Microsoft.EntityFrameworkCore
+@using Microsoft.AspNetCore.Components.Authorization
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Policy = SystemPermissions.ManageMaintenance)]
+@inject IMaintenanceService MaintenanceService
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject NavigationManager Nav
+@inject AuthenticationStateProvider AuthStateProvider
+
+<PageTitle>Log New Job</PageTitle>
+
+<div class="container-fluid px-4 py-4 max-w-3xl">
+    <div class="d-flex align-items-center mb-4 gap-3">
+        <a href="/admin/maintenance" class="btn btn-outline-secondary"><i class="bi bi-arrow-left"></i></a>
+        <div>
+            <h2 class="fw-bold mb-0">Log Internal Job</h2>
+            <p class="text-muted mb-0">Create a new maintenance ticket directly in the system.</p>
+        </div>
+    </div>
+
+    @if (rooms == null)
+    {
+        <div class="text-center py-5"><div class="spinner-border text-danger"></div></div>
+    }
+    else
+    {
+        <div class="card shadow-sm border-0 border-top border-danger border-4">
+            <div class="card-body p-4">
+                <EditForm Model="newIssue" OnValidSubmit="HandleSubmit">
+                    <DataAnnotationsValidator />
+
+                    <div class="mb-4">
+                        <label class="form-label fw-bold text-secondary small text-uppercase">1. Where is the issue?</label>
+                        <InputSelect @bind-Value="newIssue.RoomId" class="form-select form-select-lg bg-light">
+                            <option value="0" disabled>-- Select a Location --</option>
+                            @foreach (var area in rooms.GroupBy(r => r.Area?.Name ?? "Unassigned").OrderBy(g => g.Key))
+                            {
+                                <optgroup label="@area.Key">
+                                    @foreach (var room in area.OrderBy(r => r.Name))
+                                    {
+                                        <option value="@room.Id">@room.Name</option>
+                                    }
+                                </optgroup>
+                            }
+                        </InputSelect>
+                        <ValidationMessage For="() => newIssue.RoomId" class="text-danger small" />
+                        @if (showRoomError)
+                        {
+                            <div class="text-danger small mt-1">Please select a valid location.</div>
+                        }
+                    </div>
+
+                    <div class="mb-4">
+                        <label class="form-label fw-bold text-secondary small text-uppercase">2. Describe the Fault</label>
+                        <InputTextArea @bind-Value="newIssue.Description" class="form-control bg-light" rows="4" placeholder="Be as specific as possible..." />
+                        <ValidationMessage For="() => newIssue.Description" class="text-danger small" />
+                    </div>
+
+                    <div class="row mb-4">
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold text-secondary small text-uppercase">3. Severity</label>
+                            <InputSelect @bind-Value="newIssue.Severity" class="form-select bg-light">
+                                @foreach (var severity in Enum.GetValues<SnagSeverity>())
+                                {
+                                    <option value="@severity">@severity</option>
+                                }
+                            </InputSelect>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold text-secondary small text-uppercase">4. Photo (Optional)</label>
+                            <InputFile OnChange="HandleFileSelected" class="form-control bg-light" accept="image/*" />
+                        </div>
+                    </div>
+
+                    <div class="mt-5 text-end">
+                        <a href="/admin/maintenance" class="btn btn-light me-2">Cancel</a>
+                        <button type="submit" class="btn btn-danger px-5 fw-bold shadow-sm" disabled="@isSubmitting">
+                            @if (isSubmitting)
+                            {
+                                <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
+                                <span>Logging...</span>
+                            }
+                            else
+                            {
+                                <span><i class="bi bi-plus-circle me-2"></i>Log Job</span>
+                            }
+                        </button>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private MaintenanceIssue newIssue = new() { Severity = SnagSeverity.Medium };
+    private List<Room>? rooms;
+    private IBrowserFile? selectedFile;
+    private bool isSubmitting = false;
+    private bool showRoomError = false;
+    private string currentUserDisplayName = "Admin";
+
+    protected override async Task OnInitializedAsync()
+    {
+        using var context = await DbFactory.CreateDbContextAsync();
+        rooms = await context.Rooms.Include(r => r.Area).ToListAsync();
+
+        // Get the name of the staff member logging this
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+        if (user.Identity != null && user.Identity.IsAuthenticated)
+        {
+            var appUser = await context.Users.FirstOrDefaultAsync(u => u.UserName == user.Identity.Name);
+            currentUserDisplayName = appUser?.FirstName ?? user.Identity.Name?.Split('@')[0] ?? "Admin";
+        }
+    }
+
+    private void HandleFileSelected(InputFileChangeEventArgs e)
+    {
+        selectedFile = e.File;
+    }
+
+    private async Task HandleSubmit()
+    {
+        if (newIssue.RoomId == 0)
+        {
+            showRoomError = true;
+            return;
+        }
+        showRoomError = false;
+        isSubmitting = true;
+        StateHasChanged();
+
+        Stream? fileStream = null;
+        string? fileName = null;
+
+        if (selectedFile != null)
+        {
+            // Max 5MB file upload limit
+            fileStream = selectedFile.OpenReadStream(maxAllowedSize: 5 * 1024 * 1024);
+            fileName = selectedFile.Name;
+        }
+
+        await MaintenanceService.SubmitInternalSnagAsync(newIssue, currentUserDisplayName, fileStream, fileName);
+        
+        // Redirect straight to the master log so they can see it added
+        Nav.NavigateTo("/admin/maintenance/log");
+    }
+}

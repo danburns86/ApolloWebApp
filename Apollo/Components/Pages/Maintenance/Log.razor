@@ -1,0 +1,391 @@
+﻿@page "/admin/maintenance/log"
+@using Apollo.Models
+@using Apollo.Data
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Policy = SystemPermissions.ManageMaintenance)]
+@inject IMaintenanceService MaintenanceService
+
+<PageTitle>Maintenance Log</PageTitle>
+
+<div class="container-fluid px-4 py-4 max-w-7xl">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="fw-bold mb-0">Maintenance Log</h2>
+            <p class="text-muted">Master record of all reported issues and resolutions.</p>
+        </div>
+    </div>
+
+    <div class="card shadow-sm border-0 mb-4">
+        <div class="card-header bg-white py-3 d-flex align-items-center gap-3">
+            <h6 class="m-0 fw-bold text-primary flex-grow-1"><i class="bi bi-journal-text me-2"></i>Issue History</h6>
+            
+            <select class="form-select form-select-sm w-auto" @bind="filterStatus">
+                <option value="">All Statuses</option>
+                @foreach (var status in Enum.GetValues<SnagStatus>())
+                {
+                    <option value="@status">@status</option>
+                }
+            </select>
+
+            <select class="form-select form-select-sm w-auto" @bind="filterSeverity">
+                <option value="">All Severities</option>
+                @foreach (var severity in Enum.GetValues<SnagSeverity>())
+                {
+                    <option value="@severity">@severity</option>
+                }
+            </select>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th class="ps-4">ID</th>
+                            <th>Date Logged</th>
+                            <th>Location</th>
+                            <th>Description</th>
+                            <th>Severity</th>
+                            <th>Status</th>
+                            <th class="text-end pe-4">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (isLoading)
+                        {
+                            <tr><td colspan="7" class="text-center py-4"><div class="spinner-border spinner-border-sm text-primary"></div></td></tr>
+                        }
+                        else if (!FilteredIssues.Any())
+                        {
+                            <tr><td colspan="7" class="text-center py-4 text-muted fst-italic">No issues match the current filters.</td></tr>
+                        }
+                        else
+                        {
+                            @foreach (var issue in FilteredIssues)
+                            {
+                                <tr>
+                                    <td class="ps-4 text-muted small">#@issue.Id</td>
+                                    <td>
+                                        <div class="fw-bold small">@issue.ReportedAt.ToString("dd MMM yyyy")</div>
+                                        <div class="text-muted" style="font-size: 0.75rem;">@issue.ReportedAt.ToString("HH:mm")</div>
+                                    </td>
+                                    <td>
+                                        <div class="fw-bold small">@issue.Room?.Name</div>
+                                        <div class="text-muted" style="font-size: 0.75rem;">@issue.Room?.Area?.Name</div>
+                                    </td>
+                                    <td>
+                                        <div class="text-truncate small" style="max-width: 250px;" title="@issue.Description">
+                                            @issue.Description
+                                        </div>
+                                    </td>
+                                    <td><span class="badge @GetSeverityBadgeClass(issue.Severity)">@issue.Severity</span></td>
+                                    <td><span class="badge @GetStatusBadgeClass(issue.Status)">@issue.Status.ToString().Replace("ContractorRequired", "Contractor")</span></td>
+                                    <td class="text-end pe-4">
+                                        <button class="btn btn-sm btn-outline-secondary" @onclick="() => OpenModal(issue)">
+                                            View / Update
+                                        </button>
+                                    </td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+@if (selectedIssue != null)
+{
+    <div class="modal fade show d-block" style="background-color: rgba(0,0,0,0.6); z-index: 1050;" tabindex="-1">
+        <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-content shadow-lg border-0">
+                <div class="modal-header bg-dark text-white border-0">
+                    <h5 class="modal-title fw-bold">Ticket #@selectedIssue.Id - @selectedIssue.Room?.Name</h5>
+                    <button type="button" class="btn-close btn-close-white" @onclick="CloseModal"></button>
+                </div>
+                <div class="modal-body p-4 bg-light">
+                    <div class="row g-4">
+                        <div class="col-lg-7">
+                            <div class="card border-0 shadow-sm mb-4">
+                                <div class="card-body">
+                                    <h6 class="fw-bold text-muted text-uppercase small mb-2">Issue Description</h6>
+                                    <textarea class="form-control mb-3" @bind="editDescription" rows="3"></textarea>
+                                    
+                                    <div class="row g-3">
+                                        <div class="col-md-6">
+                                            <label class="form-label small fw-bold text-uppercase text-primary">Assign To</label>
+                                            <input type="text" class="form-control form-control-sm" @bind="assignedTo" placeholder="e.g. Dave (Electrics)" />
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label class="form-label small fw-bold text-uppercase text-danger">Status</label>
+                                            <select class="form-select form-select-sm" @bind="newStatus">
+                                                @foreach (var status in Enum.GetValues<SnagStatus>())
+                                                {
+                                                    <option value="@status">@status.ToString().Replace("ContractorRequired", "Contractor Required")</option>
+                                                }
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    @if (newStatus == SnagStatus.ContractorRequired)
+                                    {
+                                        <div class="mt-3 p-2 bg-warning bg-opacity-10 border border-warning rounded">
+                                            <h6 class="fw-bold text-warning-emphasis small text-uppercase mb-2">Contractor Details</h6>
+                                            <div class="row g-2">
+                                                <div class="col-6"><input type="text" class="form-control form-control-sm" @bind="contractorName" placeholder="Company Name" /></div>
+                                                <div class="col-6"><input type="text" class="form-control form-control-sm" @bind="quoteRef" placeholder="Quote #" /></div>
+                                            </div>
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+
+                            <div class="card border-0 shadow-sm">
+                                <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+                                    <h6 class="m-0 fw-bold text-secondary"><i class="bi bi-box-seam me-2"></i>Parts Required</h6>
+                                </div>
+                                <div class="card-body p-0">
+                                    <table class="table table-sm align-middle mb-0">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th class="ps-3">Part Description</th>
+                                                <th>Qty</th>
+                                                <th>Status</th>
+                                                <th class="text-end pe-3">Action</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @foreach (var part in selectedIssue.Parts)
+                                            {
+                                                <tr>
+                                                    <td class="ps-3 small">@part.Description</td>
+                                                    <td class="small">@part.Quantity</td>
+                                                    <td>
+                                                        @if (part.InStock)
+                                                        {
+                                                            <span class="badge bg-success">In Stock</span>
+                                                        }
+                                                        else if (part.IsOrdered)
+                                                        {
+
+                                                            <span class="badge bg-info text-dark">Ordered</span>
+                                                        }
+                                                        else
+                                                        {
+
+                                                            <span class="badge bg-danger">Needs Ordering</span>
+                                                        }
+                                                    </td>
+                                                    <td class="text-end pe-3">
+                                                        <button class="btn btn-xs btn-outline-secondary" @onclick="() => TogglePartStatus(part)">Toggle</button>
+                                                    </td>
+                                                </tr>
+                                            }
+                                            @if (!selectedIssue.Parts.Any())
+                                            {
+                                                <tr><td colspan="4" class="text-center py-3 text-muted small fst-italic">No parts listed.</td></tr>
+                                            }
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div class="card-footer bg-light">
+                                    <div class="row g-2 align-items-center">
+                                        <div class="col-6"><input type="text" class="form-control form-control-sm" @bind="newPartName" placeholder="Part name..." /></div>
+                                        <div class="col-2"><input type="number" class="form-control form-control-sm" @bind="newPartQty" min="1" /></div>
+                                        <div class="col-auto">
+                                            <div class="form-check form-check-inline mt-1">
+                                                <input class="form-check-input" type="checkbox" @bind="newPartInStock" id="stockCheck">
+                                                    <label class="form-check-label small" for="stockCheck">In Stock</label>
+                                                </div>
+                                            </div>
+                                            <div class="col text-end"><button class="btn btn-sm btn-primary w-100" @onclick="AddPart">Add</button></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="col-lg-5 d-flex flex-column">
+                                @if (!string.IsNullOrEmpty(selectedIssue.ImagePath))
+                                {
+                                    <div class="card border-0 shadow-sm mb-4">
+                                        <a href="@selectedIssue.ImagePath" target="_blank">
+                                            <img src="@selectedIssue.ImagePath" class="card-img-top" style="max-height: 200px; object-fit: cover;" />
+                                        </a>
+                                    </div>
+                                }
+
+                                <div class="card border-0 shadow-sm flex-grow-1 d-flex flex-column">
+                                    <div class="card-header bg-white py-3 border-bottom">
+                                        <h6 class="m-0 fw-bold text-secondary"><i class="bi bi-clock-history me-2"></i>Timeline & Notes</h6>
+                                    </div>
+                                    <div class="card-body overflow-auto" style="max-height: 350px;">
+                                        <div class="mb-3">
+                                            <div class="small fw-bold text-danger">@selectedIssue.ReportedByName (Reported)</div>
+                                            <div class="text-muted" style="font-size: 0.75rem;">@selectedIssue.ReportedAt.ToString("g")</div>
+                                            <div class="p-2 bg-white border rounded small mt-1">Issue officially logged.</div>
+                                        </div>
+
+                                        @foreach (var note in selectedIssue.Notes.OrderBy(n => n.CreatedAt))
+                                        {
+                                            <div class="mb-3">
+                                                <div class="small fw-bold @(note.CreatedBy == "System" ? "text-info" : "text-primary")">@note.CreatedBy</div>
+                                                <div class="text-muted" style="font-size: 0.75rem;">@note.CreatedAt.ToString("g")</div>
+                                                <div class="p-2 bg-white border rounded small mt-1 @(note.CreatedBy == "System" ? "fst-italic" : "")">
+                                                    @note.NoteText
+                                                </div>
+                                            </div>
+                                        }
+                                    </div>
+                                    <div class="card-footer bg-white border-top">
+                                        <div class="input-group">
+                                            <input type="text" class="form-control form-control-sm" @bind="newNoteText" placeholder="Add a note..." @onkeyup="HandleNoteKeyUp" />
+                                            <button class="btn btn-sm btn-primary" @onclick="AddNote">Post</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer bg-white border-top">
+                        <button type="button" class="btn btn-secondary" @onclick="CloseModal">Close</button>
+                        <button type="button" class="btn btn-success px-4 fw-bold shadow-sm" @onclick="SaveUpdate">Save Master Changes</button>
+                    </div>
+                </div>
+            </div>
+        </div> 
+        
+    }
+    }
+
+    
+@code {
+    private List<MaintenanceIssue> allIssues = new();
+    private bool isLoading = true;
+
+    // Filters
+    private SnagStatus? filterStatus;
+    private SnagSeverity? filterSeverity;
+
+    // Modal State
+    private MaintenanceIssue? selectedIssue;
+    private SnagStatus newStatus;
+    private string editDescription = "";
+    private string? assignedTo = "";
+    private string? contractorName = "";
+    private string? quoteRef = "";
+
+    // Parts & Notes State
+    private string newNoteText = "";
+    private string newPartName = "";
+    private int newPartQty = 1;
+    private bool newPartInStock = false;
+
+    private IEnumerable<MaintenanceIssue> FilteredIssues => allIssues
+        .Where(i => filterStatus == null || i.Status == filterStatus)
+        .Where(i => filterSeverity == null || i.Severity == filterSeverity);
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        isLoading = true;
+        allIssues = await MaintenanceService.GetAllIssuesAsync();
+        isLoading = false;
+    }
+
+    private void OpenModal(MaintenanceIssue issue)
+    {
+        selectedIssue = issue;
+        newStatus = issue.Status;
+        editDescription = issue.Description;
+        assignedTo = issue.AssignedTo;
+        contractorName = issue.ContractorCompany;
+        quoteRef = issue.QuoteReference;
+        
+        // Reset inputs
+        newNoteText = "";
+        newPartName = "";
+        newPartQty = 1;
+        newPartInStock = false;
+    }
+
+    private void CloseModal() => selectedIssue = null;
+
+    private async Task SaveUpdate()
+    {
+        if (selectedIssue != null)
+        {
+            await MaintenanceService.UpdateSnagStatus(selectedIssue.Id, newStatus, null, assignedTo, contractorName, quoteRef, editDescription);
+            await LoadData();
+            CloseModal();
+        }
+    }
+
+    private async Task AddNote()
+    {
+        if (selectedIssue != null && !string.IsNullOrWhiteSpace(newNoteText))
+        {
+            await MaintenanceService.AddNoteAsync(selectedIssue.Id, newNoteText);
+            newNoteText = "";
+            await RefreshSelectedIssue();
+        }
+    }
+    
+    private async Task HandleNoteKeyUp(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await AddNote();
+    }
+
+    private async Task AddPart()
+    {
+        if (selectedIssue != null && !string.IsNullOrWhiteSpace(newPartName))
+        {
+            await MaintenanceService.AddPartAsync(selectedIssue.Id, newPartName, newPartQty, newPartInStock);
+            newPartName = "";
+            newPartQty = 1;
+            await RefreshSelectedIssue();
+        }
+    }
+
+    private async Task TogglePartStatus(MaintenancePart part)
+    {
+        // Simple cycle: Needs Ordering -> Ordered -> In Stock -> Needs Ordering
+        bool inStock = false;
+        bool isOrdered = false;
+
+        if (part.NeedsOrdering) { isOrdered = true; } // Move to Ordered
+        else if (part.IsOrdered) { inStock = true; }  // Move to In Stock
+        // Else it goes back to NeedsOrdering (both false)
+
+        await MaintenanceService.TogglePartStatusAsync(part.Id, inStock, isOrdered);
+        await RefreshSelectedIssue();
+    }
+
+    private async Task RefreshSelectedIssue()
+    {
+        // Reload data to get updated lists, then re-attach the selected issue
+        await LoadData();
+        selectedIssue = allIssues.FirstOrDefault(i => i.Id == selectedIssue?.Id);
+    }
+
+    // Visual Helpers
+    private string GetSeverityBadgeClass(SnagSeverity severity) => severity switch
+    {
+        SnagSeverity.Emergency => "bg-danger",
+        SnagSeverity.High => "bg-warning text-dark",
+        SnagSeverity.Medium => "bg-primary",
+        _ => "bg-secondary"
+    };
+
+    private string GetStatusBadgeClass(SnagStatus status) => status switch
+    {
+        SnagStatus.Pending => "bg-danger",
+        SnagStatus.Resolved => "bg-success",
+        SnagStatus.InProgress => "bg-primary",
+        SnagStatus.PartsRequired => "bg-info text-dark",
+        SnagStatus.ContractorRequired => "bg-warning text-dark",
+        _ => "bg-secondary"
+    };
+}

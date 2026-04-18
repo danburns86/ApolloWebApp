@@ -1,0 +1,87 @@
+﻿@page "/admin/assets/reports/repair"
+@using Apollo.Models
+@using Apollo.Data
+@using Microsoft.EntityFrameworkCore
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Policy = SystemPermissions.ViewAssets)]
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+
+<PageTitle>Assets Awaiting Repair</PageTitle>
+
+<div class="container-fluid px-4 py-4 max-w-7xl">
+    <div class="d-flex justify-content-between align-items-center mb-4 d-print-none">
+        <div>
+            <h2 class="fw-bold mb-0">Technical Assets Awaiting Repair</h2>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb mb-0 small">
+                    <li class="breadcrumb-item"><a href="/admin/assets/reports">Reports Dashboard</a></li>
+                    <li class="breadcrumb-item active">Repair</li>
+                </ol>
+            </nav>
+        </div>
+        <button class="btn btn-outline-danger fw-bold" onclick="window.print()"><i class="bi bi-printer me-2"></i>Print Workshop List</button>
+    </div>
+
+    @if (isLoading)
+    {
+        <div class="text-center py-5"><div class="spinner-border text-primary"></div></div>
+    }
+    else
+    {
+        <div class="card shadow-sm border-0 border-top border-warning border-4">
+            <div class="card-body p-0">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Tag</th>
+                            <th>Equipment</th>
+                            <th>Assigned To / Contractor</th>
+                            <th>Compliance Impact</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (!reportData.Any())
+                        {
+                            <tr><td colspan="4" class="text-center py-4 text-muted">No equipment currently flagged for repair.</td></tr>
+                        }
+                        @foreach (var asset in reportData)
+                        {
+                            <tr>
+                                <td class="fw-bold text-danger">@asset.AssetTag</td>
+                                <td>
+                                    <div class="fw-bold">@asset.Name</div>
+                                    <div class="small text-muted">SN: @asset.SerialNumber</div>
+                                </td>
+                                <td>@(asset.IsOffsite? asset.AssignedTo: "Onsite Workshop")</td>
+                                <td>
+                                    @if (asset.RequiresPAT)
+                                    {
+                                        <span class="badge bg-info small me-1">PAT</span>
+                                    }
+                                    @if (asset.RequiresLOLER)
+                                    {
+                                        <span class="badge bg-warning text-dark small">LOLER</span>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private bool isLoading = true;
+    private List<Asset> reportData = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        using var context = await DbFactory.CreateDbContextAsync();
+        reportData = await context.Assets
+            .Where(a => a.Status == AssetStatus.OutForRepair)
+            .OrderByDescending(a => a.AssetTag)
+            .ToListAsync();
+        isLoading = false;
+    }
+}

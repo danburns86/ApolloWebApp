@@ -1,0 +1,69 @@
+﻿@page "/admin/reports/lock-allocation"
+@using Apollo.Models
+@using Apollo.Data
+@using Microsoft.EntityFrameworkCore
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+
+<PageTitle>Lock Allocation Report</PageTitle>
+
+<div class="d-print-none mb-4 d-flex justify-content-between align-items-center">
+    <div>
+        <h2>Lock Allocation Breakdown</h2>
+        <p class="text-muted mb-0">Overview of key distribution across all registered locks.</p>
+    </div>
+    <button class="btn btn-outline-dark shadow-sm" onclick="window.print()">
+        <i class="bi bi-printer me-2"></i> Print
+    </button>
+</div>
+
+<div class="card shadow-sm border-0">
+    <div class="card-body p-0 table-responsive">
+        <table class="table table-hover table-striped align-middle mb-0">
+            <thead class="table-dark small text-uppercase">
+                <tr>
+                    <th class="ps-3">Lock Code</th>
+                    <th>Door / Lock Name</th>
+                    <th class="text-center">Total Keys</th>
+                    <th class="text-center text-info">Issued</th>
+                    <th class="text-center text-success">In Stock</th>
+                    <th class="text-center text-warning">Damaged</th>
+                    <th class="text-center text-danger pe-3">Lost</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (!Locks.Any())
+                {
+                    <tr><td colspan="7" class="text-center py-4">Loading lock data...</td></tr>
+                }
+                @foreach (var lck in Locks)
+                {
+                    <tr>
+                        <td class="ps-3 fw-bold fs-6 text-primary">@lck.LockCode</td>
+                        <td class="fw-bold">@lck.Name</td>
+                        <td class="text-center fw-bold bg-light">@lck.Keys.Count</td>
+                        <td class="text-center">@lck.Keys.Count(k => k.Status == "Issued")</td>
+                        <td class="text-center">@lck.Keys.Count(k => k.Status == "In Stock")</td>
+                        <td class="text-center">@lck.Keys.Count(k => k.Status == "Damaged")</td>
+                        <td class="text-center pe-3 fw-bold @(lck.Keys.Any(k => k.Status == "Lost") ? "text-danger" : "")">
+                            @lck.Keys.Count(k => k.Status == "Lost")
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@code {
+    private List<HardwareLock> Locks = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        using var context = await DbFactory.CreateDbContextAsync();
+        Locks = await context.Locks
+            .Include(l => l.Keys)
+            .Where(l => l.IsActive)
+            .OrderBy(l => l.LockCode)
+            .ToListAsync();
+    }
+}

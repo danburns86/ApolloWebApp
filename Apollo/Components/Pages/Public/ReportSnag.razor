@@ -1,0 +1,167 @@
+﻿@page "/snag"
+@layout Apollo.Components.Layout.EmptyLayout
+@using Apollo.Models
+@using Apollo.Data
+@inject IMaintenanceService MaintenanceService
+@inject ILocationService LocationService
+
+<div class="container py-4">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div class="card shadow-lg border-0">
+                <div class="card-header bg-danger text-white p-4 text-center">
+                    <i class="bi bi-tools display-4"></i>
+                    <h2 class="h4 mt-2">Maintenance Reporting</h2>
+                </div>
+
+                <div class="card-body p-4">
+                    @if (isSubmitted)
+                    {
+                        <div class="text-center py-5">
+                            <i class="bi bi-send-check text-success display-1"></i>
+                            <h3 class="mt-3">Report Received</h3>
+                            <p class="text-muted">Thank you. The technical team has been notified.</p>
+                            <button class="btn btn-outline-primary mt-3" @onclick="ResetForm">Submit Another</button>
+                        </div>
+                    }
+                    else if (!isVerified)
+                    {
+                        <div class="text-center py-4">
+                            <h5 class="mb-4">Enter Stage Door Passcode</h5>
+                            <input type="password" @bind="passcodeAttempt" class="form-control form-control-lg text-center font-monospace mb-3" placeholder="####" />
+                            @if (!string.IsNullOrEmpty(errorMessage))
+                            {
+                                <div class="text-danger mb-3 small">@errorMessage</div>
+                            }
+                            <button class="btn btn-dark btn-lg w-100" @onclick="VerifyAccess" disabled="@isChecking">
+                                @if (isChecking)
+                                {
+                                    <span class="spinner-border spinner-border-sm me-2"></span>
+                                }
+                                Unlock Form
+                            </button>
+                        </div>
+                    }
+                    else
+                    {
+                        <EditForm Model="newSnag" OnValidSubmit="HandleSubmit">
+                            <DataAnnotationsValidator />
+
+                            <div class="mb-3">
+                                <label class="form-label fw-bold small">Your Name</label>
+                                <InputText @bind-Value="newSnag.ReportedByName" class="form-control" placeholder="Optional" />
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label fw-bold small">Room / Area</label>
+                                <select class="form-select" @bind="newSnag.RoomId">
+                                    <option value="0">-- Select Location --</option>
+                                    @foreach (var area in allAreas)
+                                    {
+                                        <optgroup label="@area.Name">
+                                            @foreach (var room in area.Rooms.Where(r => r.IsActive))
+                                            {
+                                                <option value="@room.Id">@room.Name</option>
+                                            }
+                                        </optgroup>
+                                    }
+                                </select>
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label fw-bold small">Description</label>
+                                <InputTextArea @bind-Value="newSnag.Description" class="form-control" rows="3" placeholder="What is the issue?" />
+                                <ValidationMessage For="() => newSnag.Description" />
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label fw-bold small">Urgency</label>
+                                <InputSelect @bind-Value="newSnag.Severity" class="form-select">
+                                    <option value="@SnagSeverity.Low">Low</option>
+                                    <option value="@SnagSeverity.Medium">Medium</option>
+                                    <option value="@SnagSeverity.High">High (Impacting Show)</option>
+                                    <option value="@SnagSeverity.Emergency">Emergency (Safety Risk)</option>
+                                </InputSelect>
+                            </div>
+
+                            <div class="mb-4">
+                                <label class="form-label fw-bold small">Photo (Optional)</label>
+                                <InputFile OnChange="LoadFile" class="form-control" accept="image/*" />
+                            </div>
+
+                            <button type="submit" class="btn btn-danger btn-lg w-100 shadow" disabled="@isProcessing">
+                                @if (isProcessing)
+                                {
+                                    <span class="spinner-border spinner-border-sm me-2"></span>
+                                }
+                                Send Report
+                            </button>
+                        </EditForm>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private MaintenanceIssue newSnag = new();
+    private List<Area> allAreas = new List<Area>();
+    private string passcodeAttempt = "";
+    private string errorMessage = "";
+    private bool isVerified = false;
+    private bool isSubmitted = false;
+    private bool isProcessing = false;
+    private bool isChecking = false;
+    private IBrowserFile? selectedFile;
+
+    protected override async Task OnInitializedAsync()
+    {
+        allAreas = await LocationService.GetAreasWithRoomsAsync();
+    }
+
+    private async Task VerifyAccess()
+    {
+        isChecking = true;
+        errorMessage = "";
+        if (await MaintenanceService.VerifyPasscode(passcodeAttempt))
+        {
+            isVerified = true;
+        }
+        else
+        {
+            errorMessage = "Incorrect Passcode.";
+        }
+        isChecking = false;
+    }
+
+    private void LoadFile(InputFileChangeEventArgs e) => selectedFile = e.File;
+
+    private void ResetForm()
+    {
+        newSnag = new MaintenanceIssue();
+        isSubmitted = false;
+        selectedFile = null;
+    }
+
+    private async Task HandleSubmit()
+    {
+        if (newSnag.RoomId == 0) { errorMessage = "Please select a room."; return; }
+
+        isProcessing = true;
+        try
+        {
+            Stream? stream = null;
+            if (selectedFile != null) stream = selectedFile.OpenReadStream(1024 * 1024 * 5);
+
+            await MaintenanceService.SubmitPublicSnag(newSnag, passcodeAttempt, stream, selectedFile?.Name);
+            isSubmitted = true;
+        }
+        catch (Exception ex)
+        {
+            errorMessage = "Error: " + ex.Message;
+            isVerified = false; // Only kick back if the passcode somehow changed/expired
+        }
+        finally { isProcessing = false; }
+    }
+}

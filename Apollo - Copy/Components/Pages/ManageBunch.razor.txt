@@ -1,0 +1,134 @@
+﻿@page "/bunches/manage/{BunchId:int}"
+@rendermode InteractiveServer
+@using Apollo.Models
+@using Apollo.Data
+@using Microsoft.EntityFrameworkCore
+@inject ApplicationDbContext Db
+@inject NavigationManager Nav
+
+<PageTitle>Manage Bunch Keys</PageTitle>
+
+@if (TargetBunch == null)
+{
+    <p>Loading...</p>
+}
+else
+{
+    <div class="mb-4">
+        <a href="/bunches" class="btn btn-link p-0 mb-2"><i class="bi bi-arrow-left"></i> Back to Bunches</a>
+        <h3>Manage Keys for: <strong>@TargetBunch.Name</strong></h3>
+        <p class="text-muted small">Current Holder: @(TargetBunch.IssuedToName ?? "In Stock")</p>
+    </div>
+
+    <div class="row">
+        <div class="col-md-7">
+            <div class="card shadow-sm border-0">
+                <div class="card-header bg-dark text-white fw-bold">Current Keys on Bunch</div>
+                <div class="card-body p-0">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light small text-uppercase">
+                            <tr>
+                                <th class="ps-3">Key Number</th>
+                                <th>Lock Name</th>
+                                <th class="text-end pe-3">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var ka in TargetBunch.KeyAssignments.Where(a => a.RemovedDate == null))
+                            {
+                                <tr>
+                                    <td class="ps-3 fw-bold">@ka.KeyRecord!.Lock!.LockCode @ka.KeyRecord.SequenceNumber</td>
+                                    <td>@ka.KeyRecord.Lock.Name</td>
+                                    <td class="text-end pe-3">
+                                        <button class="btn btn-sm btn-outline-danger" @onclick="() => RemoveKey(ka)">
+                                            <i class="bi bi-trash"></i> Remove
+                                        </button>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-5">
+            <div class="card shadow-sm border-primary">
+                <div class="card-header bg-primary text-white fw-bold">Add Key to Bunch</div>
+                <div class="card-body">
+                    <label class="form-label small fw-bold">Search Available Keys (In Stock Only)</label>
+                    <select class="form-select mb-3" @bind="SelectedKeyId">
+                        <option value="0">-- Select a key --</option>
+                        @foreach (var k in AvailableKeys)
+                        {
+                            <option value="@k.Id">@k.Lock!.LockCode @k.SequenceNumber - @k.Lock.Name</option>
+                        }
+                    </select>
+                    <button class="btn btn-primary w-100" @onclick="AddKey" disabled="@(SelectedKeyId == 0)">
+                        <i class="bi bi-plus-lg"></i> Add to Bunch
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public int BunchId { get; set; }
+    private Bunch? TargetBunch;
+    private List<KeyRecord> AvailableKeys = new();
+    private int SelectedKeyId;
+
+    protected override async Task OnInitializedAsync() => await LoadData();
+
+    private async Task LoadData()
+    {
+        TargetBunch = await Db.Bunches
+            .Include(b => b.KeyAssignments).ThenInclude(ka => ka.KeyRecord).ThenInclude(k => k.Lock)
+            .FirstOrDefaultAsync(b => b.Id == BunchId);
+
+        // Keys must be "In Stock" and NOT already on another bunch
+        var keysOnOtherBunches = await Db.KeyBunchAssignments
+            .Where(ka => ka.RemovedDate == null)
+            .Select(ka => ka.KeyRecordId)
+            .ToListAsync();
+
+        AvailableKeys = await Db.Keys
+            .Include(k => k.Lock)
+            .Where(k => k.Status == "In Stock" && !keysOnOtherBunches.Contains(k.Id))
+            .OrderBy(k => k.Lock!.LockCode).ThenBy(k => k.SequenceNumber)
+            .ToListAsync();
+    }
+
+    private async Task AddKey()
+    {
+        if (SelectedKeyId == 0) return;
+
+        var assignment = new KeyBunchAssignment
+        {
+            BunchId = BunchId,
+            KeyRecordId = SelectedKeyId,
+            AssignedDate = DateTime.Now
+        };
+
+        // Update Key Status to match Bunch (If bunch is in stock, key is technically 'Issued' to the bunch)
+        var key = await Db.Keys.FindAsync(SelectedKeyId);
+        if (key != null) key.Status = "Issued";
+
+        Db.KeyBunchAssignments.Add(assignment);
+        await Db.SaveChangesAsync();
+        SelectedKeyId = 0;
+        await LoadData();
+    }
+
+    private async Task RemoveKey(KeyBunchAssignment ka)
+    {
+        ka.RemovedDate = DateTime.Now;
+        
+        // Return key to 'In Stock' since it's no longer on the bunch
+        if (ka.KeyRecord != null) ka.KeyRecord.Status = "In Stock";
+
+        await Db.SaveChangesAsync();
+        await LoadData();
+    }
+}

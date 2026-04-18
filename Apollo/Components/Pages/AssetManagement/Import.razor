@@ -1,0 +1,525 @@
+﻿@page "/admin/assets/import"
+@using Apollo.Models
+@using Apollo.Data
+@using Microsoft.EntityFrameworkCore
+@using Microsoft.AspNetCore.Components.Authorization
+@using System.IO
+@using System.Text.RegularExpressions
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Policy = SystemPermissions.ManageAssets)]
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject NavigationManager Nav
+
+<PageTitle>Advanced Bulk Importer</PageTitle>
+
+<div class="container-fluid px-4 py-4 max-w-7xl">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="fw-bold mb-0">Advanced Asset Importer</h2>
+            <p class="text-muted mb-0">Map columns dynamically to insert new assets or partially update existing ones.</p>
+        </div>
+        <a href="/admin/assets" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left me-2"></i>Back to Registry
+        </a>
+    </div>
+
+    @if (currentStep == 1)
+    {
+        <div class="card shadow-sm border-0 border-top border-primary border-4 mb-4">
+            <div class="card-header bg-white py-3">
+                <h5 class="fw-bold mb-0"><i class="bi bi-1-circle text-primary me-2"></i>Upload File & Configuration</h5>
+            </div>
+            <div class="card-body p-4 bg-light">
+                <div class="row align-items-center">
+                    <div class="col-md-6 border-end">
+                        <label class="form-label fw-bold">1. Does your file have a Header Row?</label>
+                        <div class="form-check form-switch mb-2">
+                            <input class="form-check-input fs-5" type="checkbox" id="headerToggle" @bind="hasHeaderRow" />
+                            <label class="form-check-label pt-1 ms-2" for="headerToggle">
+                                @(hasHeaderRow ? "Yes, row 1 contains headings." : "No, row 1 is actual asset data.")
+                            </label>
+                        </div>
+                        <p class="small text-muted">If off, we will treat the very first row as an asset and let you map the columns manually.</p>
+                    </div>
+                    <div class="col-md-6 ps-md-4">
+                        <label class="form-label fw-bold">2. Select CSV File</label>
+                        <div class="d-flex align-items-center gap-3">
+                            <InputFile OnChange="HandleFileSelected" class="form-control" accept=".csv" />
+                            @if (isProcessing)
+                            {
+                                <span class="spinner-border spinner-border-sm text-primary"></span>
+                            }
+                        </div>
+                        @if (!string.IsNullOrWhiteSpace(uploadError))
+                        {
+                            <div class="alert alert-danger mt-3 small py-2 mb-0">
+                                <i class="bi bi-exclamation-triangle-fill me-2"></i>@uploadError
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+    else if (currentStep == 2)
+    {
+        <div class="card shadow-sm border-0 border-top border-warning border-4 mb-4">
+            <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+                <h5 class="fw-bold mb-0"><i class="bi bi-2-circle text-warning me-2"></i>Map Your Columns</h5>
+                <button class="btn btn-warning fw-bold px-4" @onclick="ProcessMapping">Review Data <i class="bi bi-arrow-right ms-2"></i></button>
+            </div>
+            <div class="card-body p-0">
+                <div class="p-3 bg-light border-bottom">
+                    <p class="small text-muted mb-0">
+                        <i class="bi bi-info-circle me-1"></i> Match your CSV columns to the Apollo database fields.
+                        If you map <strong>AssetTag</strong>, the system will execute an <strong>Update</strong> to existing records.
+                        If left mapped as 'Skip', the system will insert them as <strong>New</strong> assets.
+                    </p>
+                </div>
+                <div class="table-responsive">
+                    <table class="table align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>File Column (Header)</th>
+                                <th>Sample Data (Row 1)</th>
+                                <th>Map to Apollo Field</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @for (int i = 0; i < csvHeaders.Count; i++)
+                            {
+                                var index = i;
+                                <tr>
+                                    <td class="fw-bold bg-light" style="width: 25%;">@csvHeaders[index]</td>
+                                    <td class="text-muted font-monospace" style="width: 40%;">@(csvSampleData.Count > index ? csvSampleData[index] : "")</td>
+                                    <td>
+                                        <select class="form-select border-primary" @bind="columnMappings[index]">
+                                            <option value="Skip">-- Skip Column --</option>
+                                            <optgroup label="Primary Key (For Updates)">
+                                                <option value="AssetTag">Asset Tag (e.g. LX-0001)</option>
+                                            </optgroup>
+                                            <optgroup label="Asset Details">
+                                                <option value="CategoryPrefix">Category Prefix (e.g. LX, SND)</option>
+                                                <option value="Name">Asset Name / Description</option>
+                                                <option value="ReplacementCost">Replacement Cost</option>
+                                                <option value="Manufacturer">Manufacturer</option>
+                                                <option value="Model">Model</option>
+                                                <option value="SerialNumber">Serial Number</option>
+                                            </optgroup>
+                                            <optgroup label="Tracking & Compliance">
+                                                <option value="Status">Status (Active, InStorage, etc.)</option>
+                                                <option value="RoomName">Location / Room Name</option>
+                                                <option value="IsOffsite">Is Offsite (TRUE/FALSE)</option>
+                                                <option value="AssignedTo">Assigned To / Loaned To</option>
+                                                <option value="RequiresPAT">Requires PAT (TRUE/FALSE)</option>
+                                                <option value="RequiresLOLER">Requires LOLER (TRUE/FALSE)</option>
+                                            </optgroup>
+                                        </select>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="card-footer bg-white py-3">
+                <button class="btn btn-outline-secondary" @onclick="() => currentStep = 1">Cancel & Start Over</button>
+            </div>
+        </div>
+    }
+    else if (currentStep == 3)
+    {
+        <div class="card shadow-sm border-0 border-top border-success border-4">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center py-3">
+                <div>
+                    <h5 class="fw-bold mb-0"><i class="bi bi-3-circle text-success me-2"></i>Review & Commit</h5>
+                    <div class="small text-muted mt-1">
+                        <span class="badge bg-success bg-opacity-10 text-success border border-success me-2">@importRecords.Count(r => r.IsValid && !r.IsUpdate) New Inserts</span>
+                        <span class="badge bg-primary bg-opacity-10 text-primary border border-primary me-2">@importRecords.Count(r => r.IsValid && r.IsUpdate) Partial Updates</span>
+                        <span class="badge bg-danger bg-opacity-10 text-danger border border-danger">@importRecords.Count(r => !r.IsValid) Errors</span>
+                    </div>
+                </div>
+                <div class="d-flex gap-2">
+                    <button class="btn btn-outline-secondary" @onclick="() => currentStep = 2" disabled="@isCommitting">Back to Mapping</button>
+                    <button class="btn btn-success fw-bold px-4" @onclick="CommitToDatabase" disabled="@(!importRecords.Any(r => r.IsValid) || isCommitting)">
+                        @if (isCommitting)
+                        {
+                            <span class="spinner-border spinner-border-sm me-2"></span>
+                            <span>Saving...</span>
+                        }
+                        else
+                        {
+                            <span><i class="bi bi-database-add me-2"></i>Commit Valid Records</span>
+                        }
+                    </button>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive" style="max-height: 500px; overflow-y: auto;">
+                    <table class="table table-hover align-middle mb-0 small">
+                        <thead class="table-light sticky-top shadow-sm">
+                            <tr>
+                                <th>Status</th>
+                                <th>Action</th>
+                                <th>Tag / Category</th>
+                                <th>Name</th>
+                                <th>Cost</th>
+                                <th>Location</th>
+                                <th>Compliance</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var record in importRecords)
+                            {
+                                <tr class="@(record.IsValid ? "" : "table-danger")">
+                                    <td>
+                                        @if (record.IsValid)
+                                        {
+                                            <i class="bi bi-check-circle-fill text-success fs-5"></i>
+                                        }
+                                        else
+                                        {
+
+                                            <i class="bi bi-x-circle-fill text-danger fs-5" title="@record.ErrorMessage"></i>
+                                            <div class="text-danger" style="font-size: 0.75rem;">@record.ErrorMessage</div>
+                                        }
+                                    </td>
+                                    <td>
+                                        @if (record.IsUpdate)
+                                        {
+                                            <span class="badge bg-primary">UPDATE</span>
+                                        }
+                                        else
+                                        {
+
+                                            <span class="badge bg-success">INSERT</span>
+                                        }
+                                    </td>
+                                    <td class="font-monospace">
+                                        @(record.IsUpdate? record.AssetTag: $"[{record.CategoryPrefix}]")
+                                    </td>
+                                    <td class="fw-bold">@record.Name</td>
+                                    <td>@(record.ReplacementCost.HasValue ? $"£{record.ReplacementCost.Value:F2}" : "-")</td>
+                                    <td>@(record.IsOffsite ? $"Offsite ({record.AssignedTo})" : record.RoomName)</td>
+                                    <td>
+                                        @if (record.RequiresPAT.HasValue && record.RequiresPAT.Value)
+                                        {
+                                            <span class="badge bg-info me-1">PAT</span>
+                                        }
+                                        @if (record.RequiresLOLER.HasValue && record.RequiresLOLER.Value)
+                                        {
+                                            <span class="badge bg-warning text-dark">LOLER</span>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+@code {
+    private int currentStep = 1;
+    private bool isProcessing = false;
+    private bool isCommitting = false;
+    private bool hasHeaderRow = true;
+    private string uploadError = ""; // NEW: Tracks upload errors
+
+    // CSV Raw Data State
+    private List<string> csvHeaders = new();
+    private List<string> csvSampleData = new();
+    private List<string[]> rawDataRows = new();
+    
+    // Mapping State
+    private Dictionary<int, string> columnMappings = new();
+    
+    // Processed Data
+    private List<ImportRecord> importRecords = new();
+    private List<AssetCategory> dbCategories = new();
+    private List<Room> dbRooms = new();
+    private List<Asset> dbExistingAssets = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        using var context = await DbFactory.CreateDbContextAsync();
+        dbCategories = await context.AssetCategories.ToListAsync();
+        dbRooms = await context.Rooms.ToListAsync();
+        dbExistingAssets = await context.Assets.ToListAsync();
+    }
+
+    private async Task HandleFileSelected(InputFileChangeEventArgs e)
+    {
+        isProcessing = true;
+        uploadError = "";
+        csvHeaders.Clear();
+        csvSampleData.Clear();
+        rawDataRows.Clear();
+        columnMappings.Clear();
+        StateHasChanged();
+
+        try
+        {
+            // FIX: Copy to MemoryStream first to prevent SignalR timeouts!
+            using var stream = e.File.OpenReadStream(maxAllowedSize: 5 * 1024 * 1024); // 5MB limit
+            using var ms = new MemoryStream();
+            await stream.CopyToAsync(ms);
+            ms.Position = 0; // Reset position to start before reading
+            
+            using var reader = new StreamReader(ms);
+            
+            bool isFirstRow = true;
+            var csvRegex = new Regex(",(?=(?:[^\"]*\"[^\"]*\")*[^\"]*$)");
+
+            while (!reader.EndOfStream)
+            {
+                var line = await reader.ReadLineAsync();
+                if (string.IsNullOrWhiteSpace(line)) continue;
+
+                var rawColumns = csvRegex.Split(line).Select(p => p.Trim('\"', ' ')).ToArray();
+
+                if (isFirstRow)
+                {
+                    if (hasHeaderRow)
+                    {
+                        csvHeaders = rawColumns.ToList();
+                    }
+                    else
+                    {
+                        for (int i = 0; i < rawColumns.Length; i++) csvHeaders.Add($"Column {i + 1}");
+                        rawDataRows.Add(rawColumns);
+                        csvSampleData = rawColumns.ToList();
+                    }
+                    
+                    for (int i = 0; i < csvHeaders.Count; i++)
+                    {
+                        string header = csvHeaders[i].Replace(" ", "");
+                        columnMappings[i] = AutoGuessMapping(header);
+                    }
+                    
+                    isFirstRow = false;
+                }
+                else
+                {
+                    if (csvSampleData.Count == 0) csvSampleData = rawColumns.ToList();
+                    rawDataRows.Add(rawColumns);
+                }
+            }
+            
+            currentStep = 2; // Success! Move to Step 2
+        }
+        catch (Exception ex)
+        {
+            uploadError = $"Failed to read file: {ex.Message}"; // Show the exact error on screen
+        }
+        finally
+        {
+            isProcessing = false;
+            StateHasChanged(); // Force the UI to update
+        }
+    }
+
+    private string AutoGuessMapping(string header)
+    {
+        var h = header.ToLower();
+        if (h.Contains("assettag")) return "AssetTag";
+        if (h.Contains("category") || h.Contains("prefix")) return "CategoryPrefix";
+        if (h.Contains("name") || h.Contains("description")) return "Name";
+        if (h.Contains("cost") || h.Contains("price")) return "ReplacementCost";
+        if (h.Contains("manufacturer") || h.Contains("make")) return "Manufacturer";
+        if (h.Contains("model")) return "Model";
+        if (h.Contains("serial")) return "SerialNumber";
+        if (h.Contains("room") || h.Contains("location")) return "RoomName";
+        if (h.Contains("status")) return "Status";
+        if (h.Contains("offsite")) return "IsOffsite";
+        if (h.Contains("assign") || h.Contains("loan")) return "AssignedTo";
+        if (h.Contains("pat")) return "RequiresPAT";
+        if (h.Contains("loler")) return "RequiresLOLER";
+        return "Skip";
+    }
+
+    private void ProcessMapping()
+    {
+        importRecords.Clear();
+
+        foreach (var row in rawDataRows)
+        {
+            var record = new ImportRecord { IsValid = true };
+            
+            for (int i = 0; i < row.Length; i++)
+            {
+                if (!columnMappings.ContainsKey(i) || columnMappings[i] == "Skip") continue;
+                
+                string val = row[i];
+                string field = columnMappings[i];
+
+                switch (field)
+                {
+                    case "AssetTag": record.AssetTag = val; break;
+                    case "CategoryPrefix": record.CategoryPrefix = val.ToUpper(); break;
+                    case "Name": record.Name = val; break;
+                    case "ReplacementCost": if (decimal.TryParse(val.Replace("£", ""), out decimal rc)) record.ReplacementCost = rc; break;
+                    case "Manufacturer": record.Manufacturer = val; break;
+                    case "Model": record.Model = val; break;
+                    case "SerialNumber": record.SerialNumber = val; break;
+                    case "RoomName": record.RoomName = val; break;
+                    case "Status": if (Enum.TryParse<AssetStatus>(val, true, out var st)) record.Status = st; break;
+                    case "IsOffsite": record.IsOffsite = val.Equals("TRUE", StringComparison.OrdinalIgnoreCase); break;
+                    case "AssignedTo": record.AssignedTo = val; break;
+                    case "RequiresPAT": record.RequiresPAT = val.Equals("TRUE", StringComparison.OrdinalIgnoreCase); break;
+                    case "RequiresLOLER": record.RequiresLOLER = val.Equals("TRUE", StringComparison.OrdinalIgnoreCase); break;
+                }
+            }
+
+            bool updatingByTag = !string.IsNullOrWhiteSpace(record.AssetTag);
+            
+            if (updatingByTag)
+            {
+                record.IsUpdate = true;
+                var existing = dbExistingAssets.FirstOrDefault(a => a.AssetTag.Equals(record.AssetTag, StringComparison.OrdinalIgnoreCase));
+                if (existing == null)
+                {
+                    record.IsValid = false;
+                    record.ErrorMessage = $"Update Failed: Asset Tag '{record.AssetTag}' not found in database.";
+                }
+                else
+                {
+                    record.ExistingAssetId = existing.Id;
+                }
+            }
+            else
+            {
+                record.IsUpdate = false;
+                if (string.IsNullOrWhiteSpace(record.Name))
+                {
+                    record.IsValid = false;
+                    record.ErrorMessage = "Insert Failed: Name is required.";
+                }
+                
+                var matchedCategory = dbCategories.FirstOrDefault(c => c.Prefix == record.CategoryPrefix);
+                if (matchedCategory == null)
+                {
+                    record.IsValid = false;
+                    record.ErrorMessage = $"Insert Failed: Category Prefix '{record.CategoryPrefix}' not found.";
+                }
+                else
+                {
+                    record.CategoryId = matchedCategory.Id;
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(record.RoomName))
+            {
+                var matchedRoom = dbRooms.FirstOrDefault(r => r.Name.Equals(record.RoomName, StringComparison.OrdinalIgnoreCase));
+                if (matchedRoom != null) record.RoomId = matchedRoom.Id;
+                else { record.IsValid = false; record.ErrorMessage += $" Room '{record.RoomName}' not found."; }
+            }
+
+            importRecords.Add(record);
+        }
+
+        currentStep = 3;
+    }
+
+    private async Task CommitToDatabase()
+    {
+        isCommitting = true;
+        StateHasChanged();
+
+        using var context = await DbFactory.CreateDbContextAsync();
+        using var transaction = await context.Database.BeginTransactionAsync();
+
+        try
+        {
+            var liveCategories = await context.AssetCategories.ToListAsync();
+            var validRecords = importRecords.Where(r => r.IsValid).ToList();
+
+            foreach (var record in validRecords)
+            {
+                if (record.IsUpdate && record.ExistingAssetId.HasValue)
+                {
+                    var existing = await context.Assets.FindAsync(record.ExistingAssetId.Value);
+                    if (existing != null)
+                    {
+                        if (columnMappings.ContainsValue("Name")) existing.Name = record.Name!;
+                        if (columnMappings.ContainsValue("ReplacementCost")) existing.ReplacementCost = record.ReplacementCost;
+                        if (columnMappings.ContainsValue("Manufacturer")) existing.Manufacturer = record.Manufacturer;
+                        if (columnMappings.ContainsValue("Model")) existing.Model = record.Model;
+                        if (columnMappings.ContainsValue("SerialNumber")) existing.SerialNumber = record.SerialNumber;
+                        if (columnMappings.ContainsValue("RoomName")) existing.RoomId = record.RoomId;
+                        if (columnMappings.ContainsValue("Status") && record.Status.HasValue) existing.Status = record.Status.Value;
+                        if (columnMappings.ContainsValue("IsOffsite")) existing.IsOffsite = record.IsOffsite;
+                        if (columnMappings.ContainsValue("AssignedTo")) existing.AssignedTo = record.AssignedTo;
+                        if (columnMappings.ContainsValue("RequiresPAT") && record.RequiresPAT.HasValue) existing.RequiresPAT = record.RequiresPAT.Value;
+                        if (columnMappings.ContainsValue("RequiresLOLER") && record.RequiresLOLER.HasValue) existing.RequiresLOLER = record.RequiresLOLER.Value;
+                    }
+                }
+                else
+                {
+                    var cat = liveCategories.First(c => c.Id == record.CategoryId);
+                    string generatedTag = $"{cat.Prefix}-{cat.NextSequenceNumber.ToString($"D{cat.PaddingLength}")}";
+
+                    var newAsset = new Asset
+                    {
+                        CategoryId = cat.Id,
+                        AssetTag = generatedTag,
+                        Name = record.Name!,
+                        ReplacementCost = record.ReplacementCost,
+                        Manufacturer = record.Manufacturer,
+                        Model = record.Model,
+                        SerialNumber = record.SerialNumber,
+                        RoomId = record.RoomId,
+                        Status = record.Status ?? AssetStatus.Active,
+                        IsOffsite = record.IsOffsite,
+                        AssignedTo = record.AssignedTo,
+                        RequiresPAT = record.RequiresPAT ?? false,
+                        RequiresLOLER = record.RequiresLOLER ?? false
+                    };
+
+                    context.Assets.Add(newAsset);
+                    cat.NextSequenceNumber++;
+                }
+            }
+
+            context.AssetCategories.UpdateRange(liveCategories);
+            await context.SaveChangesAsync();
+            await transaction.CommitAsync();
+
+            Nav.NavigateTo("/admin/assets");
+        }
+        catch
+        {
+            await transaction.RollbackAsync();
+            throw;
+        }
+        finally
+        {
+            isCommitting = false;
+        }
+    }
+
+    private class ImportRecord
+    {
+        public bool IsUpdate { get; set; }
+        public bool IsValid { get; set; }
+        public string ErrorMessage { get; set; } = "";
+        
+        public int? ExistingAssetId { get; set; }
+        public int CategoryId { get; set; }
+        public int? RoomId { get; set; }
+
+        public string? AssetTag { get; set; }
+        public string? CategoryPrefix { get; set; }
+        public string? Name { get; set; }
+        public decimal? ReplacementCost { get; set; }
+        public string? Manufacturer { get; set; }
+        public string? Model { get; set; }
+        public string? SerialNumber { get; set; }
+        public string? RoomName { get; set; }
+        public AssetStatus? Status { get; set; }
+        public bool IsOffsite { get; set; }
+        public string? AssignedTo { get; set; }
+        public bool? RequiresPAT { get; set; }
+        public bool? RequiresLOLER { get; set; }
+    }
+}

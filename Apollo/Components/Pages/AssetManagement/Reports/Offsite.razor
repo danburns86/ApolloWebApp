@@ -1,0 +1,99 @@
+﻿@page "/admin/assets/reports/offsite"
+@using Apollo.Models
+@using Apollo.Data
+@using Microsoft.EntityFrameworkCore
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Policy = SystemPermissions.ViewAssets)]
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+
+<PageTitle>Offsite Assets Report</PageTitle>
+
+<div class="container-fluid px-4 py-4 max-w-7xl">
+    <div class="d-flex justify-content-between align-items-center mb-4 d-print-none">
+        <div>
+            <h2 class="fw-bold mb-0">Offsite & Loaned Assets</h2>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb mb-0">
+                    <li class="breadcrumb-item"><a href="/admin/assets/reports">Reports Dashboard</a></li>
+                    <li class="breadcrumb-item active" aria-current="page">Offsite</li>
+                </ol>
+            </nav>
+        </div>
+        <button class="btn btn-outline-primary" onclick="window.print()"><i class="bi bi-printer me-2"></i>Print</button>
+    </div>
+
+    <div class="card border-0 shadow-sm mb-4 d-print-none bg-light">
+        <div class="card-body row align-items-center g-3">
+            <div class="col-md-4">
+                <label class="form-label fw-bold small text-muted text-uppercase mb-1">Sort By</label>
+                <select class="form-select" @bind="SortOrder" @bind:after="RunReport">
+                    <option value="Holder">Holder / Assigned To</option>
+                    <option value="Tag">Asset Number</option>
+                    <option value="Type">Asset Type (Category)</option>
+                </select>
+            </div>
+        </div>
+    </div>
+
+    @if (isLoading)
+    {
+        <div class="text-center py-5"><div class="spinner-border text-primary"></div></div>
+    }
+    else
+    {
+        <div class="card shadow-sm border-0 border-top border-danger border-4">
+            <div class="card-body p-0">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Holder / Assigned To</th>
+                            <th>Tag</th>
+                            <th>Item Name</th>
+                            <th>Category Type</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (!reportData.Any())
+                        {
+                            <tr><td colspan="4" class="text-center py-4 text-muted">No offsite assets found.</td></tr>
+                        }
+                        @foreach (var asset in reportData)
+                        {
+                            <tr>
+                                <td class="fw-bold text-danger">@asset.AssignedTo</td>
+                                <td class="font-monospace fw-bold">@asset.AssetTag</td>
+                                <td>@asset.Name</td>
+                                <td>@asset.Category?.Name</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private bool isLoading = true;
+    private string SortOrder = "Holder";
+    private List<Asset> reportData = new();
+
+    protected override async Task OnInitializedAsync() => await RunReport();
+
+    private async Task RunReport()
+    {
+        isLoading = true;
+        using var context = await DbFactory.CreateDbContextAsync();
+        
+        var query = context.Assets.Include(a => a.Category).Where(a => a.IsOffsite);
+
+        reportData = SortOrder switch
+        {
+            "Tag" => await query.OrderBy(a => a.AssetTag).ToListAsync(),
+            "Type" => await query.OrderBy(a => a.Category!.Name).ToListAsync(),
+            _ => await query.OrderBy(a => a.AssignedTo).ToListAsync()
+        };
+
+        isLoading = false;
+        StateHasChanged();
+    }
+}

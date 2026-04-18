@@ -1,0 +1,57 @@
+﻿@inherits LayoutComponentBase
+@using Apollo.Data
+@using Apollo.Models
+@using Microsoft.EntityFrameworkCore
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+
+<div class="page">
+    <div class="sidebar">
+        <NavMenu />
+    </div>
+
+    <main>
+        <div class="top-row px-4 d-flex justify-content-end gap-3">
+            @if (TopLinks != null)
+            {
+                @foreach (var link in TopLinks)
+                {
+                    <a href="@link.Url" target="_blank" class="text-decoration-none text-dark fw-bold small">
+                        <i class="bi @link.IconClass me-1 text-primary"></i> @link.Title
+                    </a>
+                }
+            }
+        </div>
+
+        <article class="content px-4">
+            @Body
+        </article>
+    </main>
+</div>
+
+<div id="blazor-error-ui" data-nosnippet>
+    An unhandled error has occurred.
+    <a href="." class="reload">Reload</a>
+    <span class="dismiss">🗙</span>
+</div>
+
+@code {
+    private List<TopBarLink> TopLinks = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        using var context = await DbFactory.CreateDbContextAsync();
+        var config = await context.PortalConfigurations.FirstOrDefaultAsync();
+
+        if (config != null && !string.IsNullOrWhiteSpace(config.CustomLinksJson))
+        {
+            try
+            {
+                TopLinks = System.Text.Json.JsonSerializer.Deserialize<List<TopBarLink>>(config.CustomLinksJson) ?? new List<TopBarLink>();
+            }
+            catch
+            {
+                TopLinks = new List<TopBarLink>();
+            }
+        }
+    }
+}

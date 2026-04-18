@@ -1,0 +1,170 @@
+﻿@page "/admin/assets/dashboard"
+@using Apollo.Models
+@using Apollo.Data
+@using Microsoft.EntityFrameworkCore
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Policy = SystemPermissions.ViewAssets)]
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+
+<PageTitle>Assets Dashboard</PageTitle>
+
+<div class="container-fluid px-4 py-4 max-w-7xl">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="fw-bold mb-0">Assets & Equipment</h2>
+            <p class="text-muted mb-0">High-level overview of venue inventory.</p>
+        </div>
+        <div>
+            <a href="/admin/assets" class="btn btn-outline-secondary me-2"><i class="bi bi-list-ul me-2"></i>Full Registry</a>
+            <a href="/admin/assets/reports" class="btn btn-primary fw-bold shadow-sm"><i class="bi bi-bar-chart-fill me-2"></i>Reports</a>
+        </div>
+    </div>
+
+    @if (isLoading)
+    {
+        <div class="text-center py-5"><div class="spinner-border text-primary"></div></div>
+    }
+    else
+    {
+        <div class="row g-3 mb-4">
+            <div class="col-md-3">
+                <div class="card bg-primary text-white border-0 shadow-sm h-100">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between">
+                            <div>
+                                <h6 class="text-uppercase fw-bold text-white-50 mb-1">Total Insured Value</h6>
+                                <h3 class="fw-bold mb-0">£@totalValue.ToString("N2")</h3>
+                            </div>
+                            <div class="fs-1 text-white-50"><i class="bi bi-cash-stack"></i></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card bg-success text-white border-0 shadow-sm h-100">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between">
+                            <div>
+                                <h6 class="text-uppercase fw-bold text-white-50 mb-1">Active Assets</h6>
+                                <h3 class="fw-bold mb-0">@activeAssetsCount</h3>
+                            </div>
+                            <div class="fs-1 text-white-50"><i class="bi bi-boxes"></i></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card bg-warning text-dark border-0 shadow-sm h-100">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between">
+                            <div>
+                                <h6 class="text-uppercase fw-bold text-dark-50 mb-1">Out For Repair</h6>
+                                <h3 class="fw-bold mb-0">@repairAssetsCount</h3>
+                            </div>
+                            <div class="fs-1 text-dark-50"><i class="bi bi-tools"></i></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card bg-danger text-white border-0 shadow-sm h-100">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between">
+                            <div>
+                                <h6 class="text-uppercase fw-bold text-white-50 mb-1">Offsite / Loaned</h6>
+                                <h3 class="fw-bold mb-0">@offsiteAssetsCount</h3>
+                            </div>
+                            <div class="fs-1 text-white-50"><i class="bi bi-box-arrow-right"></i></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-md-6 mb-4">
+                <div class="card border-0 shadow-sm h-100 border-top border-danger border-4">
+                    <div class="card-header bg-white py-3">
+                        <h6 class="fw-bold mb-0 text-danger"><i class="bi bi-shield-exclamation me-2"></i>Overdue Safety Inspections</h6>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="list-group list-group-flush">
+                            @if (!overdueCompliance.Any())
+                            {
+                                <div class="p-4 text-center text-muted small">All items are fully compliant.</div>
+                            }
+                            @foreach (var item in overdueCompliance.Take(5))
+                            {
+                                <div class="list-group-item d-flex justify-content-between align-items-center p-3">
+                                    <div>
+                                        <div class="fw-bold">@item.AssetTag - @item.Name</div>
+                                        <div class="small text-muted">
+                                            @(item.RequiresPAT && item.NextPATDue < DateTime.Now ? "PAT Expired" : "")
+                                            @(item.RequiresLOLER && item.NextLOLERDue < DateTime.Now ? "LOLER Expired" : "")
+                                        </div>
+                                    </div>
+                                    <a href="/admin/assets" class="btn btn-sm btn-outline-secondary">View</a>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-6 mb-4">
+                <div class="card border-0 shadow-sm h-100 border-top border-primary border-4">
+                    <div class="card-header bg-white py-3">
+                        <h6 class="fw-bold mb-0"><i class="bi bi-clock-history me-2"></i>Recently Added Inventory</h6>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle mb-0 small">
+                                <tbody>
+                                    @foreach (var item in recentAssets)
+                                    {
+                                        <tr>
+                                            <td class="fw-bold px-3">@item.AssetTag</td>
+                                            <td>@item.Name</td>
+                                            <td class="text-end px-3">£@(item.ReplacementCost?.ToString("N2") ?? "0.00")</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private bool isLoading = true;
+    private decimal totalValue = 0;
+    private int activeAssetsCount = 0;
+    private int repairAssetsCount = 0;
+    private int offsiteAssetsCount = 0;
+    
+    private List<Asset> overdueCompliance = new();
+    private List<Asset> recentAssets = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        using var context = await DbFactory.CreateDbContextAsync();
+        
+        var allAssets = await context.Assets.ToListAsync();
+        
+        totalValue = allAssets.Sum(a => a.ReplacementCost ?? 0);
+        activeAssetsCount = allAssets.Count(a => a.Status == AssetStatus.Active);
+        repairAssetsCount = allAssets.Count(a => a.Status == AssetStatus.OutForRepair);
+        offsiteAssetsCount = allAssets.Count(a => a.IsOffsite);
+
+        overdueCompliance = allAssets.Where(a =>
+            (a.RequiresPAT && a.NextPATDue.HasValue && a.NextPATDue < DateTime.Now) ||
+            (a.RequiresLOLER && a.NextLOLERDue.HasValue && a.NextLOLERDue < DateTime.Now))
+            .ToList();
+
+        recentAssets = allAssets.OrderByDescending(a => a.Id).Take(5).ToList();
+        
+        isLoading = false;
+    }
+}

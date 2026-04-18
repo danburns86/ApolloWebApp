@@ -1,0 +1,74 @@
+﻿@page "/admin/maintenance/reports/parts"
+@rendermode InteractiveServer
+@using Apollo.Models
+@using Apollo.Data
+@using Apollo.Security  
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Policy = SystemPermissions.ManageMaintenance)]
+@inject IMaintenanceService MaintenanceService
+@inject IJSRuntime JS
+
+<div class="container-fluid px-4 py-4 d-print-none">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div class="d-flex align-items-center gap-3">
+            <a href="/admin/maintenance/reports" class="btn btn-outline-secondary"><i class="bi bi-arrow-left"></i></a>
+            <h2 class="fw-bold mb-0">Parts Order List</h2>
+        </div>
+        <button class="btn btn-dark shadow-sm" @onclick="PrintReport"><i class="bi bi-printer me-2"></i>Print Order</button>
+    </div>
+</div>
+
+<div class="container-fluid px-4 print-area">
+    @if (isLoading) { <div class="text-center py-5 d-print-none"><div class="spinner-border text-info"></div></div> }
+    else
+    {
+        <div class="print-header d-none d-print-block mb-4">
+            <h2>Parts Purchasing Order List</h2><hr />
+        </div>
+
+        var partsToOrder = allIssues.SelectMany(i => i.Parts.Select(p => new { Part = p, Issue = i })).Where(x => x.Part.NeedsOrdering).ToList();
+
+        <table class="table table-bordered table-sm">
+            <thead class="table-light">
+                <tr><th style="width:10%">Qty</th><th style="width:50%">Part Description</th><th style="width:20%">For Job / Room</th><th style="width:20%">Purchased?</th></tr>
+            </thead>
+            <tbody>
+                @foreach (var item in partsToOrder)
+                {
+                    <tr>
+                        <td class="fw-bold text-center fs-5">@item.Part.Quantity</td>
+                        <td class="fs-5">@item.Part.Description</td>
+                        <td>Job #@item.Issue.Id<br/><small class="text-muted">@item.Issue.Room?.Name</small></td>
+                        <td></td>
+                    </tr>
+                }
+                @if(!partsToOrder.Any()){ <tr><td colspan="4" class="text-center text-muted py-3">No parts currently require ordering.</td></tr> }
+            </tbody>
+        </table>
+    }
+</div>
+
+<style>
+    @@media print {
+        body * { visibility: hidden; }
+        .print-area, .print-area * { visibility: visible; }
+        .print-area { position: absolute; left: 0; top: 0; width: 100%; }
+        .d-print-none { display: none !important; }
+        .d-print-block { display: block !important; }
+        .table { border-color: #000 !important; }
+        th, td { border-color: #000 !important; padding: 8px !important; }
+    }
+</style>
+
+@code {
+    private List<MaintenanceIssue> allIssues = new();
+    private bool isLoading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        isLoading = true;
+        allIssues = await MaintenanceService.GetAllIssuesAsync();
+        isLoading = false;
+    }
+
+    private async Task PrintReport() => await JS.InvokeVoidAsync("window.print");
+}

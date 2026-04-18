@@ -1,0 +1,70 @@
+﻿@page "/reports"
+@using Apollo.Models
+@using Apollo.Security
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+
+<PageTitle>Master Reports Dashboard</PageTitle>
+
+<div class="container-fluid px-4 py-4 max-w-7xl">
+    <div class="mb-4">
+        <h2 class="fw-bold mb-0">Reports & Analytics</h2>
+        <p class="text-muted">Select a department to view associated reports, logs, and printouts.</p>
+    </div>
+
+    <div class="row g-4">
+        <AuthorizeView Policy="@SystemPermissions.ManageSystemSettings">
+            <Authorized>
+                <div class="col-md-6 col-lg-4">
+                    <div class="card h-100 shadow-sm border-0 border-top border-primary border-4 hover-card">
+                        <a href="/keys/reports" class="text-decoration-none text-dark d-block">
+                            <div class="card-header bg-white border-0 pt-4 pb-0">
+                                <h4 class="fw-bold text-primary mb-0"><i class="bi bi-key me-2"></i>Key Management</h4>
+                            </div>
+                        </a>
+                        <div class="card-body">
+                            <ul class="list-unstyled text-muted mb-0">
+                                <li class="mb-2"><i class="bi bi-chevron-right text-primary me-2 small"></i>Master Inventory Log</li>
+                                <li class="mb-2"><i class="bi bi-chevron-right text-primary me-2 small"></i>Checkout History</li>
+                                <li class="mb-2"><i class="bi bi-chevron-right text-primary me-2 small"></i>Overdue & Stale Keys</li>
+                                <li><i class="bi bi-chevron-right text-primary me-2 small"></i>Security Audit Results</li>
+                            </ul>
+                        </div>
+                        <div class="card-footer bg-white border-0 pb-4">
+                            <a href="/keys/reports" class="btn btn-outline-primary w-100 fw-bold">View Key Reports</a>
+                        </div>
+                    </div>
+                </div>
+            </Authorized>
+        </AuthorizeView>
+
+        <AuthorizeView Policy="@SystemPermissions.ManageMaintenance">
+            <Authorized>
+                <div class="col-md-6 col-lg-4">
+                    <div class="card h-100 shadow-sm border-0 border-top border-danger border-4 hover-card">
+                        <a href="/admin/maintenance/reports" class="text-decoration-none text-dark d-block">
+                            <div class="card-header bg-white border-0 pt-4 pb-0">
+                                <h4 class="fw-bold text-danger mb-0"><i class="bi bi-tools me-2"></i>Maintenance Hub</h4>
+                            </div>
+                        </a>
+                        <div class="card-body">
+                            <ul class="list-unstyled text-muted mb-0">
+                                <li class="mb-2"><i class="bi bi-chevron-right text-danger me-2 small"></i>Triage Walkaround Sheet</li>
+                                <li class="mb-2"><i class="bi bi-chevron-right text-danger me-2 small"></i>Outstanding Internal Jobs</li>
+                                <li class="mb-2"><i class="bi bi-chevron-right text-danger me-2 small"></i>Parts Purchasing List</li>
+                                <li><i class="bi bi-chevron-right text-danger me-2 small"></i>Contractor Referrals</li>
+                            </ul>
+                        </div>
+                        <div class="card-footer bg-white border-0 pb-4">
+                            <a href="/admin/maintenance/reports" class="btn btn-outline-danger w-100 fw-bold">View Maintenance Reports</a>
+                        </div>
+                    </div>
+                </div>
+            </Authorized>
+        </AuthorizeView>
+    </div>
+</div>
+
+<style>
+    .hover-card { transition: transform 0.2s, box-shadow 0.2s; }
+    .hover-card:hover { transform: translateY(-5px); box-shadow: 0 .5rem 1rem rgba(0,0,0,.15)!important; }
+</style>

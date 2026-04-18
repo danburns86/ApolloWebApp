@@ -1,0 +1,264 @@
+﻿@page "/admin/members"
+@using Apollo.Models
+@using Apollo.Data
+@using Microsoft.EntityFrameworkCore
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+
+<PageTitle>Member Registry</PageTitle>
+
+<div class="container-fluid px-4 py-4 max-w-7xl">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="fw-bold mb-0">Member Registry</h2>
+            <p class="text-muted mb-0">Manage personnel and technical team eligibility.</p>
+        </div>
+        <div class="d-flex gap-2">
+            <input type="text" class="form-control" placeholder="Search members..." @bind="searchQuery" @bind:event="oninput" @onkeyup="ApplyFilter" style="width: 300px;" />
+            <a href="/admin/members/import" class="btn btn-outline-primary"><i class="bi bi-upload me-2"></i>Sync MemberMojo</a>
+        </div>
+    </div>
+
+    @if (isLoading)
+    {
+        <div class="text-center py-5"><div class="spinner-border text-primary"></div></div>
+    }
+    else
+    {
+        <div class="card shadow-sm border-0 border-top border-primary border-4">
+            <div class="card-body p-0">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th class="px-4">Tech Team</th>
+                            <th>Name</th>
+                            <th>Contact</th>
+                            <th>Status</th>
+                            <th>Reported Interests</th>
+                            <th class="text-end px-4">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var member in filteredMembers)
+                        {
+                            <tr class="@(member.IsTechTeam ? "table-primary table-opacity-10" : "")">
+                                <td class="px-4">
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox"
+                                               checked="@member.IsTechTeam"
+                                               @onchange="@(async (e) => await ToggleTechTeam(member, e))" />
+                                    </div>
+                                </td>
+                                <td>
+                                    <div class="fw-bold">@member.FullName</div>
+                                    <div class="small text-muted">#@member.MemberNumber</div>
+                                </td>
+                                <td>
+                                    <div class="small"><i class="bi bi-envelope me-1"></i>@member.Email</div>
+                                    <div class="small"><i class="bi bi-phone me-1"></i>@member.MobileNumber</div>
+                                </td>
+                                <td>
+                                    <span class="badge @(member.MembershipStatus == "Active" ? "bg-success" : "bg-danger")">
+                                        @member.MembershipStatus
+                                    </span>
+                                </td>
+                                <td>
+                                    <div class="d-flex flex-wrap gap-1">
+                                        @if (member.SkillLXOp)
+                                        {
+                                            <span class="badge bg-light text-dark border">LX</span>
+                                        }
+                                        @if (member.SkillSoundOp)
+                                        {
+                                            <span class="badge bg-light text-dark border">SND</span>
+                                        }
+                                        @if (member.SkillStageManager)
+                                        {
+                                            <span class="badge bg-light text-dark border">SM</span>
+                                        }
+                                    </div>
+                                </td>
+                                <td class="text-end px-4">
+                                    <button class="btn btn-sm btn-outline-secondary" @onclick="() => ViewDetails(member)">Details</button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+</div>
+
+@* MEMBER PROFILE MODAL *@
+@if (showDetailsModal && selectedMember != null)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5); overflow-y: auto; z-index: 1050;">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content border-0 shadow-lg">
+                <div class="modal-header bg-dark text-white border-0">
+                    <h5 class="modal-title fw-bold">
+                        <i class="bi bi-person-badge me-2"></i>Member Profile: @selectedMember.FullName
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" @onclick="CloseDetails"></button>
+                </div>
+                <div class="modal-body p-4 bg-light">
+                    <div class="row g-4">
+                        <div class="col-md-5">
+                            <div class="card border-0 shadow-sm p-3 mb-3">
+                                <h6 class="fw-bold border-bottom pb-2 mb-3">Identity & Status</h6>
+                                <p class="mb-1 small text-muted">Member Number</p>
+                                <p class="fw-bold">#@selectedMember.MemberNumber</p>
+                                
+                                <p class="mb-1 small text-muted">Membership Status</p>
+                                <p><span class="badge @(selectedMember.MembershipStatus == "Active" ? "bg-success" : "bg-danger")">@selectedMember.MembershipStatus</span></p>
+
+                                <p class="mb-1 small text-muted">Contact Details</p>
+                                <div class="mb-2"><i class="bi bi-envelope me-2"></i>@selectedMember.Email</div>
+                                <div><i class="bi bi-phone me-2"></i>@selectedMember.MobileNumber</div>
+                            </div>
+
+                            <div class="card border-0 shadow-sm p-3">
+                                <h6 class="fw-bold border-bottom pb-2 mb-3">Safety & Compliance</h6>
+                                <div class="d-flex justify-content-between mb-2">
+                                    <span>First Aider</span>
+                                    <i class="bi @(selectedMember.IsFirstAider ? "bi-check-circle-fill text-success" : "bi-x-circle text-muted")"></i>
+                                </div>
+                                <div class="d-flex justify-content-between">
+                                    <span>DBS Checked</span>
+                                    <i class="bi @(selectedMember.HasDBS ? "bi-check-circle-fill text-success" : "bi-x-circle text-muted")"></i>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-md-7">
+                            <div class="card border-0 shadow-sm p-3 h-100">
+                                <h6 class="fw-bold border-bottom pb-2 mb-3">Technical & Creative Interests</h6>
+                                <div class="row g-2">
+                                    @foreach (var skill in GetSkillDisplayList(selectedMember))
+                                    {
+                                        <div class="col-6">
+                                            <div class="p-2 border rounded bg-white small d-flex justify-content-between align-items-center">
+                                                @skill.Name
+                                                @if (skill.IsSet)
+                                                {
+                                                    <i class="bi bi-check-lg text-primary"></i>
+                                                }
+                                            </div>
+                                        </div>
+                                    }
+                                </div>
+                                
+                                <div class="mt-4 p-3 bg-warning bg-opacity-10 border border-warning rounded">
+                                    <h6 class="fw-bold text-dark small text-uppercase">Tech Team Status</h6>
+                                    <div class="form-check form-switch mt-2">
+                                        <input class="form-check-input" type="checkbox" @bind="selectedMember.IsTechTeam" id="modalTech" />
+                                        <label class="form-check-label fw-bold" for="modalTech">Active Technical Team Member</label>
+                                    </div>
+                                    <p class="small text-muted mt-1 mb-0">Enabling this places them at the top of crewing dropdowns regardless of MemberMojo interests.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer border-0">
+                    <button class="btn btn-secondary" @onclick="CloseDetails">Close</button>
+                    <button class="btn btn-primary px-4 fw-bold shadow-sm" @onclick="SaveChanges">Save Profile Changes</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<Member> allMembers = new();
+    private List<Member> filteredMembers = new();
+    private string searchQuery = "";
+    private bool isLoading = true;
+
+    protected override async Task OnInitializedAsync() => await LoadData();
+
+    private async Task LoadData()
+    {
+        isLoading = true;
+        using var context = await DbFactory.CreateDbContextAsync();
+        // SORTING: Tech Team first, then alphabetical by Last Name
+        allMembers = await context.Members
+            .OrderByDescending(m => m.IsTechTeam)
+            .ThenBy(m => m.LastName)
+            .ToListAsync();
+        ApplyFilter();
+        isLoading = false;
+    }
+
+    private void ApplyFilter()
+    {
+        if (string.IsNullOrWhiteSpace(searchQuery))
+        {
+            filteredMembers = allMembers.ToList();
+        }
+        else
+        {
+            var q = searchQuery.ToLower();
+            filteredMembers = allMembers.Where(m =>
+                m.FirstName.ToLower().Contains(q) ||
+                m.LastName.ToLower().Contains(q) ||
+                m.MemberNumber.Contains(q)).ToList();
+        }
+    }
+
+    private async Task ToggleTechTeam(Member member, ChangeEventArgs e)
+    {
+        member.IsTechTeam = (bool)(e.Value ?? false);
+        using var context = await DbFactory.CreateDbContextAsync();
+        context.Members.Update(member);
+        await context.SaveChangesAsync();
+        
+        // Re-sort to move them up/down in the list immediately
+        await LoadData();
+    }
+
+    private bool showDetailsModal = false;
+    private Member? selectedMember;
+
+    private void ViewDetails(Member member)
+    {
+        selectedMember = member;
+        showDetailsModal = true;
+    }
+
+    private void CloseDetails()
+    {
+        showDetailsModal = false;
+        selectedMember = null;
+    }
+
+    private async Task SaveChanges()
+    {
+        if (selectedMember != null)
+        {
+            using var context = await DbFactory.CreateDbContextAsync();
+            context.Members.Update(selectedMember);
+            await context.SaveChangesAsync();
+            await LoadData(); // Refresh list to reflect IsTechTeam changes
+            CloseDetails();
+        }
+    }
+
+    // Helper to turn the bool properties into a clean list for the UI
+    private List<(string Name, bool IsSet)> GetSkillDisplayList(Member m)
+    {
+        return new List<(string Name, bool IsSet)>
+        {
+            ("Lighting Design", m.SkillLXDesign),
+            ("LX Operator", m.SkillLXOp),
+            ("Sound Design", m.SkillSoundDesign),
+            ("Sound Operator", m.SkillSoundOp),
+            ("Stage Manager", m.SkillStageManager),
+            ("Stage Crew", m.SkillStageCrew),
+            ("Wardrobe", m.SkillWardrobe),
+            ("Set Building", m.SkillSetBuild),
+            ("Bar Staff", m.SkillBar),
+            ("FOH / Box Office", m.SkillFOH)
+        };
+    }
+}

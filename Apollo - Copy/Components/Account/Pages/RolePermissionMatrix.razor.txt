@@ -1,0 +1,242 @@
+﻿@page "/admin/roles/matrix"
+@rendermode InteractiveServer
+@using Apollo.Models
+@using Apollo.Data
+@using Microsoft.AspNetCore.Identity
+@using Microsoft.EntityFrameworkCore
+@using System.Security.Claims
+@inject ApplicationDbContext Db
+@inject RoleManager<IdentityRole> RoleManager
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Administrator")]
+
+<PageTitle>Role Permission Matrix</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h2>Role Permission Matrix</h2>
+        <p class="text-muted mb-0">Define what each role is allowed to do across the system.</p>
+    </div>
+    <a href="/admin/users" class="btn btn-outline-secondary shadow-sm">Back to Users</a>
+</div>
+<hr />
+
+@if (!AllPermissions.Any())
+{
+    <div class="alert alert-warning shadow-sm border-warning d-flex justify-content-between align-items-center">
+        <div>
+            <strong>No permissions defined yet!</strong>
+            <br />The system database currently has no registered modules or permissions.
+        </div>
+        <button class="btn btn-warning fw-bold" @onclick="SeedDefaultPermissions">
+            <i class="bi bi-magic"></i> Auto-Generate Default Core Permissions
+        </button>
+    </div>
+}
+else
+{
+    <div class="row mb-4">
+        <div class="col-md-6 col-xl-4">
+            <div class="card shadow-sm border-dark">
+                <div class="card-header bg-dark text-white fw-bold">1. Select a Role to Manage</div>
+                <div class="card-body">
+                    <select class="form-select border-primary" @bind="SelectedRoleId" @bind:after="LoadRoleClaims">
+                        <option value="">-- Choose a Role --</option>
+                        @foreach (var role in Roles)
+                        {
+                            <option value="@role.Id">@role.Name</option>
+                        }
+                    </select>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-6 col-xl-8 text-end align-self-center">
+            @if (!string.IsNullOrEmpty(SelectedRoleId))
+            {
+                <button class="btn btn-success btn-lg shadow-sm" @onclick="SavePermissions">
+                    <i class="bi bi-floppy"></i> Save Permissions for @SelectedRoleName
+                </button>
+                @if (ShowSuccessMessage)
+                {
+                    <span class="text-success fw-bold ms-3"><i class="bi bi-check-circle"></i> Saved successfully!</span>
+                }
+            }
+        </div>
+    </div>
+
+    @if (!string.IsNullOrEmpty(SelectedRoleId))
+    {
+        <div class="row">
+            @foreach (var moduleGroup in AllPermissions.GroupBy(p => p.Module))
+            {
+                <div class="col-xl-4 col-lg-6 mb-4">
+                    <div class="card shadow-sm h-100">
+                        <div class="card-header fw-bold @GetHeaderColor(moduleGroup.Key)">
+                            @moduleGroup.Key
+                        </div>
+                        <div class="card-body">
+                            <ul class="list-group list-group-flush">
+                                @foreach (var perm in moduleGroup)
+                                {
+                                    <li class="list-group-item d-flex align-items-center">
+                                        <input class="form-check-input me-3 border-secondary" type="checkbox"
+                                               id="perm_@perm.Id"
+                                               checked="@SelectedClaims.Contains(perm.ClaimValue)"
+                                               @onchange="@(e => TogglePermission(perm.ClaimValue, e.Value))" />
+                                        
+                                        <label class="form-check-label mb-0" for="perm_@perm.Id">
+                                            <span class="fw-bold d-block">@perm.Name</span>
+                                            <small class="text-muted font-monospace">@perm.ClaimValue</small>
+                                        </label>
+                                    </li>
+                                }
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+}
+
+@code {
+    private List<SystemPermission> AllPermissions = new();
+    private List<IdentityRole> Roles = new();
+    
+    private string SelectedRoleId = string.Empty;
+    private string SelectedRoleName = string.Empty;
+    
+    // This hashset holds the "ClaimValue" strings (e.g. "Keys.IssueReturn") that are currently ticked
+    private HashSet<string> SelectedClaims = new();
+    
+    private bool ShowSuccessMessage = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Roles = await RoleManager.Roles.OrderBy(r => r.Name).ToListAsync();
+        await LoadPermissions();
+    }
+
+    private async Task LoadPermissions()
+    {
+        AllPermissions = await Db.SystemPermissions.OrderBy(p => p.Module).ThenBy(p => p.Name).ToListAsync();
+    }
+
+    private async Task LoadRoleClaims()
+    {
+        ShowSuccessMessage = false;
+        SelectedClaims.Clear();
+        SelectedRoleName = string.Empty;
+
+        if (string.IsNullOrEmpty(SelectedRoleId)) return;
+
+        var role = await RoleManager.FindByIdAsync(SelectedRoleId);
+        if (role != null)
+        {
+            SelectedRoleName = role.Name ?? "Unknown Role";
+            
+            // Get all claims for this role
+            var claims = await RoleManager.GetClaimsAsync(role);
+            
+            // Add the ones that are "Permission" claims to our checked list
+            foreach (var claim in claims.Where(c => c.Type == "Permission"))
+            {
+                SelectedClaims.Add(claim.Value);
+            }
+        }
+    }
+
+    private void TogglePermission(string claimValue, object? isChecked)
+    {
+        ShowSuccessMessage = false;
+        if ((bool)(isChecked ?? false))
+        {
+            SelectedClaims.Add(claimValue);
+        }
+        else
+        {
+            SelectedClaims.Remove(claimValue);
+        }
+    }
+
+    private async Task SavePermissions()
+    {
+        if (string.IsNullOrEmpty(SelectedRoleId)) return;
+
+        var role = await RoleManager.FindByIdAsync(SelectedRoleId);
+        if (role != null)
+        {
+            // 1. Get existing permission claims
+            var existingClaims = await RoleManager.GetClaimsAsync(role);
+            var existingPermissions = existingClaims.Where(c => c.Type == "Permission").ToList();
+
+            // 2. Remove all of them to give us a clean slate
+            foreach (var claim in existingPermissions)
+            {
+                await RoleManager.RemoveClaimAsync(role, claim);
+            }
+
+            // 3. Add the ones that are currently checked in the UI
+            foreach (var claimValue in SelectedClaims)
+            {
+                await RoleManager.AddClaimAsync(role, new Claim("Permission", claimValue));
+            }
+
+            ShowSuccessMessage = true;
+            _ = Task.Delay(3000).ContinueWith(_ => InvokeAsync(() => { ShowSuccessMessage = false; StateHasChanged(); }));
+        }
+    }
+
+    // --- UI HELPER ---
+    private string GetHeaderColor(string moduleName)
+    {
+        return moduleName switch
+        {
+            "Key Management" => "bg-primary text-white",
+            "User Management" => "bg-success text-white",
+            "Admin Functions" => "bg-danger text-white",
+            "Facilities" => "bg-info text-dark", // New
+            "Maintenance" => "bg-warning text-dark", // New
+            _ => "bg-secondary text-white"
+        };
+    }
+
+    // --- SEED DEFAULT DATA ---
+    private async Task SeedDefaultPermissions()
+    {
+        var defaults = new List<SystemPermission>
+        {
+            // Existing
+            new() { Module = "Key Management", Name = "View Key Inventory", ClaimValue = "Inventory.View" },
+            new() { Module = "Key Management", Name = "Generate New Keys", ClaimValue = "Keys.Create" },
+            new() { Module = "Key Management", Name = "Manage Bunches", ClaimValue = "Bunches.Manage" },
+            new() { Module = "Key Management", Name = "Issue & Return Items", ClaimValue = "Transactions.IssueReturn" },
+            new() { Module = "Key Management", Name = "Perform Formal Audits", ClaimValue = "Audit.Perform" },
+            new() { Module = "User Management", Name = "View Staff Profiles", ClaimValue = "Users.View" },
+            new() { Module = "User Management", Name = "Assign Roles", ClaimValue = "Users.ManageRoles" },
+            new() { Module = "Admin Functions", Name = "Manage Core Settings", ClaimValue = "Admin.ManageSettings" },
+            new() { Module = "Admin Functions", Name = "Full System Access", ClaimValue = "Admin.FullAccess" },
+
+            // NEW: Facilities
+            new() { Module = "Facilities", Name = "View Facilities", ClaimValue = "Facilities.View" },
+            new() { Module = "Facilities", Name = "Manage Areas & Rooms", ClaimValue = "Facilities.Manage" },
+
+            // NEW: Maintenance
+            new() { Module = "Maintenance", Name = "View Maintenance Book", ClaimValue = "Maintenance.View" },
+            new() { Module = "Maintenance", Name = "Manage/Approve Snags", ClaimValue = "Maintenance.Manage" },
+            new() { Module = "Maintenance", Name = "View Contractor Reports", ClaimValue = "Maintenance.ContractorView" }
+        };
+
+        // Only add ones that don't exist yet
+        foreach (var d in defaults)
+        {
+            if (!Db.SystemPermissions.Any(p => p.ClaimValue == d.ClaimValue))
+            {
+                Db.SystemPermissions.Add(d);
+            }
+        }
+
+        await Db.SaveChangesAsync();
+        await LoadPermissions();
+    }
+}

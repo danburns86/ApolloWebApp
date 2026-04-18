@@ -1,0 +1,224 @@
+﻿@page "/"
+@using Apollo.Data
+@using Apollo.Models
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.EntityFrameworkCore
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject NavigationManager Nav
+@inject AuthenticationStateProvider AuthStateProvider
+
+<PageTitle>@(Config?.WelcomeHeading ?? "Theatre Portal")</PageTitle>
+
+@if (!string.IsNullOrEmpty(ErrorMessage))
+{
+    <div class="alert alert-danger m-4 shadow">
+        <h4 class="fw-bold"><i class="bi bi-exclamation-triangle-fill"></i> Startup Error Captured</h4>
+        <p class="mb-0">@ErrorMessage</p>
+    </div>
+}
+else if (IsLoading)
+{
+    <div class="text-center mt-5">
+        <div class="spinner-border text-primary" role="status"></div>
+        <p class="mt-2 text-muted">Loading Portal Data...</p>
+    </div>
+}
+else
+{
+    <div class="mb-5">
+        <h1 class="fw-bold">@GreetingMessage, @UserDisplayName!</h1>
+        <h2 class="fw-light">@(Config?.WelcomeHeading ?? "Welcome to the Portal")</h2>
+        <p class="text-muted fs-5">@(Config?.WelcomeMessage ?? "Select a management module below to begin.")</p>
+    </div>
+
+    <div class="row g-4">
+        @* KEY MANAGEMENT *@
+        @if (Config!.IsKeyManagementEnabled || IsAdmin)
+        {
+            <div class="col-md-6 col-lg-4">
+                <div class="card h-100 shadow-sm border-0 border-top border-primary border-4 @(Config.IsKeyManagementEnabled ? "hover-card" : "opacity-50")"
+                     style="cursor:@(Config.IsKeyManagementEnabled ? "pointer" : "not-allowed"); transition: transform 0.2s;"
+                     @onclick='() => { if (Config.IsKeyManagementEnabled) NavTo("admin/keys"); }'>
+                    
+                    @if (!Config.IsKeyManagementEnabled && IsAdmin)
+                    {
+                        <div class="bg-danger text-white text-center py-1 fw-bold small rounded-top">DISABLED (Admin Visible)</div>
+                    }
+                    
+                    <div class="card-body text-center py-5">
+                        <div class="mb-3">
+                            <div class="d-inline-flex align-items-center justify-content-center bg-primary bg-opacity-10 text-primary rounded-circle" style="width: 80px; height: 80px;">
+                                <i class="bi bi-key-fill display-5"></i>
+                            </div>
+                        </div>
+                        <h4 class="fw-bold">Key Management</h4>
+                        <p class="text-muted mb-0">Inventory, checkouts, bunches, and security audits.</p>
+                    </div>
+                </div>
+            </div>
+        }
+
+        @* MAINTENANCE *@
+        @if (Config!.IsMaintenanceEnabled || IsAdmin)
+        {
+            <div class="col-md-6 col-lg-4">
+                <div class="card h-100 shadow-sm border-0 border-top border-danger border-4 @(Config.IsMaintenanceEnabled ? "hover-card" : "opacity-50")"
+                     style="cursor:@(Config.IsMaintenanceEnabled ? "pointer" : "not-allowed"); transition: transform 0.2s;"
+                     @onclick='() => { if (Config.IsMaintenanceEnabled) NavTo("admin/maintenance"); }'>
+                    
+                    @if (!Config.IsMaintenanceEnabled && IsAdmin)
+                    {
+                        <div class="bg-danger text-white text-center py-1 fw-bold small rounded-top">DISABLED (Admin Visible)</div>
+                    }
+
+                    <div class="card-body text-center py-5">
+                        <div class="mb-3">
+                            <div class="d-inline-flex align-items-center justify-content-center bg-danger bg-opacity-10 text-danger rounded-circle" style="width: 80px; height: 80px;">
+                                <i class="bi bi-tools display-5"></i>
+                            </div>
+                        </div>
+                        <h4 class="fw-bold">Maintenance Hub</h4>
+                        <p class="text-muted mb-0">Triage incoming snags, manage parts, and run walkaround reports.</p>
+                    </div>
+                </div>
+            </div>
+        }
+
+        @* ASSET TRACKING (NEW) *@
+        @if (Config!.IsAssetsEnabled || IsAdmin)
+        {
+            <div class="col-md-6 col-lg-4">
+                <div class="card h-100 shadow-sm border-0 border-top border-success border-4 @(Config.IsAssetsEnabled ? "hover-card" : "opacity-50")"
+                     style="cursor:@(Config.IsAssetsEnabled ? "pointer" : "not-allowed"); transition: transform 0.2s;"
+                     @onclick='() => { if (Config.IsAssetsEnabled) NavTo("admin/assets/dashboard"); }'>
+                    
+                    @if (!Config.IsAssetsEnabled && IsAdmin)
+                    {
+                        <div class="bg-danger text-white text-center py-1 fw-bold small rounded-top">DISABLED (Admin Visible)</div>
+                    }
+
+                    <div class="card-body text-center py-5">
+                        <div class="mb-3">
+                            <div class="d-inline-flex align-items-center justify-content-center bg-success bg-opacity-10 text-success rounded-circle" style="width: 80px; height: 80px;">
+                                <i class="bi bi-boxes display-5"></i>
+                            </div>
+                        </div>
+                        <h4 class="fw-bold">Asset Tracking</h4>
+                        <p class="text-muted mb-0">Technical inventory, valuation, offsite loans, and safety compliance.</p>
+                    </div>
+                </div>
+            </div>
+        }
+
+        @* REPORTS *@
+        @if (Config!.IsReportsEnabled || IsAdmin)
+        {
+            <div class="col-md-6 col-lg-4">
+                <div class="card h-100 shadow-sm border-0 border-top border-info border-4 @(Config.IsReportsEnabled ? "hover-card" : "opacity-50")"
+                     style="cursor:@(Config.IsReportsEnabled ? "pointer" : "not-allowed"); transition: transform 0.2s;"
+                     @onclick='() => { if (Config.IsReportsEnabled) NavTo("admin/assets/reports"); }'>
+                    
+                    @if (!Config.IsReportsEnabled && IsAdmin)
+                    {
+                        <div class="bg-danger text-white text-center py-1 fw-bold small rounded-top">DISABLED (Admin Visible)</div>
+                    }
+
+                    <div class="card-body text-center py-5">
+                        <div class="mb-3">
+                            <div class="d-inline-flex align-items-center justify-content-center bg-info bg-opacity-10 text-info rounded-circle" style="width: 80px; height: 80px;">
+                                <i class="bi bi-graph-up display-5"></i>
+                            </div>
+                        </div>
+                        <h4 class="fw-bold">Reports & Analytics</h4>
+                        <p class="text-muted mb-0">Master inventory records, value reports, and audit logs.</p>
+                    </div>
+                </div>
+            </div>
+        }
+
+        @* ADMINISTRATION *@
+        @if (Config!.IsAdminEnabled || IsAdmin)
+        {
+            <div class="col-md-6 col-lg-4">
+                <div class="card h-100 shadow-sm border-0 border-top border-dark border-4 @(Config.IsAdminEnabled ? "hover-card" : "opacity-50")"
+                     style="cursor:@(Config.IsAdminEnabled ? "pointer" : "not-allowed"); transition: transform 0.2s;"
+                     @onclick='() => { if (Config.IsAdminEnabled) NavTo("admin/settings"); }'>
+                    
+                    @if (!Config.IsAdminEnabled && IsAdmin)
+                    {
+                        <div class="bg-danger text-white text-center py-1 fw-bold small rounded-top">DISABLED (Admin Visible)</div>
+                    }
+
+                    <div class="card-body text-center py-5">
+                        <div class="mb-3">
+                            <div class="d-inline-flex align-items-center justify-content-center bg-dark bg-opacity-10 text-dark rounded-circle" style="width: 80px; height: 80px;">
+                                <i class="bi bi-gear-fill display-5"></i>
+                            </div>
+                        </div>
+                        <h4 class="fw-bold">Administration</h4>
+                        <p class="text-muted mb-0">System configuration, user roles, and module settings.</p>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+}
+
+<style>
+    .hover-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 0.5rem 1rem rgba(0,0,0,0.15) !important;
+    }
+</style>
+
+@code {
+    private PortalConfiguration? Config;
+    private string GreetingMessage = "Hello";
+    private string UserDisplayName = "User";
+    private bool IsAdmin = false;
+    private bool IsLoading = true;
+    private string? ErrorMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            using var db = await DbFactory.CreateDbContextAsync();
+            
+            Config = await db.PortalConfigurations.FirstOrDefaultAsync();
+            if (Config == null) Config = new PortalConfiguration();
+            
+            var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+            var user = authState.User;
+            
+            if (user.Identity != null && user.Identity.IsAuthenticated)
+            {
+                IsAdmin = user.IsInRole("Administrator");
+                var appUser = await db.Users.FirstOrDefaultAsync(u => u.UserName == user.Identity.Name);
+                if (appUser != null && !string.IsNullOrWhiteSpace(appUser.FirstName))
+                {
+                    UserDisplayName = appUser.FirstName;
+                }
+                else
+                {
+                    UserDisplayName = user.Identity.Name?.Split('@')[0] ?? "User";
+                }
+            }
+            
+            var hour = DateTime.Now.Hour;
+            if (hour < 12) GreetingMessage = "Good Morning";
+            else if (hour < 17) GreetingMessage = "Good Afternoon";
+            else GreetingMessage = "Good Evening";
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = ex.Message;
+        }
+        finally
+        {
+            IsLoading = false;
+        }
+    }
+
+    private void NavTo(string path) => Nav.NavigateTo(path);
+}

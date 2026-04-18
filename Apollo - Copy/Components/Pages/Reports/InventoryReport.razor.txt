@@ -1,0 +1,240 @@
+﻿@page "/admin/reports/inventory-status"
+@rendermode InteractiveServer
+@using Apollo.Models
+@using Apollo.Data
+@using Microsoft.EntityFrameworkCore
+@using Microsoft.AspNetCore.Components.Authorization
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject IJSRuntime JS
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Administrator")]
+
+<PageTitle>Master Inventory Report</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-3 d-print-none">
+    <div>
+        <h2>Master Inventory Status</h2>
+        <p class="text-muted mb-0">Live status of every key, bunch, and lock in the system.</p>
+    </div>
+    <div class="d-flex gap-2">
+        <button class="btn btn-outline-primary" @onclick="ExportToCsv">
+            <i class="bi bi-file-earmark-excel"></i> Export CSV
+        </button>
+        <button class="btn btn-outline-dark" onclick="window.print()">
+            <i class="bi bi-printer"></i> Print
+        </button>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0 mb-4 d-print-none">
+    <div class="card-body bg-light">
+        <div class="row g-3">
+            <div class="col-md-4">
+                <label class="form-label small fw-bold">Search Keys/Locks</label>
+                <input type="text" class="form-control" placeholder="Search code or name..." @bind="SearchTerm" @bind:event="oninput" />
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small fw-bold">Filter by Holder/Location</label>
+                <select class="form-select" @bind="SelectedHolder">
+                    <option value="">-- All Locations --</option>
+                    @foreach (var name in AllHoldersList)
+                    {
+                        <option value="@name">@name</option>
+                    }
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small fw-bold">Status</label>
+                <select class="form-select" @bind="StatusFilter">
+                    <option value="">All Statuses</option>
+                    <option value="In Stock">In Stock</option>
+                    <option value="Issued">Issued</option>
+                    <option value="Lost">Lost</option>
+                </select>
+            </div>
+        </div>
+    </div>
+</div>
+
+@foreach (var group in LockGroups.OrderBy(g => g.Key.LockCode))
+{
+    var filteredKeys = GetFilteredKeys(group.Value);
+    if (!filteredKeys.Any()) continue;
+
+    <div class="card shadow-sm mb-4 border-0">
+        <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+            <span class="fw-bold">@group.Key.LockCode - @group.Key.Name</span>
+            <span class="badge bg-secondary">@filteredKeys.Count Keys</span>
+        </div>
+        <div class="card-body p-0">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light small text-uppercase">
+                    <tr>
+                        <th class="ps-3">Seq #</th>
+                        <th>Status</th>
+                        <th>Current Location / Holder</th>
+                        <th>Assignment</th>
+                        <th>Last Seen</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var key in filteredKeys)
+                    {
+                        <tr>
+                            <td class="ps-3 fw-bold">@group.Key.LockCode @key.SequenceNumber</td>
+                            <td>
+                                <span class="badge @(key.Status == "In Stock" ? "bg-success" : (key.Status == "Lost" ? "bg-danger" : "bg-primary"))">
+                                    @key.Status
+                                </span>
+                            </td>
+                            <td>
+                                @if (!string.IsNullOrEmpty(key.IssuedToName))
+                                {
+                                    <span class="text-primary fw-bold"><i class="bi bi-person"></i> @key.IssuedToName</span>
+                                }
+                                else if (ActiveKeyHolders.ContainsKey(key.Id))
+                                {
+                                    <span class="text-primary fw-bold"><i class="bi bi-person"></i> @ActiveKeyHolders[key.Id].HolderName</span>
+                                }
+                                else
+                                {
+                                    <span class="text-muted"><i class="bi bi-archive"></i> @(key.StorageLocation?.Name ?? "Main Cabinet")</span>
+                                }
+                            </td>
+                            <td>
+                                @if (KeysInBunches.ContainsKey(key.Id))
+                                {
+                                    <span class="badge bg-dark">Bunch: @KeysInBunches[key.Id]</span>
+                                }
+                                else
+                                {
+                                    <span class="text-muted small">Loose Key</span>
+                                }
+                            </td>
+                            <td class="small">@(key.LastSeenDate?.ToString("dd/MM/yy HH:mm") ?? "N/A")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+
+@code {
+    private string SearchTerm = "";
+    private string SelectedHolder = "";
+    private string StatusFilter = "";
+
+    private List<string> AllHoldersList = new();
+    private Dictionary<HardwareLock, List<KeyRecord>> LockGroups = new();
+    private Dictionary<int, string> KeysInBunches = new();
+    private Dictionary<int, KeyHolderInfo> ActiveKeyHolders = new();
+
+    public class KeyHolderInfo { public string HolderName { get; set; } = ""; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        using var context = await DbFactory.CreateDbContextAsync();
+
+        AllHoldersList.Clear();
+        ActiveKeyHolders.Clear();
+        KeysInBunches.Clear();
+        var holderNamesTracker = new HashSet<string>();
+
+        // 1. Get all keys with related data
+        var allKeys = await context.Keys
+            .Include(k => k.Lock)
+            .Include(k => k.StorageLocation)
+            .ToListAsync();
+
+        LockGroups = allKeys
+            .Where(k => k.Lock != null)
+            .GroupBy(k => k.Lock!)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        // 2. Map Keys to Bunches
+        var activeAssignments = await context.KeyBunchAssignments
+            .Include(ka => ka.Bunch)
+            .Where(ka => ka.RemovedDate == null)
+            .ToListAsync();
+
+        foreach (var ka in activeAssignments)
+        {
+            if (ka.KeyRecordId != 0 && ka.Bunch != null)
+            {
+                KeysInBunches[ka.KeyRecordId] = ka.Bunch.Name;
+                // If a bunch is issued, the key is effectively issued to that person
+                if (!string.IsNullOrEmpty(ka.Bunch.IssuedToName))
+                {
+                    ActiveKeyHolders[ka.KeyRecordId] = new KeyHolderInfo { HolderName = ka.Bunch.IssuedToName };
+                    holderNamesTracker.Add(ka.Bunch.IssuedToName);
+                }
+            }
+        }
+
+        // 3. Track storage locations and individual holders
+        foreach (var key in allKeys)
+        {
+            if (key.StorageLocation != null) holderNamesTracker.Add(key.StorageLocation.Name);
+            if (!string.IsNullOrEmpty(key.IssuedToName))
+            {
+                holderNamesTracker.Add(key.IssuedToName);
+                if (!ActiveKeyHolders.ContainsKey(key.Id))
+                    ActiveKeyHolders[key.Id] = new KeyHolderInfo { HolderName = key.IssuedToName };
+            }
+        }
+
+        AllHoldersList = holderNamesTracker.OrderBy(n => n).ToList();
+    }
+
+    private List<KeyRecord> GetFilteredKeys(List<KeyRecord> keys)
+    {
+        var query = keys.AsEnumerable();
+
+        if (!string.IsNullOrWhiteSpace(SearchTerm))
+            query = query.Where(k => (k.Lock?.LockCode ?? "").Contains(SearchTerm, StringComparison.OrdinalIgnoreCase) ||
+                                     (k.Lock?.Name ?? "").Contains(SearchTerm, StringComparison.OrdinalIgnoreCase));
+
+        if (!string.IsNullOrWhiteSpace(StatusFilter))
+            query = query.Where(k => k.Status == StatusFilter);
+
+        if (!string.IsNullOrWhiteSpace(SelectedHolder))
+        {
+            query = query.Where(k =>
+                (k.StorageLocation?.Name == SelectedHolder) ||
+                (k.IssuedToName == SelectedHolder) ||
+                (ActiveKeyHolders.ContainsKey(k.Id) && ActiveKeyHolders[k.Id].HolderName == SelectedHolder)
+            );
+        }
+
+        return query.ToList();
+    }
+
+    private async Task ExportToCsv()
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("Lock,Seq,Status,Holder/Location,Assignment,Last Seen");
+
+        foreach (var group in LockGroups)
+        {
+            foreach (var key in group.Value)
+            {
+                var holder = !string.IsNullOrEmpty(key.IssuedToName) ? key.IssuedToName :
+                            (ActiveKeyHolders.ContainsKey(key.Id) ? ActiveKeyHolders[key.Id].HolderName :
+                            (key.StorageLocation?.Name ?? "Cabinet"));
+                
+                var assignment = KeysInBunches.ContainsKey(key.Id) ? KeysInBunches[key.Id] : "Loose";
+
+                sb.AppendLine($"{group.Key.LockCode},{group.Key.LockCode} {key.SequenceNumber},\"{key.Status}\",\"{holder}\",\"{assignment}\",\"{key.LastSeenDate}\"");
+            }
+        }
+
+        var fileBytes = System.Text.Encoding.UTF8.GetBytes(sb.ToString());
+        using var streamRef = new DotNetStreamReference(new System.IO.MemoryStream(fileBytes));
+        await JS.InvokeVoidAsync("downloadFileFromStream", $"Inventory_Report_{DateTime.Now:yyyyMMdd}.csv", streamRef);
+    }
+}

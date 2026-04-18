@@ -1,0 +1,142 @@
+﻿@page "/admin/members/import"
+@using System.Globalization
+@using CsvHelper
+@using CsvHelper.Configuration
+@using Microsoft.EntityFrameworkCore
+@using Apollo.Data
+@using Apollo.Models
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject NavigationManager Nav
+
+<PageTitle>Import Members</PageTitle>
+
+<div class="container py-4">
+    <div class="card shadow-sm border-0 border-top border-primary border-4">
+        <div class="card-body p-5 text-center">
+            <i class="bi bi-people-fill display-1 text-primary mb-3"></i>
+            <h2 class="fw-bold">MemberMojo Sync</h2>
+            
+            @if (!isProcessing)
+            {
+                <p class="text-muted">Upload your <code>members.csv</code> to sync the personnel registry.</p>
+                <div class="my-4 py-5 border-2 border-dashed rounded bg-light">
+                    <InputFile OnChange="HandleFileUpload" class="form-control w-50 mx-auto" />
+                </div>
+            }
+            else
+            {
+                <div class="py-5">
+                    <div class="spinner-border text-primary mb-3" style="width: 3rem; height: 3rem;"></div>
+                    <h4 class="fw-bold">Syncing Records...</h4>
+                    <p class="text-muted">Processed @processedCount records. This may take a moment for large files.</p>
+                    <div class="progress w-50 mx-auto" style="height: 10px;">
+                        <div class="progress-bar progress-bar-striped progress-bar-animated" style="width: 100%"></div>
+                    </div>
+                </div>
+            }
+
+            @if (!string.IsNullOrEmpty(errorMessage))
+            {
+                <div class="alert alert-danger mt-3">@errorMessage</div>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    private bool isProcessing = false;
+    private int processedCount = 0;
+    private string errorMessage = "";
+
+    private async Task HandleFileUpload(InputFileChangeEventArgs e)
+    {
+        isProcessing = true;
+        errorMessage = "";
+        processedCount = 0;
+
+        try
+        {
+            // 1. Open the stream with a high limit
+            using var stream = e.File.OpenReadStream(maxAllowedSize: 15 * 1024 * 1024);
+            using var reader = new StreamReader(stream);
+            
+            var config = new CsvConfiguration(CultureInfo.InvariantCulture)
+            {
+                PrepareHeaderForMatch = args => args.Header.Trim(),
+                HeaderValidated = null,
+                MissingFieldFound = null,
+            };
+
+            using var csv = new CsvReader(reader, config);
+            
+            // 2. Read headers asynchronously
+            await csv.ReadAsync();
+            csv.ReadHeader();
+            
+            using var context = await DbFactory.CreateDbContextAsync();
+
+            // Load existing members to avoid repeat DB hits
+            var existingMembers = await context.Members.ToDictionaryAsync(m => m.MemberNumber);
+
+            // 3. Process row by row ASYNCHRONOUSLY
+            while (await csv.ReadAsync())
+            {
+                var record = csv.GetRecord<dynamic>();
+                var dict = (IDictionary<string, object>)record;
+                
+                string memberNum = dict["Member number"]?.ToString() ?? "";
+                if (string.IsNullOrWhiteSpace(memberNum)) continue;
+
+                if (!existingMembers.TryGetValue(memberNum, out var member))
+                {
+                    member = new Member { MemberNumber = memberNum };
+                    context.Members.Add(member);
+                    existingMembers.Add(memberNum, member);
+                }
+
+                // Mapping Identity
+                member.FirstName = dict["First name"]?.ToString() ?? "";
+                member.LastName = dict["Last name"]?.ToString() ?? "";
+                member.Email = dict["Email"]?.ToString();
+                member.MobileNumber = dict["Mobile number"]?.ToString() ?? dict["Contact number"]?.ToString();
+                member.MembershipStatus = dict["Membership state"]?.ToString() ?? "Active";
+                
+                if (DateTime.TryParse(dict["Expires on"]?.ToString(), out var expiry))
+                    member.ExpiryDate = expiry;
+
+                // Mapping Technical Interests
+                member.SkillLXDesign = GetBool(dict, "Lighting Design / Set-Up");
+                member.SkillLXOp = GetBool(dict, "Lighting Operator");
+                member.SkillSoundOp = GetBool(dict, "Sound Operation");
+                member.SkillStageManager = GetBool(dict, "Stage Manager");
+                member.SkillBar = GetBool(dict, "Bar Staff");
+
+                processedCount++;
+                
+                // Allow the UI to update the count every 50 records
+                if (processedCount % 50 == 0)
+                {
+                    StateHasChanged();
+                    await Task.Yield(); // Hands control back to the UI for a millisecond
+                }
+            }
+
+            await context.SaveChangesAsync();
+            Nav.NavigateTo("/admin/members");
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error during import: {ex.Message}";
+            Console.WriteLine(ex.ToString());
+        }
+        finally
+        {
+            isProcessing = false;
+        }
+    }
+
+    private bool GetBool(IDictionary<string, object> dict, string key)
+    {
+        return dict.ContainsKey(key) && dict[key]?.ToString()?.ToLower() == "yes";
+    }
+}

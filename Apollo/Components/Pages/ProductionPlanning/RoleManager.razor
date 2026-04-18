@@ -1,0 +1,232 @@
+﻿@page "/admin/production/roles"
+@using Apollo.Models
+@using Apollo.Data
+@using Microsoft.EntityFrameworkCore
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+
+<PageTitle>Role Templates</PageTitle>
+
+<div class="container-fluid px-4 py-4 max-w-6xl">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="fw-bold mb-0 text-primary">Role Templates</h2>
+            <p class="text-muted mb-0">Define which roles appear by default for each show type.</p>
+        </div>
+        <div class="d-flex gap-2">
+            <button class="btn btn-primary shadow-sm px-4 fw-bold" @onclick="() => OpenAddModal()">
+                <i class="bi bi-plus-lg me-2"></i>Create New Role
+            </button>
+        </div>
+    </div>
+
+    @if (isLoading)
+    {
+        <div class="text-center py-5"><div class="spinner-border text-primary"></div></div>
+    }
+    else
+    {
+        <div class="row g-4">
+            @foreach (var cat in categories)
+            {
+                <div class="col-xl-4 col-md-6">
+                    <div class="card shadow-sm border-0 h-100">
+                        <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+                            <span class="fw-bold"><i class="bi @cat.IconClass me-2"></i>@cat.Name</span>
+                            <span class="badge bg-secondary">@roles.Count(r => r.CategoryId == cat.Id)</span>
+                        </div>
+                        <ul class="list-group list-group-flush">
+                            @foreach (var role in roles.Where(r => r.CategoryId == cat.Id).OrderBy(r => r.Name))
+                            {
+                                <li class="list-group-item d-flex justify-content-between align-items-center">
+                                    <div>
+                                        @if (role.IsMandatory)
+                                        {
+                                            <i class="bi bi-exclamation-circle-fill text-danger me-2" title="Mandatory"></i>
+                                        }
+                                        else
+                                        {
+                                            <i class="bi bi-info-circle text-muted me-2" title="Optional"></i>
+                                        }
+                                        @role.Name
+                                    </div>
+                                    <div class="btn-group">
+                                        <button class="btn btn-sm text-primary" @onclick="() => OpenEditModal(role)"><i class="bi bi-pencil"></i></button>
+                                        <button class="btn btn-sm text-danger" @onclick="() => DeleteRole(role)"><i class="bi bi-trash"></i></button>
+                                    </div>
+                                </li>
+                            }
+                            @if (!roles.Any(r => r.CategoryId == cat.Id))
+                            {
+                                <li class="list-group-item text-center py-4 text-muted small italic">No roles defined for this type.</li>
+                            }
+                        </ul>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@* MULTI-CATEGORY ROLE MODAL *@
+@if (showModal)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5); z-index: 1050;">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content border-0 shadow-lg">
+                <div class="modal-header bg-light border-0">
+                    <h5 class="modal-title fw-bold">@(isEditMode ? "Edit Role" : "Create New Role Across Categories")</h5>
+                    <button type="button" class="btn-close" @onclick="() => showModal = false"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <div class="mb-4">
+                        <label class="small fw-bold text-uppercase text-muted">Role Name</label>
+                        <input type="text" class="form-control form-control-lg fw-bold" @bind="editingRoleName" placeholder="e.g. Stage Manager" />
+                    </div>
+
+                    <h6 class="fw-bold mb-3 text-primary">Category Configuration</h6>
+                    <div class="table-responsive rounded border">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead class="bg-light small text-uppercase">
+                                <tr>
+                                    <th>Event Type</th>
+                                    <th class="text-center">Enable for Type</th>
+                                    <th class="text-center">Is Mandatory?</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var state in selectionStates)
+                                {
+                                    <tr class="@(state.IsIncluded ? "" : "opacity-50")">
+                                        <td class="fw-bold">
+                                            <i class="bi @state.Category.IconClass me-2"></i>@state.Category.Name
+                                        </td>
+                                        <td class="text-center">
+                                            <div class="form-check form-switch d-inline-block">
+                                                <input class="form-check-input" type="checkbox" @bind="state.IsIncluded" disabled="@(isEditMode)" />
+                                            </div>
+                                        </td>
+                                        <td class="text-center">
+                                            <div class="form-check form-switch d-inline-block">
+                                                <input class="form-check-input" type="checkbox" @bind="state.IsMandatory" disabled="@(!state.IsIncluded)" />
+                                            </div>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                    @if (isEditMode)
+                    {
+                        <div class="alert alert-info mt-3 small mb-0">
+                            <i class="bi bi-info-circle me-2"></i> In edit mode, you can only change the name and mandatory status of the specific record you selected.
+                        </div>
+                    }
+                </div>
+                <div class="modal-footer border-0">
+                    <button class="btn btn-secondary" @onclick="() => showModal = false">Cancel</button>
+                    <button class="btn btn-primary px-4 fw-bold shadow-sm" @onclick="SaveRoles" disabled="@(string.IsNullOrEmpty(editingRoleName))">
+                        <i class="bi bi-check-lg me-2"></i>@(isEditMode ? "Save Changes" : "Create Roles")
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<ProductionRole> roles = new();
+    private List<ProductionCategory> categories = new();
+    private bool isLoading = true;
+    private bool showModal = false;
+    private bool isEditMode = false;
+
+    // Modal State
+    private string editingRoleName = "";
+    private List<RoleSelectionState> selectionStates = new();
+    private ProductionRole? currentEditingRecord;
+
+    protected override async Task OnInitializedAsync() => await LoadData();
+
+    private async Task LoadData()
+    {
+        isLoading = true;
+        using var context = await DbFactory.CreateDbContextAsync();
+        categories = await context.ProductionCategories.OrderBy(c => c.Name).ToListAsync();
+        roles = await context.ProductionRoles.Include(r => r.Category).ToListAsync();
+        isLoading = false;
+    }
+
+    private void OpenAddModal()
+    {
+        isEditMode = false;
+        editingRoleName = "";
+        selectionStates = categories.Select(c => new RoleSelectionState { Category = c, IsIncluded = true }).ToList();
+        showModal = true;
+    }
+
+    private void OpenEditModal(ProductionRole role)
+    {
+        isEditMode = true;
+        currentEditingRecord = role;
+        editingRoleName = role.Name;
+        // In edit mode, we only show the one category it belongs to
+        selectionStates = new List<RoleSelectionState> {
+            new RoleSelectionState {
+                Category = role.Category!,
+                IsIncluded = true,
+                IsMandatory = role.IsMandatory
+            }
+        };
+        showModal = true;
+    }
+
+    private async Task SaveRoles()
+    {
+        using var context = await DbFactory.CreateDbContextAsync();
+
+        if (isEditMode && currentEditingRecord != null)
+        {
+            var record = await context.ProductionRoles.FindAsync(currentEditingRecord.Id);
+            if (record != null)
+            {
+                record.Name = editingRoleName;
+                record.IsMandatory = selectionStates[0].IsMandatory;
+                context.ProductionRoles.Update(record);
+            }
+        }
+        else
+        {
+            // Create mode: Create a record for every "Included" category
+            foreach (var state in selectionStates.Where(s => s.IsIncluded))
+            {
+                context.ProductionRoles.Add(new ProductionRole
+                {
+                    Name = editingRoleName,
+                    CategoryId = state.Category.Id,
+                    IsMandatory = state.IsMandatory
+                });
+            }
+        }
+
+        await context.SaveChangesAsync();
+        showModal = false;
+        await LoadData();
+    }
+
+    private async Task DeleteRole(ProductionRole role)
+    {
+        using var context = await DbFactory.CreateDbContextAsync();
+        context.ProductionRoles.Remove(role);
+        await context.SaveChangesAsync();
+        await LoadData();
+    }
+
+    // Helper class for the modal table
+    public class RoleSelectionState
+    {
+        public ProductionCategory Category { get; set; } = null!;
+        public bool IsIncluded { get; set; }
+        public bool IsMandatory { get; set; }
+    }
+}

@@ -1,0 +1,100 @@
+﻿@page "/admin/maintenance/reports/outstanding"
+@rendermode InteractiveServer
+@using Apollo.Models
+@using Apollo.Data
+@using Apollo.Security  
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Policy = SystemPermissions.ManageMaintenance)]
+@inject IMaintenanceService MaintenanceService
+@inject IJSRuntime JS
+
+<div class="container-fluid px-4 py-4 d-print-none">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div class="d-flex align-items-center gap-3">
+            <a href="/admin/maintenance/reports" class="btn btn-outline-secondary"><i class="bi bi-arrow-left"></i></a>
+            <h2 class="fw-bold mb-0">Outstanding Jobs</h2>
+        </div>
+        <button class="btn btn-dark shadow-sm" @onclick="PrintReport"><i class="bi bi-printer me-2"></i>Print Assignments</button>
+    </div>
+</div>
+
+<div class="container-fluid px-4 print-area">
+    @if (isLoading) { <div class="text-center py-5 d-print-none"><div class="spinner-border text-primary"></div></div> }
+    else
+    {
+        <div class="print-header d-none d-print-block mb-4">
+            <h2>Outstanding Internal Jobs</h2>
+            <p class="text-muted">Generated: @DateTime.Now.ToString("dd MMM yyyy HH:mm")</p>
+            <hr />
+        </div>
+
+        var outstanding = allIssues.Where(i => i.Status == SnagStatus.InProgress || i.Status == SnagStatus.PartsRequired)
+                                   .GroupBy(i => string.IsNullOrWhiteSpace(i.AssignedTo) ? "Unassigned" : i.AssignedTo)
+                                   .ToList();
+        
+        @foreach (var group in outstanding)
+        {
+            <h5 class="fw-bold mt-4 mb-2 bg-light p-2 border">Assigned To: @group.Key</h5>
+            <table class="table table-bordered table-sm mb-4">
+                <thead class="table-light">
+                    <tr>
+                        <th style="width: 10%;">ID</th>
+                        <th style="width: 20%;">Location</th>
+                        <th style="width: 50%;">Description / Notes</th>
+                        <th style="width: 20%;">Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var issue in group)
+                    {
+                        <tr>
+                            <td class="fw-bold">#@issue.Id</td>
+                            <td>
+                                <strong>@issue.Room?.Name</strong><br/>
+                                <small class="text-muted">@issue.Room?.Area?.Name</small>
+                            </td>
+                            <td>
+                                @issue.Description
+                                @if (issue.Parts.Any(p => p.NeedsOrdering))
+                                {
+                                    <div class="text-danger small mt-2 fw-bold"><i class="bi bi-exclamation-triangle me-1"></i>Waiting on parts</div>
+                                }
+                            </td>
+                            <td>
+                                <span class="badge @(issue.Status == SnagStatus.PartsRequired ? "bg-info text-dark" : "bg-primary")">
+                                    @issue.Status
+                                </span>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+        @if(!outstanding.Any()) { <p class="text-center text-muted py-4 fst-italic">No outstanding internal jobs.</p> }
+    }
+</div>
+
+<style>
+    @@media print {
+        body * { visibility: hidden; }
+        .print-area, .print-area * { visibility: visible; }
+        .print-area { position: absolute; left: 0; top: 0; width: 100%; }
+        .d-print-none { display: none !important; }
+        .d-print-block { display: block !important; }
+        .table { border-color: #000 !important; }
+        th, td { border-color: #000 !important; padding: 8px !important; }
+    }
+</style>
+
+@code {
+    private List<MaintenanceIssue> allIssues = new();
+    private bool isLoading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        isLoading = true;
+        allIssues = await MaintenanceService.GetAllIssuesAsync();
+        isLoading = false;
+    }
+
+    private async Task PrintReport() => await JS.InvokeVoidAsync("window.print");
+}

@@ -1,0 +1,90 @@
+﻿@page "/admin/maintenance/reports/completed"
+@rendermode InteractiveServer
+@using Apollo.Models
+@using Apollo.Data
+@using Apollo.Security  
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Policy = SystemPermissions.ManageMaintenance)]
+@inject IMaintenanceService MaintenanceService
+@inject IJSRuntime JS
+
+<div class="container-fluid px-4 py-4 d-print-none">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div class="d-flex align-items-center gap-3">
+            <a href="/admin/maintenance/reports" class="btn btn-outline-secondary"><i class="bi bi-arrow-left"></i></a>
+            <h2 class="fw-bold mb-0">Completed Log</h2>
+        </div>
+        <button class="btn btn-dark shadow-sm" @onclick="PrintReport"><i class="bi bi-printer me-2"></i>Print History</button>
+    </div>
+</div>
+
+<div class="container-fluid px-4 print-area">
+    @if (isLoading) { <div class="text-center py-5 d-print-none"><div class="spinner-border text-success"></div></div> }
+    else
+    {
+        <div class="print-header d-none d-print-block mb-4">
+            <h2>Completed Jobs Log</h2>
+            <p class="text-muted">Generated: @DateTime.Now.ToString("dd MMM yyyy HH:mm")</p>
+            <hr />
+        </div>
+
+        var completed = allIssues.Where(i => i.Status == SnagStatus.Resolved).OrderByDescending(i => i.ResolvedAt).ToList();
+        
+        <table class="table table-bordered table-sm">
+            <thead class="table-light">
+                <tr>
+                    <th style="width: 10%;">ID</th>
+                    <th style="width: 15%;">Resolved Date</th>
+                    <th style="width: 25%;">Location</th>
+                    <th style="width: 50%;">Resolution Notes / Description</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var issue in completed)
+                {
+                    <tr>
+                        <td class="fw-bold text-muted">#@issue.Id</td>
+                        <td>@issue.ResolvedAt?.ToString("dd MMM yyyy")</td>
+                        <td>
+                            <strong>@issue.Room?.Name</strong><br/>
+                            <small class="text-muted">@issue.Room?.Area?.Name</small>
+                        </td>
+                        <td>
+                            <div class="mb-1"><strong>Fault:</strong> @issue.Description</div>
+                            @if (!string.IsNullOrWhiteSpace(issue.AdminNotes))
+                            {
+                                <div class="small text-success"><i class="bi bi-check2-circle me-1"></i>@issue.AdminNotes</div>
+                            }
+                        </td>
+                    </tr>
+                }
+                @if(!completed.Any()) { <tr><td colspan="4" class="text-center text-muted py-4 fst-italic">No completed jobs found.</td></tr> }
+            </tbody>
+        </table>
+    }
+</div>
+
+<style>
+    @@media print {
+        body * { visibility: hidden; }
+        .print-area, .print-area * { visibility: visible; }
+        .print-area { position: absolute; left: 0; top: 0; width: 100%; }
+        .d-print-none { display: none !important; }
+        .d-print-block { display: block !important; }
+        .table { border-color: #000 !important; }
+        th, td { border-color: #000 !important; padding: 8px !important; }
+    }
+</style>
+
+@code {
+    private List<MaintenanceIssue> allIssues = new();
+    private bool isLoading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        isLoading = true;
+        allIssues = await MaintenanceService.GetAllIssuesAsync();
+        isLoading = false;
+    }
+
+    private async Task PrintReport() => await JS.InvokeVoidAsync("window.print");
+}

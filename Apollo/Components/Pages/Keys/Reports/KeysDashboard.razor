@@ -1,0 +1,82 @@
+﻿@page "/keys/reports"
+@using Apollo.Models
+@using Apollo.Data
+@using Microsoft.EntityFrameworkCore
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Administrator")]
+
+<PageTitle>Reports Dashboard</PageTitle>
+
+<div class="container-fluid px-4">
+    <div class="mb-4">
+        <h2 class="fw-bold">Reports & Analytics</h2>
+        <p class="text-muted">Master directories, audit logs, and hardware breakdowns.</p>
+    </div>
+
+    <div class="row g-4 mb-5">
+        
+        <div class="col-lg-4">
+            <div class="card h-100 border-0 shadow-sm border-top border-primary border-4">
+                <div class="card-header bg-white py-3 border-bottom">
+                    <h5 class="mb-0 fw-bold text-primary"><i class="bi bi-box-seam me-2"></i>Inventory Records</h5>
+                </div>
+                <div class="card-body">
+                    <div class="list-group list-group-flush">
+                        <a href="/admin/reports/inventory-status" class="list-group-item list-group-item-action border-0 px-0">
+                            <i class="bi bi-chevron-right me-2 text-primary small"></i> Master Inventory Status
+                        </a>
+                        <a href="/admin/reports/bunches-overview" class="list-group-item list-group-item-action border-0 px-0">
+                            <i class="bi bi-chevron-right me-2 text-primary small"></i> Bunches Directory
+                        </a>
+                        <a href="/admin/reports/lock-allocation" class="list-group-item list-group-item-action border-0 px-0">
+                            <i class="bi bi-chevron-right me-2 text-primary small"></i> Lock Allocation Breakdown
+                        </a>
+                        <a href="/admin/reports/spare-locks" class="list-group-item list-group-item-action border-0 px-0">
+                            <i class="bi bi-chevron-right me-2 text-primary small"></i> Spare Locks (In Stock)
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-4">
+            <div class="card h-100 border-0 shadow-sm border-top border-dark border-4">
+                <div class="card-header bg-white py-3 border-bottom">
+                    <h5 class="mb-0 fw-bold text-dark"><i class="bi bi-shield-check me-2"></i>Audit & Compliance</h5>
+                </div>
+                <div class="card-body">
+                    <div class="list-group list-group-flush">
+                        <a href="/admin/reports/outstanding-audit" class="list-group-item list-group-item-action border-0 px-0">
+                            <i class="bi bi-chevron-right me-2 text-dark small"></i> Printable Sign-off Sheets
+                        </a>
+                        <a href="/admin/reports/campaign-audit" class="list-group-item list-group-item-action border-0 px-0">
+                            <i class="bi bi-chevron-right me-2 text-dark small"></i> Campaign Audit Checklists
+                        </a>
+                        <a href="/admin/reports/audit-logs" class="list-group-item list-group-item-action border-0 px-0">
+                            <i class="bi bi-chevron-right me-2 text-dark small"></i> System Audit Trail
+                        </a>
+                        <a href="/admin/activity" class="list-group-item list-group-item-action border-0 px-0">
+                            <i class="bi bi-chevron-right me-2 text-dark small"></i> Live Activity Log
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-4">
+            <div class="card h-100 border-0 shadow-sm border-top border-danger border-4">
+                <div class="card-header bg-white py-3 border-bottom">
+                    <h5 class="mb-0 fw-bold text-danger"><i class="bi bi-exclamation-triangle me-2"></i>Risks & Alerts</h5>
+                </div>
+                <div class="card-body">
+                    <div class="list-group list-group-flush">
+                        <a href="/admin/reports/lost-and-found" class="list-group-item list-group-item-action border-0 px-0 text-danger fw-bold">
+                            <i class="bi bi-search me-2"></i> Lost & Found Registry
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>

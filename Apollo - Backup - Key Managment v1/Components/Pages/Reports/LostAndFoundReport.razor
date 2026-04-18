@@ -1,0 +1,161 @@
+﻿@page "/admin/reports/lost-and-found"
+@rendermode InteractiveServer
+@using Apollo.Models
+@using Apollo.Data
+@using Microsoft.EntityFrameworkCore
+@inject ApplicationDbContext Db
+@inject IJSRuntime JS
+
+<PageTitle>Lost & Found Report</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-3 d-print-none">
+    <h3>Lost & Found Registry</h3>
+    <div>
+        <button class="btn btn-outline-primary me-2" @onclick="ExportToCsv"><i class="bi bi-file-earmark-excel"></i> Export CSV</button>
+        <button class="btn btn-outline-dark" onclick="window.print()"><i class="bi bi-printer"></i> Print PDF</button>
+    </div>
+</div>
+
+<div class="row g-4">
+    <div class="col-12">
+        <div class="card shadow-sm border-danger">
+            <div class="card-header bg-danger text-white fw-bold">
+                <i class="bi bi-exclamation-octagon-fill me-2"></i> Currently Missing Inventory
+            </div>
+            <div class="card-body p-0 table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light small text-uppercase">
+                        <tr>
+                            <th class="ps-3">Item ID</th>
+                            <th>Description</th>
+                            <th>Last Known Holder</th>
+                            <th>Lock Name</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (!MissingItems.Any())
+                        {
+                            <tr><td colspan="4" class="text-center py-4 text-muted">Hooray! No items are currently marked as lost.</td></tr>
+                        }
+                        @foreach (var item in MissingItems)
+                        {
+                            <tr>
+                                <td class="ps-3 fw-bold">@item.Code</td>
+                                <td>
+                                    <span class="badge @(item.IsBunch ? "bg-dark" : "bg-secondary")">@(item.IsBunch ? "Bunch" : "Key")</span>
+                                    <span class="ms-1">@item.Name</span>
+                                </td>
+                                <td class="text-primary fw-bold">@item.LastHolder</td>
+                                <td class="small text-muted">@item.LockName</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12 d-print-none">
+        <div class="card shadow-sm border-success">
+            <div class="card-header bg-success text-white fw-bold">
+                <i class="bi bi-check-circle-fill me-2"></i> Recovery History (Last 30 Days)
+            </div>
+            <div class="card-body p-0 table-responsive">
+                <table class="table table-sm table-striped mb-0">
+                    <thead class="table-light small text-uppercase">
+                        <tr>
+                            <th class="ps-3">Item</th>
+                            <th>Recovery Date</th>
+                            <th>Notes</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var log in RecoveryLogs)
+                        {
+                            <tr>
+                                <td class="ps-3 fw-bold">@log.ItemDetails</td>
+                                <td>@log.Date.ToString("dd/MM/yy HH:mm")</td>
+                                <td class="small">Marked "Found" and returned to stock.</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    public class MissingItemDto
+    {
+        public string Code { get; set; } = "";
+        public string Name { get; set; } = "";
+        public bool IsBunch { get; set; }
+        public string LastHolder { get; set; } = "Unknown";
+        public string LockName { get; set; } = "-";
+    }
+
+    public class RecoveryLogDto
+    {
+        public string ItemDetails { get; set; } = "";
+        public DateTime Date { get; set; }
+    }
+
+    private List<MissingItemDto> MissingItems = new();
+    private List<RecoveryLogDto> RecoveryLogs = new();
+
+    protected override async Task OnInitializedAsync() => await LoadData();
+
+    private async Task LoadData()
+    {
+        MissingItems.Clear();
+
+        // 1. Missing Bunches
+        var lostBunches = await Db.Bunches.Where(b => b.IsActive && b.IsLost).ToListAsync();
+        foreach (var b in lostBunches)
+        {
+            MissingItems.Add(new MissingItemDto { Code = "BUNCH", Name = b.Name, IsBunch = true, LastHolder = b.IssuedToName ?? "In Stock" });
+        }
+
+        // 2. Missing Keys
+        var lostKeys = await Db.Keys.Include(k => k.Lock).Where(k => k.Status == "Lost").ToListAsync();
+        foreach (var k in lostKeys)
+        {
+            MissingItems.Add(new MissingItemDto
+            {
+                Code = $"{k.Lock!.LockCode} {k.SequenceNumber}",
+                Name = "Single Key",
+                IsBunch = false,
+                LastHolder = k.IssuedToName ?? "In Stock",
+                LockName = k.Lock.Name
+            });
+        }
+
+        // 3. Recovery History (Fixed Join)
+        var transactions = await Db.CheckoutTransactions
+            .Include(t => t.Bunch)
+            .Include(t => t.KeyRecord).ThenInclude(k => k!.Lock)
+            .Where(t => t.ReturnDate != null)
+            .OrderByDescending(t => t.ReturnDate)
+            .Take(20)
+            .ToListAsync();
+
+        RecoveryLogs = transactions.Select(t => new RecoveryLogDto
+        {
+            ItemDetails = t.Bunch != null ? t.Bunch.Name :
+                          (t.KeyRecord != null ? $"{t.KeyRecord.Lock!.LockCode} {t.KeyRecord.SequenceNumber}" : "Unknown"),
+            Date = t.ReturnDate!.Value
+        }).ToList();
+    }
+
+    private async Task ExportToCsv()
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("CODE,TYPE,DESCRIPTION,LAST HOLDER,LOCK NAME");
+        foreach (var i in MissingItems) sb.AppendLine($"{i.Code},{(i.IsBunch ? "Bunch" : "Key")},\"{i.Name}\",\"{i.LastHolder}\",\"{i.LockName}\"");
+        
+        var fileBytes = System.Text.Encoding.UTF8.GetBytes(sb.ToString());
+        using var streamRef = new DotNetStreamReference(new System.IO.MemoryStream(fileBytes));
+        await JS.InvokeVoidAsync("downloadFileFromStream", $"LostFound_{DateTime.Now:yyyyMMdd}.csv", streamRef);
+    }
+}

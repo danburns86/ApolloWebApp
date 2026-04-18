@@ -1,0 +1,181 @@
+﻿@page "/admin/reports/audit-logs"
+@rendermode InteractiveServer
+@using Apollo.Data
+@using Apollo.Models
+@using Microsoft.EntityFrameworkCore
+@using System.Text.Json
+@inject ApplicationDbContext Db
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Administrator")]
+
+<PageTitle>System Audit Logs</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h2>System Audit Logs</h2>
+        <p class="text-muted mb-0">Review the complete chain-of-custody and system change history.</p>
+    </div>
+    <a href="/admin" class="btn btn-outline-secondary shadow-sm">Back to Admin</a>
+</div>
+<hr />
+
+<div class="card shadow-sm border-dark mb-4">
+    <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+        <span class="fw-bold"><i class="bi bi-clock-history"></i> Recent Activity</span>
+        
+        <div class="input-group input-group-sm w-25">
+            <input type="text" class="form-control" placeholder="Search user or table..." @bind="SearchTerm" @bind:event="oninput" @onkeyup="FilterLogs" />
+            <button class="btn btn-secondary" @onclick="LoadLogs"><i class="bi bi-search"></i></button>
+        </div>
+    </div>
+    <div class="card-body p-0 table-responsive">
+        <table class="table table-striped table-hover mb-0 align-middle text-sm">
+            <thead class="table-light">
+                <tr>
+                    <th>Date & Time</th>
+                    <th>User</th>
+                    <th>Action</th>
+                    <th>Record Type</th>
+                    <th>Details</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (!FilteredLogs.Any())
+                {
+                    <tr>
+                        <td colspan="5" class="text-center py-4 text-muted">No audit logs found matching your criteria.</td>
+                    </tr>
+                }
+                else
+                {
+                    @foreach (var log in FilteredLogs)
+                    {
+                        <tr>
+                            <td class="text-nowrap">@log.Timestamp.ToString("dd/MM/yyyy HH:mm:ss")</td>
+                            <td class="fw-bold text-primary">@log.UserId</td>
+                            <td>
+                                @if (log.ActionType == "Create")
+                                {
+                                    <span class="badge bg-success">Created</span>
+                                }
+                                else if (log.ActionType == "Update")
+                                {
+
+                                    <span class="badge bg-warning text-dark">Updated</span>
+                                }
+                                else if (log.ActionType == "Delete")
+                                {
+
+                                    <span class="badge bg-danger">Deleted</span>
+                                }
+                                else
+                                {
+
+                                    <span class="badge bg-secondary">@log.ActionType</span>
+                                }
+                            </td>
+                            <td>@log.TableName <span class="text-muted">(ID: @log.PrimaryKey)</span></td>
+                            <td>
+                                <button class="btn btn-sm btn-outline-info" @onclick="() => ShowDetails(log)">
+                                    <i class="bi bi-eye"></i> View JSON
+                                </button>
+                            </td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@if (SelectedLog != null)
+{
+    <div class="modal show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-content border-info">
+                <div class="modal-header bg-info text-white">
+                    <h5 class="modal-title fw-bold">Log Details</h5>
+                    <button type="button" class="btn-close btn-close-white" @onclick="CloseDetails"></button>
+                </div>
+                <div class="modal-body font-monospace" style="font-size: 0.85rem;">
+                    @if (!string.IsNullOrEmpty(SelectedLog.OldValues))
+                    {
+                        <h6 class="fw-bold text-danger">Old Values:</h6>
+                        <pre class="bg-light p-2 border rounded">@FormatJson(SelectedLog.OldValues)</pre>
+                    }
+                    
+                    @if (!string.IsNullOrEmpty(SelectedLog.NewValues))
+                    {
+                        <h6 class="fw-bold text-success mt-3">New Values:</h6>
+                        <pre class="bg-light p-2 border rounded">@FormatJson(SelectedLog.NewValues)</pre>
+                    }
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CloseDetails">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<AuditLog> AllLogs = new();
+    private List<AuditLog> FilteredLogs = new();
+    private AuditLog? SelectedLog;
+    private string SearchTerm = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadLogs();
+    }
+
+    private async Task LoadLogs()
+    {
+        // Load the top 100 most recent logs so we don't crash the browser with years of data
+        AllLogs = await Db.AuditLogs
+            .OrderByDescending(a => a.Timestamp)
+            .Take(100)
+            .ToListAsync();
+            
+        FilteredLogs = AllLogs;
+    }
+
+    private void FilterLogs()
+    {
+        if (string.IsNullOrWhiteSpace(SearchTerm))
+        {
+            FilteredLogs = AllLogs;
+        }
+        else
+        {
+            FilteredLogs = AllLogs.Where(l =>
+                (l.UserId != null && l.UserId.Contains(SearchTerm, StringComparison.OrdinalIgnoreCase)) ||
+                (l.TableName != null && l.TableName.Contains(SearchTerm, StringComparison.OrdinalIgnoreCase)) ||
+                (l.ActionType != null && l.ActionType.Contains(SearchTerm, StringComparison.OrdinalIgnoreCase))
+            ).ToList();
+        }
+    }
+
+    private void ShowDetails(AuditLog log)
+    {
+        SelectedLog = log;
+    }
+
+    private void CloseDetails()
+    {
+        SelectedLog = null;
+    }
+
+    // Helper to make the JSON readable in the modal
+    private string FormatJson(string json)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            return JsonSerializer.Serialize(doc, new JsonSerializerOptions { WriteIndented = true });
+        }
+        catch
+        {
+            return json; // Fallback if it's not valid JSON for some reason
+        }
+    }
+}

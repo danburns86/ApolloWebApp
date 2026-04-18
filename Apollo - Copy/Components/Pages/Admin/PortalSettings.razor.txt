@@ -1,0 +1,161 @@
+﻿@page "/admin/settings/portal"
+@rendermode InteractiveServer
+@using Apollo.Models
+@using Apollo.Data
+@using Microsoft.EntityFrameworkCore
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject IJSRuntime JS
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Administrator")]
+
+<PageTitle>Portal Configuration</PageTitle>
+
+<div class="container-fluid px-4 max-w-5xl pb-5">
+    <div class="mb-4">
+        <h2 class="fw-bold">Portal Configuration</h2>
+        <p class="text-muted">Global branding, security, and system rules.</p>
+    </div>
+
+    @if (ShowSuccess)
+    {
+        <div class="alert alert-success shadow-sm mb-4">
+            <i class="bi bi-check-circle-fill me-2"></i> Settings saved successfully.
+        </div>
+    }
+
+    @if (Config != null)
+    {
+        <EditForm Model="Config" OnValidSubmit="SaveSettings" OnInvalidSubmit="HandleInvalidSubmit">
+            <DataAnnotationsValidator />
+            
+            @* This red box will now show you exactly why a save is failing *@
+            <div class="mb-4">
+                <ValidationSummary class="alert alert-danger shadow-sm" />
+            </div>
+
+            <div class="row g-4">
+                <div class="col-lg-6">
+                    <div class="card border-0 shadow-sm mb-4">
+                        <div class="card-header bg-white py-3 border-bottom">
+                            <h5 class="mb-0 fw-bold text-primary"><i class="bi bi-palette me-2"></i>Branding & Welcome</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="mb-3">
+                                <label class="form-label fw-bold small text-uppercase">Theatre Name</label>
+                                <InputText @bind-Value="Config.TheatreName" class="form-control" />
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label fw-bold small text-uppercase">Welcome Heading</label>
+                                <InputText @bind-Value="Config.WelcomeHeading" class="form-control" />
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label fw-bold small text-uppercase">Sub-Message</label>
+                                <InputTextArea @bind-Value="Config.WelcomeMessage" class="form-control" rows="2" />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card border-0 shadow-sm border-start border-warning border-4">
+                        <div class="card-header bg-white py-3 border-bottom">
+                            <h5 class="mb-0 fw-bold text-warning"><i class="bi bi-shield-lock me-2"></i>Public Snagging Security</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="mb-2">
+                                <label class="form-label fw-bold small text-uppercase">Stage Door Passcode</label>
+                                <div class="input-group">
+                                    <span class="input-group-text bg-light"><i class="bi bi-key"></i></span>
+                                    <InputText @bind-Value="Config.StageDoorPasscode" class="form-control font-monospace" placeholder="####" />
+                                </div>
+                                <div class="form-text small mt-2">Gates the <code>/snag</code> form for crew and staff.</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-lg-6">
+                    <div class="card border-0 shadow-sm border-start border-info border-4 mb-4">
+                        <div class="card-header bg-white py-3 border-bottom">
+                            <h5 class="mb-0 fw-bold text-info"><i class="bi bi-gear-wide-connected me-2"></i>System Rules</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="mb-3">
+                                <label class="form-label fw-bold small text-uppercase">Stale Checkout Threshold (Hours)</label>
+                                <InputNumber @bind-Value="Config.StaleCheckoutHours" class="form-control" />
+                                <div class="form-text small">Time before an unreturned key is flagged as 'Stale' (1-720).</div>
+                                <ValidationMessage For="() => Config.StaleCheckoutHours" class="text-danger small" />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card border-0 shadow-sm mb-4">
+                        <div class="card-header bg-white py-3 border-bottom">
+                            <h5 class="mb-0 fw-bold text-success"><i class="bi bi-toggle-on me-2"></i>Module Toggles</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="form-check form-switch mb-3">
+                                <InputCheckbox @bind-Value="Config.IsKeyManagementEnabled" class="form-check-input" id="toggleKey" />
+                                <label class="form-check-label fw-bold" for="toggleKey">Key Management</label>
+                            </div>
+                            <div class="form-check form-switch mb-3">
+                                <InputCheckbox @bind-Value="Config.IsReportsEnabled" class="form-check-input" id="toggleReports" />
+                                <label class="form-check-label fw-bold" for="toggleReports">Reports & Analytics</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mt-4 text-end">
+                <button type="submit" class="btn btn-primary btn-lg px-5 shadow">Save All Settings</button>
+            </div>
+        </EditForm>
+    }
+</div>
+
+@code {
+    private PortalConfiguration? Config;
+    private bool ShowSuccess = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        using var context = await DbFactory.CreateDbContextAsync();
+        Config = await context.PortalConfigurations.OrderBy(c => c.Id).FirstOrDefaultAsync();
+        
+        if (Config == null)
+        {
+            Config = new PortalConfiguration
+            {
+                TheatreName = "Apollo",
+                StageDoorPasscode = "1234",
+                StaleCheckoutHours = 48
+            };
+            context.PortalConfigurations.Add(Config);
+            await context.SaveChangesAsync();
+        }
+    }
+
+    private async Task SaveSettings()
+    {
+        if (Config == null) return;
+
+        try
+        {
+            using var context = await DbFactory.CreateDbContextAsync();
+            context.PortalConfigurations.Update(Config);
+            await context.SaveChangesAsync();
+            ShowSuccess = true;
+            StateHasChanged();
+            
+            _ = Task.Delay(3000).ContinueWith(_ => InvokeAsync(() => { ShowSuccess = false; StateHasChanged(); }));
+        }
+        catch (Exception ex)
+        {
+            await JS.InvokeVoidAsync("alert", "Database Error: " + ex.Message);
+        }
+    }
+
+    private async Task HandleInvalidSubmit()
+    {
+        // This alerts you if you click Save but validation fails
+        await JS.InvokeVoidAsync("alert", "Cannot save. Please correct the validation errors listed at the top.");
+    }
+}

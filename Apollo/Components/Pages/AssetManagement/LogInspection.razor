@@ -1,0 +1,224 @@
+﻿@page "/admin/assets/inspect/{AssetId:int}"
+@using Apollo.Models
+@using Apollo.Data
+@using Microsoft.EntityFrameworkCore
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Policy = SystemPermissions.ManageAssets)]
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject NavigationManager Nav
+
+<PageTitle>Inspection - @(asset?.AssetTag ?? "...")</PageTitle>
+
+<div class="container-fluid px-4 py-4 max-w-5xl">
+    @if (isLoading)
+    {
+        <div class="text-center py-5"><div class="spinner-border text-primary"></div></div>
+    }
+    else if (asset != null)
+    {
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2 class="fw-bold mb-0">Record @record.Type Inspection</h2>
+            <div class="btn-group shadow-sm">
+                <button type="button" class="btn btn-@(record.Type == InspectionType.PAT ? "primary" : "outline-primary")" @onclick='() => SetType(InspectionType.PAT)'>PAT</button>
+                <button type="button" class="btn btn-@(record.Type == InspectionType.LOLER ? "primary" : "outline-primary")" @onclick='() => SetType(InspectionType.LOLER)'>LOLER</button>
+            </div>
+        </div>
+
+        <EditForm Model="record" OnValidSubmit="SaveRecord">
+            <div class="row g-4">
+                <div class="col-md-4">
+                    <div class="card shadow-sm border-0 border-top border-primary border-4 p-3 text-center mb-3">
+                        <div class="h3 fw-bold text-primary">@asset.AssetTag</div>
+                        <div class="fw-bold">@asset.Name</div>
+                        @if (!string.IsNullOrEmpty(asset.SWL))
+                        {
+                            <div class="badge bg-info text-dark mt-2">SWL: @asset.SWL</div>
+                        }
+                    </div>
+
+                    @if (record.Type == InspectionType.PAT)
+                    {
+                        <div class="alert alert-info shadow-sm small">
+                            <h6 class="fw-bold"><i class="bi bi-info-circle me-2"></i>IET 5th Ed. Reference</h6>
+                            <ul class="mb-0 ps-3">
+                                <li><strong>Earth Bond:</strong> &lt; 0.1&Omega; + Lead R</li>
+                                <li><strong>Insulation:</strong> &gt; 1.0M&Omega;</li>
+                                <li><strong>Leakage:</strong> &lt; 3.5mA (CI) / 0.25mA (CII)</li>
+                            </ul>
+                        </div>
+                    }
+                </div>
+
+                <div class="col-md-8">
+                    <div class="card shadow-sm border-0 mb-4">
+                        <div class="card-body">
+                            @if (record.Type == InspectionType.PAT)
+                            {
+                                <div class="bg-light p-3 rounded border mb-4">
+                                    <h6 class="fw-bold text-uppercase small text-muted mb-3">Electrical Metrics</h6>
+                                    
+                                    <div class="form-check form-switch mb-3 p-3 bg-white border rounded">
+                                        <InputCheckbox @bind-Value="visualPass" class="form-check-input" id="visPass" />
+                                        <label class="form-check-label fw-bold text-primary" for="visPass">Full Visual Inspection Passed?</label>
+                                    </div>
+
+                                    <div class="row g-3">
+                                        <div class="col-md-6">
+                                            <label class="small fw-bold">Earth Bond (&Omega;)</label>
+                                            <div class="input-group input-group-sm">
+                                                <InputNumber @bind-Value="record.EarthBond" class="form-control" />
+                                                <div class="input-group-text"><InputCheckbox @bind-Value="record.EarthBondPassed" />&nbsp;Pass</div>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label class="small fw-bold">Insulation (M&Omega;)</label>
+                                            <div class="input-group input-group-sm">
+                                                <InputNumber @bind-Value="record.Insulation" class="form-control" />
+                                                <div class="input-group-text"><InputCheckbox @bind-Value="record.InsulationPassed" />&nbsp;Pass</div>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label class="small fw-bold">Leakage (mA)</label>
+                                            <div class="input-group input-group-sm">
+                                                <InputNumber @bind-Value="record.Leakage" class="form-control" />
+                                                <div class="input-group-text"><InputCheckbox @bind-Value="record.LeakagePassed" />&nbsp;Pass</div>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label class="small fw-bold">Polarity (Leads)</label>
+                                            <div class="input-group input-group-sm">
+                                                <InputSelect @bind-Value="record.Polarity" class="form-select">
+                                                    <option value="N/A">N/A</option>
+                                                    <option value="Pass">Pass</option>
+                                                    <option value="Fail">Fail</option>
+                                                </InputSelect>
+                                                <div class="input-group-text"><InputCheckbox @bind-Value="record.PolarityPassed" />&nbsp;OK</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            }
+
+                            @if (record.Type == InspectionType.LOLER)
+                            {
+                                <div class="bg-info bg-opacity-10 p-3 rounded border border-info mb-4">
+                                    <h6 class="fw-bold text-uppercase small text-info mb-3">LOLER Thorough Examination</h6>
+                                    <label class="small fw-bold">Examined Components</label>
+                                    <InputText @bind-Value="record.ExaminedComponents" class="form-control mb-3" placeholder="e.g. Chain, Hook, Brake" />
+                                    <div class="form-check form-switch">
+                                        <InputCheckbox @bind-Value="record.WeightTestPerformed" class="form-check-input" id="wt" />
+                                        <label class="form-check-label fw-bold" for="wt">Full Weight/Load Test Performed?</label>
+                                    </div>
+                                </div>
+                            }
+
+                            <div class="row g-3 border-top pt-4">
+                                <div class="col-md-6 border-end">
+                                    <label class="form-label small fw-bold">Next Retest (Months)</label>
+                                    <input type="number" class="form-control form-control-lg w-50" @bind="calculatedInterval" @bind:after="RecalculateDate" />
+                                    <div class="small text-info mt-2">Next Due: @record.NextDueDate.ToString("MMM yyyy")</div>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label small fw-bold">Overall Result</label>
+                                    <InputSelect @bind-Value="record.Status" class="form-select form-select-lg">
+                                        @foreach (var res in Enum.GetValues<InspectionResult>())
+                                        {
+                                            <option value="@res">@res</option>
+                                        }
+                                    </InputSelect>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card shadow-sm border-0 mb-4">
+                        <div class="card-body">
+                            <label class="form-label small fw-bold text-uppercase">Comments / Advisories</label>
+                            <InputTextArea @bind-Value="record.Comments" class="form-control" rows="3" placeholder="Note minor repairs or reasons for failure..." />
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn btn-success w-100 fw-bold py-3 shadow mb-5">Commit Inspection Result</button>
+                </div>
+            </div>
+        </EditForm>
+    }
+</div>
+
+@code {
+    [Parameter] public int AssetId { get; set; }
+    private Asset? asset;
+    private InspectionRecord record = new()
+    {
+        InspectedBy = "Admin",
+        EarthBondPassed = true,
+        InsulationPassed = true,
+        LeakagePassed = true,
+        PolarityPassed = true
+    };
+    private bool visualPass = true;
+    private int calculatedInterval = 12;
+    private bool isLoading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        using var context = await DbFactory.CreateDbContextAsync();
+        asset = await context.Assets.Include(a => a.Room).FirstOrDefaultAsync(a => a.Id == AssetId);
+        if (asset != null)
+        {
+            record.AssetId = asset.Id;
+            record.Type = asset.RequiresLOLER ? InspectionType.LOLER : (asset.VisualOnly ? InspectionType.Visual : InspectionType.PAT);
+            calculatedInterval = CalculateSuggestedInterval();
+            RecalculateDate();
+        }
+        isLoading = false;
+    }
+
+    private int CalculateSuggestedInterval()
+    {
+        if (asset?.RetestIntervalOverride != null) return asset.RetestIntervalOverride.Value;
+        if (record.Type == InspectionType.LOLER) return 6;
+        
+        var risk = asset?.RiskOverride ?? asset?.Room?.DefaultRisk ?? EnvironmentRisk.Medium;
+        var cls = asset?.ApplianceClass ?? EquipmentClass.ClassI;
+
+        return (risk, cls) switch
+        {
+            (EnvironmentRisk.High, _) => 6,
+            (EnvironmentRisk.Medium, EquipmentClass.ClassI) => 12,
+            (EnvironmentRisk.Medium, EquipmentClass.ClassII) => 24,
+            (EnvironmentRisk.Low, _) => 48,
+            _ => 12
+        };
+    }
+
+    private void SetType(InspectionType type) { record.Type = type; calculatedInterval = CalculateSuggestedInterval(); RecalculateDate(); }
+    private void RecalculateDate() => record.NextDueDate = record.InspectionDate.AddMonths(calculatedInterval);
+
+    private async Task SaveRecord()
+    {
+        using var context = await DbFactory.CreateDbContextAsync();
+
+        if (!visualPass || !record.EarthBondPassed || !record.InsulationPassed || !record.LeakagePassed || !record.PolarityPassed)
+        {
+            record.Status = InspectionResult.Fail;
+        }
+
+        context.InspectionRecords.Add(record);
+        var dbAsset = await context.Assets.FindAsync(AssetId);
+        if (dbAsset != null)
+        {
+            if (record.Type == InspectionType.LOLER)
+            {
+                dbAsset.NextLOLERDue = record.NextDueDate;
+                if (record.WeightTestPerformed) dbAsset.LastWeightTestDate = record.InspectionDate;
+            }
+            else
+            {
+                dbAsset.NextPATDue = record.NextDueDate;
+            }
+            if (record.Status == InspectionResult.Fail) dbAsset.Status = AssetStatus.Quarantined;
+        }
+        await context.SaveChangesAsync();
+        Nav.NavigateTo("/admin/assets");
+    }
+}

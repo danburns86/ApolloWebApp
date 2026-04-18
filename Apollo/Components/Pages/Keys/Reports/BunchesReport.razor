@@ -1,0 +1,98 @@
+﻿@page "/admin/reports/bunches-overview"
+@using Apollo.Models
+@using Apollo.Data
+@using Microsoft.EntityFrameworkCore
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+
+<PageTitle>Bunches Overview Report</PageTitle>
+
+<div class="d-print-none mb-4 d-flex justify-content-between align-items-center">
+    <div>
+        <h2>Master Bunches Directory</h2>
+        <p class="text-muted mb-0">Complete list of all configured key bunches and their assigned keys.</p>
+    </div>
+    <button class="btn btn-outline-dark shadow-sm" onclick="window.print()">
+        <i class="bi bi-printer me-2"></i> Print
+    </button>
+</div>
+
+<div class="card shadow-sm border-0">
+    <div class="card-body p-0 table-responsive">
+        <table class="table table-bordered align-middle mb-0">
+            <thead class="table-light small text-uppercase">
+                <tr>
+                    <th class="ps-3" style="width: 25%;">Bunch Name / Dept</th>
+                    <th style="width: 15%; text-align: center;">Status</th>
+                    <th style="width: 45%;">Keys Attached</th>
+                    <th style="width: 15%;">Issue Details</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var bunch in Bunches)
+                {
+                    <tr>
+                        <td class="ps-3">
+                            <div class="fw-bold fs-6">@bunch.Name</div>
+                            <div class="small text-muted"><i class="bi bi-building"></i> @(bunch.Department?.Name ?? "General")</div>
+                        </td>
+                        <td class="text-center">
+                            @if (!string.IsNullOrEmpty(bunch.IssuedToName))
+                            {
+                                <span class="badge bg-primary">Issued</span>
+                            }
+                            else if (bunch.IsLost)
+                            {
+                                <span class="badge bg-danger">Lost</span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-success">Unissued (In Stock)</span>
+                            }
+                        </td>
+                        <td class="small">
+                            @if (bunch.KeyAssignments != null && bunch.KeyAssignments.Any(ka => ka.RemovedDate == null))
+                            {
+                                <ul class="mb-0 ps-3">
+                                    @foreach (var ka in bunch.KeyAssignments.Where(a => a.RemovedDate == null))
+                                    {
+                                        <li><strong>@ka.KeyRecord?.Lock?.LockCode @ka.KeyRecord?.SequenceNumber</strong> - <span class="text-muted">@ka.KeyRecord?.Lock?.Name</span></li>
+                                    }
+                                </ul>
+                            }
+                            else
+                            {
+                                <span class="fst-italic text-muted">No keys attached</span>
+                            }
+                        </td>
+                        <td class="small">
+                            @if (!string.IsNullOrEmpty(bunch.IssuedToName))
+                            {
+                                <div class="fw-bold text-primary">@bunch.IssuedToName</div>
+                                <div class="text-muted">@bunch.IssueDate?.ToString("dd/MM/yy HH:mm")</div>
+                            }
+                            else
+                            {
+                                <span class="text-muted">-</span>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@code {
+    private List<Bunch> Bunches = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        using var context = await DbFactory.CreateDbContextAsync();
+        Bunches = await context.Bunches
+            .Include(b => b.Department)
+            .Include(b => b.KeyAssignments!).ThenInclude(ka => ka.KeyRecord).ThenInclude(k => k!.Lock)
+            .Where(b => b.IsActive)
+            .OrderBy(b => b.Name)
+            .ToListAsync();
+    }
+}

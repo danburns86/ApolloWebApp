@@ -1,0 +1,107 @@
+﻿@page "/setup/departments"
+@using Apollo.Models
+@using Apollo.Data
+@using Microsoft.EntityFrameworkCore
+@inject ApplicationDbContext Db
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Administrator")]
+
+<PageTitle>Departments & Managers</PageTitle>
+
+<h2>Manage Departments</h2>
+<p class="text-muted">Define departments or manager roles responsible for specific keys.</p>
+<hr />
+
+<div class="row">
+    <div class="col-md-4">
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-success text-white">Add New Department</div>
+            <div class="card-body">
+                <EditForm Model="NewDepartment" OnValidSubmit="AddDepartment" FormName="AddDepartmentForm">
+                    <DataAnnotationsValidator />
+                    
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Department / Role Name <span class="text-danger">*</span></label>
+                        <InputText @bind-Value="NewDepartment.Name" class="form-control" placeholder="e.g., Technical Manager" />
+                        <ValidationMessage For="() => NewDepartment.Name" class="text-danger" />
+                    </div>
+                    
+                    <button type="submit" class="btn btn-success w-100">Save Department</button>
+                </EditForm>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-8">
+        <div class="card shadow-sm">
+            <div class="card-body p-0">
+                <table class="table table-striped table-hover mb-0">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>Department Name</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (!DepartmentsList.Any())
+                        {
+                            <tr>
+                                <td colspan="2" class="text-center py-4 text-muted">No departments found.</td>
+                            </tr>
+                        }
+                        else
+                        {
+                            @foreach (var dept in DepartmentsList)
+                            {
+                                <tr>
+                                    <td class="fw-bold">@dept.Name</td>
+                                    <td>
+                                        <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => ArchiveDepartment(dept.Id)">
+                                            <i class="bi bi-archive"></i> Archive
+                                        </button>
+                                    </td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    public Department NewDepartment { get; set; } = new();
+    private List<Department> DepartmentsList = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        DepartmentsList = await Db.Departments
+            .Where(s => s.IsActive == true)
+            .OrderBy(s => s.Name)
+            .ToListAsync();
+    }
+
+    private async Task ArchiveDepartment(int id)
+    {
+        var deptToArchive = await Db.Departments.FindAsync(id);
+        if (deptToArchive != null)
+        {
+            deptToArchive.IsActive = false;
+            await Db.SaveChangesAsync();
+            await LoadData();
+        }
+    }
+
+    private async Task AddDepartment()
+    {
+        Db.Departments.Add(NewDepartment);
+        await Db.SaveChangesAsync();
+        NewDepartment = new Department();
+        await LoadData();
+    }
+}

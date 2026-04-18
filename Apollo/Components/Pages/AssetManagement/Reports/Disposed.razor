@@ -1,0 +1,75 @@
+﻿@page "/admin/assets/reports/disposed"
+@using Apollo.Models
+@using Apollo.Data
+@using Microsoft.EntityFrameworkCore
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Policy = SystemPermissions.ViewAssets)]
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+
+<PageTitle>Disposed Assets Report</PageTitle>
+
+<div class="container-fluid px-4 py-4 max-w-7xl">
+    <div class="d-flex justify-content-between align-items-center mb-4 d-print-none">
+        <div>
+            <h2 class="fw-bold mb-0">Disposed & Decommissioned Assets</h2>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb mb-0 small">
+                    <li class="breadcrumb-item"><a href="/admin/assets/reports">Reports Dashboard</a></li>
+                    <li class="breadcrumb-item active">Disposed</li>
+                </ol>
+            </nav>
+        </div>
+        <button class="btn btn-outline-secondary" onclick="window.print()"><i class="bi bi-printer me-2"></i>Print History</button>
+    </div>
+
+    @if (isLoading)
+    {
+        <div class="text-center py-5"><div class="spinner-border text-primary"></div></div>
+    }
+    else
+    {
+        <div class="card shadow-sm border-0 border-top border-dark border-4">
+            <div class="card-body p-0">
+                <table class="table table-hover align-middle mb-0 small">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Original Tag</th>
+                            <th>Equipment Name</th>
+                            <th>Manufacturer / Serial</th>
+                            <th>Final Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (!reportData.Any())
+                        {
+                            <tr><td colspan="4" class="text-center py-4 text-muted">No disposed assets on record.</td></tr>
+                        }
+                        @foreach (var asset in reportData)
+                        {
+                            <tr class="text-muted">
+                                <td class="text-decoration-line-through">@asset.AssetTag</td>
+                                <td>@asset.Name</td>
+                                <td>@asset.Manufacturer / @asset.SerialNumber</td>
+                                <td><span class="badge bg-dark">Decommissioned</span></td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private bool isLoading = true;
+    private List<Asset> reportData = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        using var context = await DbFactory.CreateDbContextAsync();
+        reportData = await context.Assets
+            .Where(a => a.Status == AssetStatus.Decommissioned)
+            .OrderByDescending(a => a.AssetTag)
+            .ToListAsync();
+        isLoading = false;
+    }
+}

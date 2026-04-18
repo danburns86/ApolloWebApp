@@ -1,0 +1,215 @@
+﻿@page "/admin/users/overrides"
+@rendermode InteractiveServer
+@using Apollo.Models
+@using Apollo.Data
+@using Microsoft.AspNetCore.Identity
+@using Microsoft.EntityFrameworkCore
+@using System.Security.Claims
+@inject ApplicationDbContext Db
+@inject UserManager<ApplicationUser> UserManager
+@inject RoleManager<IdentityRole> RoleManager
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Administrator")]
+
+<PageTitle>User Permission Overrides</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h2>User Permission Overrides</h2>
+        <p class="text-muted mb-0">Apply explicit "Force Allow" bonuses or "Force Deny" penalties to specific individuals.</p>
+    </div>
+    <a href="/admin/users" class="btn btn-outline-secondary shadow-sm">Back to Users</a>
+</div>
+<hr />
+
+<div class="row mb-4">
+    <div class="col-md-6 col-xl-4">
+        <div class="card shadow-sm border-dark">
+            <div class="card-header bg-dark text-white fw-bold">1. Select a User to Override</div>
+            <div class="card-body">
+                <select class="form-select border-primary" @bind="SelectedUserId" @bind:after="LoadUserData">
+                    <option value="">-- Choose a User --</option>
+                    @foreach (var user in UsersList)
+                    {
+                        <option value="@user.Id">@user.Email</option>
+                    }
+                </select>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-6 col-xl-8 text-end align-self-center">
+        @if (!string.IsNullOrEmpty(SelectedUserId))
+        {
+            <button class="btn btn-warning btn-lg shadow-sm text-dark fw-bold" @onclick="SaveOverrides">
+                <i class="bi bi-floppy"></i> Save Overrides for User
+            </button>
+            @if (ShowSuccessMessage)
+            {
+                <span class="text-success fw-bold ms-3"><i class="bi bi-check-circle"></i> Saved successfully!</span>
+            }
+        }
+    </div>
+</div>
+
+@if (!string.IsNullOrEmpty(SelectedUserId))
+{
+    <div class="row">
+        @foreach (var moduleGroup in AllPermissions.GroupBy(p => p.Module))
+        {
+            <div class="col-xl-4 col-lg-6 mb-4">
+                <div class="card shadow-sm h-100 border-secondary">
+                    <div class="card-header fw-bold bg-light text-dark border-bottom">
+                        @moduleGroup.Key
+                    </div>
+                    <div class="card-body p-0">
+                        <ul class="list-group list-group-flush">
+                            @foreach (var perm in moduleGroup)
+                            {
+                                var isInherited = InheritedRoleClaims.Contains(perm.ClaimValue) || InheritedRoleClaims.Contains("Admin.FullAccess");
+                                var currentValue = Overrides.ContainsKey(perm.ClaimValue) ? Overrides[perm.ClaimValue] : "Inherit";
+
+                                <li class="list-group-item p-3">
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <div class="fw-bold">@perm.Name</div>
+                                        @if (isInherited)
+                                        {
+                                            <span class="badge bg-success opacity-75" title="Granted by their current role"><i class="bi bi-shield-check"></i> Role Inherited</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-secondary opacity-50"><i class="bi bi-shield-x"></i> No Base Access</span>
+                                        }
+                                    </div>
+                                    
+                                    <select class="form-select form-select-sm @GetDropdownColor(currentValue)"
+                                            value="@currentValue"
+                                            @onchange="@(e => UpdateOverride(perm.ClaimValue, e.Value?.ToString() ?? "Inherit"))">
+                                        <option value="Inherit">Inherit Base Access (Default)</option>
+                                        <option value="Allow">Force Allow (Bonus Access)</option>
+                                        <option value="Deny">Force Deny (Revoke Access)</option>
+                                    </select>
+                                </li>
+                            }
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    private List<ApplicationUser> UsersList = new();
+    private List<SystemPermission> AllPermissions = new();
+    
+    private string SelectedUserId = string.Empty;
+    
+    // Tracks what they get from their base Roles so we can show the UI badges
+    private HashSet<string> InheritedRoleClaims = new();
+    
+    // Tracks their personal overrides. Key = ClaimValue (e.g., "Keys.Create"), Value = "Allow" or "Deny"
+    private Dictionary<string, string> Overrides = new();
+    
+    private bool ShowSuccessMessage = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        UsersList = await UserManager.Users.OrderBy(u => u.Email).ToListAsync();
+        AllPermissions = await Db.SystemPermissions.OrderBy(p => p.Module).ThenBy(p => p.Name).ToListAsync();
+    }
+
+    private async Task LoadUserData()
+    {
+        ShowSuccessMessage = false;
+        InheritedRoleClaims.Clear();
+        Overrides.Clear();
+
+        if (string.IsNullOrEmpty(SelectedUserId)) return;
+
+        var user = await UserManager.FindByIdAsync(SelectedUserId);
+        if (user != null)
+        {
+            // 1. Calculate Base Inheritance
+            var roles = await UserManager.GetRolesAsync(user);
+            foreach (var roleName in roles)
+            {
+                var role = await RoleManager.FindByNameAsync(roleName);
+                if (role != null)
+                {
+                    var roleClaims = await RoleManager.GetClaimsAsync(role);
+                    foreach (var claim in roleClaims.Where(c => c.Type == "Permission"))
+                    {
+                        InheritedRoleClaims.Add(claim.Value);
+                    }
+                }
+            }
+
+            // 2. Load Personal Overrides
+            var userClaims = await UserManager.GetClaimsAsync(user);
+            foreach (var claim in userClaims)
+            {
+                if (claim.Type == "Permission")
+                {
+                    Overrides[claim.Value] = "Allow";
+                }
+                else if (claim.Type == "DenyPermission")
+                {
+                    Overrides[claim.Value] = "Deny";
+                }
+            }
+        }
+    }
+
+    private void UpdateOverride(string claimValue, string overrideType)
+    {
+        ShowSuccessMessage = false;
+        
+        if (overrideType == "Inherit")
+        {
+            Overrides.Remove(claimValue); // Clean it out so we just fall back to standard role rules
+        }
+        else
+        {
+            Overrides[claimValue] = overrideType; // "Allow" or "Deny"
+        }
+    }
+
+    private async Task SaveOverrides()
+    {
+        if (string.IsNullOrEmpty(SelectedUserId)) return;
+
+        var user = await UserManager.FindByIdAsync(SelectedUserId);
+        if (user != null)
+        {
+            // 1. Wipe out all existing personal overrides so we have a clean slate
+            var existingClaims = await UserManager.GetClaimsAsync(user);
+            var personalSecurityClaims = existingClaims.Where(c => c.Type == "Permission" || c.Type == "DenyPermission").ToList();
+            
+            foreach (var claim in personalSecurityClaims)
+            {
+                await UserManager.RemoveClaimAsync(user, claim);
+            }
+
+            // 2. Write the new overrides back to the user's account
+            foreach (var kvp in Overrides)
+            {
+                var claimType = kvp.Value == "Deny" ? "DenyPermission" : "Permission";
+                await UserManager.AddClaimAsync(user, new Claim(claimType, kvp.Key));
+            }
+
+            ShowSuccessMessage = true;
+            _ = Task.Delay(3000).ContinueWith(_ => InvokeAsync(() => { ShowSuccessMessage = false; StateHasChanged(); }));
+        }
+    }
+
+    // --- UI HELPER ---
+    private string GetDropdownColor(string val)
+    {
+        return val switch
+        {
+            "Allow" => "bg-success text-white border-success",
+            "Deny" => "bg-danger text-white border-danger",
+            _ => "bg-light text-dark"
+        };
+    }
+}
