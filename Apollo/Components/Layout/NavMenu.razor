@@ -20,8 +20,7 @@
     var hsChevron = HSExpanded ? "bi-chevron-down" : "bi-chevron-right";
 }
 
-<div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
-    
+<div class="nav-scrollable" onclick="var el = document.querySelector('.navbar-toggler'); if(el) el.click();">
     @* --- BRANDING SECTION --- *@
     <div class="text-center py-3 border-bottom border-secondary mb-2" style="background-color: rgba(0,0,0,0.1);">
         <img src="@logoUrl" alt="Logo" style="max-height: 60px; max-width: 80%; object-fit: contain;"

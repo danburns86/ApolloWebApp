@@ -852,6 +852,66 @@ namespace Apollo.Models
         public string ExitRoutesStatus { get; set; } = "Clear";
     }
 
+    // Update/Add these to the H&S Section of TheatreModels.cs
+
+    public class FireRiskAssessment : RiskAssessment
+    {
+        public string ConstructionDetails { get; set; } = string.Empty;
+        public int NumberOfFloors { get; set; }
+        public string UseOfPremises { get; set; } = "Theatre / Entertainment Venue";
+        public int MaxOccupancy { get; set; } // ADDED THIS
+
+        // Checklist Sections
+        public bool Q_Elec_FixedInspected { get; set; }
+        public bool Q_Elec_ApplianceTested { get; set; }
+        public bool Q_Elec_NoAdapters { get; set; }
+        public bool Q_Smoke_MeasuresInPlace { get; set; }
+        public bool Q_Smoke_SignageProvided { get; set; }
+        public bool Q_Arson_Secure { get; set; }
+        public bool Q_Arson_WasteSafe { get; set; }
+        public bool Q_Heat_Maintenance { get; set; }
+        public bool Q_Cook_Safe { get; set; }
+        public bool Q_Housekeeping_Clear { get; set; }
+        public bool Q_Contractors_Qualified { get; set; }
+        public bool Q_Escape_Obstructions { get; set; }
+        public bool Q_Escape_ExitsOpenable { get; set; }
+        public bool Q_Warning_AlarmSuitable { get; set; }
+        public bool Q_Warning_DetectorsAdequate { get; set; }
+        public bool Q_Manage_Training { get; set; }
+
+        public string Narrative_HazardsFound { get; set; } = string.Empty;
+        public string Narrative_PeopleAtRisk { get; set; } = string.Empty;
+        public string Narrative_EvaluationNotes { get; set; } = string.Empty;
+
+        public List<FireActionPlanItem> ActionPlan { get; set; } = new();
+        public List<RoomFireSafetyAssignment> RoomAssignments { get; set; } = new();
+    }
+
+    public class FireActionPlanItem
+    {
+        [Key]
+        public int Id { get; set; }
+        public int FireRiskAssessmentId { get; set; }
+        public string ItemName { get; set; } = string.Empty; // e.g., "Signage"
+        public string Deficiency { get; set; } = string.Empty;
+        public string ProposedAction { get; set; } = string.Empty;
+        public string Timescale { get; set; } = string.Empty;
+        public string PersonResponsible { get; set; } = string.Empty;
+        public bool IsCompleted { get; set; }
+    }
+
+    public class RoomFireSafetyAssignment
+    {
+        [Key]
+        public int Id { get; set; }
+        public int FireRiskAssessmentId { get; set; }
+        public int RoomId { get; set; }
+        [ForeignKey("RoomId")]
+        public Room? Room { get; set; }
+        public bool IsCoveredByAreaAssessment { get; set; } = true; // "Inherit" vs "Exception"
+        public string? ExceptionNote { get; set; }
+    }
+
     #endregion
 
 }

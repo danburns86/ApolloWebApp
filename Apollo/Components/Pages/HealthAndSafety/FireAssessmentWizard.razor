@@ -1,0 +1,147 @@
+﻿@page "/admin/hs/fire-risk-assessment/new/{areaId:int}"
+@page "/admin/hs/fire-risk-assessment/edit/{raId:int}"
+@using Apollo.Models
+@using Apollo.Data
+@using Microsoft.EntityFrameworkCore
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject NavigationManager Nav
+
+<div class="container py-4 max-w-6xl">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="fw-bold"><i class="bi bi-fire text-danger me-2"></i>Fire Safety Audit</h2>
+            <p class="text-muted">Assessing Area: <strong>@targetArea?.Name</strong></p>
+        </div>
+        <button class="btn btn-primary fw-bold px-4 shadow" @onclick="SaveFSRA">Save Audit</button>
+    </div>
+
+    @* --- STEP 1: PREMISES --- *@
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-header bg-dark text-white fw-bold">Step 1: Premises Info</div>
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-6"><label class="small fw-bold">Construction</label><input type="text" class="form-control" @bind="fsra.ConstructionDetails" /></div>
+                <div class="col-md-3"><label class="small fw-bold">Floors</label><input type="number" class="form-control" @bind="fsra.NumberOfFloors" /></div>
+                <div class="col-md-3"><label class="small fw-bold">Max Occupancy</label><input type="number" class="form-control" @bind="fsra.MaxOccupancy" /></div>
+            </div>
+        </div>
+    </div>
+
+    @* --- STEP 2: HAZARDS (GOV CHECKLIST) --- *@
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-header bg-danger text-white fw-bold">Step 2: Identify Fire Hazards</div>
+        <div class="card-body p-0">
+            <table class="table align-middle mb-0">
+                <thead class="bg-light small fw-bold">
+                    <tr><th class="ps-4">Checklist Point</th><th style="width: 120px;" class="text-center">Answer</th><th>Requirement</th></tr>
+                </thead>
+                <tbody>
+                    <tr class="table-secondary"><td colspan="3" class="ps-4 fw-bold small text-uppercase">Electrical & Heating</td></tr>
+                    @renderRow("Fixed electrical installations inspected (5 yr)?", () => fsra.Q_Elec_FixedInspected, (v) => fsra.Q_Elec_FixedInspected = v)
+                    @renderRow("Portable heaters subject to periodic inspection?", () => fsra.Q_Heat_Maintenance, (v) => fsra.Q_Heat_Maintenance = v)
+                    
+                    <tr class="table-secondary"><td colspan="3" class="ps-4 fw-bold small text-uppercase">Management & Arson</td></tr>
+                    @renderRow("Standard of housekeeping adequate (no waste)?", () => fsra.Q_Housekeeping_Clear, (v) => fsra.Q_Housekeeping_Clear = v)
+                    @renderRow("Premises adequately secured against arson?", () => fsra.Q_Arson_Secure, (v) => fsra.Q_Arson_Secure = v)
+                    
+                    <tr class="table-secondary"><td colspan="3" class="ps-4 fw-bold small text-uppercase">Escape & Warning</td></tr>
+                    @renderRow("Escape routes kept clear of obstructions?", () => fsra.Q_Escape_Obstructions, (v) => fsra.Q_Escape_Obstructions = v)
+                    @renderRow("Fire alarm system extent adequate?", () => fsra.Q_Warning_AlarmSuitable, (v) => fsra.Q_Warning_AlarmSuitable = v)
+                    @renderRow("Emergency lighting standard reasonable?", () => fsra.Q_Warning_DetectorsAdequate, (v) => fsra.Q_Warning_DetectorsAdequate = v)
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    @* --- STEP 3: ACTION PLAN --- *@
+    <div class="card border-0 shadow-sm mb-4 border-start border-4 border-warning">
+        <div class="card-header bg-white fw-bold text-warning">Step 3: Action Plan (Rectification)</div>
+        <div class="card-body p-0">
+            <table class="table table-sm mb-0">
+                <thead class="small fw-bold"><tr><th class="ps-3">Deficiency</th><th>Proposed Action</th><th>Timescale</th><th>Responsible</th></tr></thead>
+                <tbody>
+                    @foreach (var item in fsra.ActionPlan)
+                    {
+                        <tr>
+                            <td class="ps-3">@item.ItemName</td>
+                            <td><input type="text" class="form-control form-control-sm" @bind="item.ProposedAction" /></td>
+                            <td><input type="text" class="form-control form-control-sm" @bind="item.Timescale" /></td>
+                            <td><input type="text" class="form-control form-control-sm" @bind="item.PersonResponsible" /></td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    @* --- STEP 4: ROOM ASSIGNMENTS --- *@
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-header bg-info text-white fw-bold">Step 4: Room Coverage (Inheritance)</div>
+        <div class="card-body p-0">
+            <table class="table mb-0">
+                <thead class="small fw-bold"><tr><th class="ps-4">Room</th><th class="text-center">Included?</th><th>Exception Note</th></tr></thead>
+                <tbody>
+                    @foreach (var ass in fsra.RoomAssignments)
+                    {
+                        <tr>
+                            <td class="ps-4">@ass.Room?.Name</td>
+                            <td class="text-center"><input type="checkbox" @bind="ass.IsCoveredByAreaAssessment" /></td>
+                            <td><input type="text" class="form-control form-control-sm" @bind="ass.ExceptionNote" disabled="@ass.IsCoveredByAreaAssessment" /></td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public int areaId { get; set; }
+    [Parameter] public int raId { get; set; }
+    private Area? targetArea;
+    private FireRiskAssessment fsra = new() { Type = RiskAssessmentType.Fire };
+
+    protected override async Task OnInitializedAsync()
+    {
+        using var context = await DbFactory.CreateDbContextAsync();
+        if (raId != 0)
+        {
+            fsra = await context.FireRiskAssessments.Include(f => f.ActionPlan).Include(f => f.RoomAssignments).ThenInclude(a => a.Room).FirstAsync(f => f.Id == raId);
+            targetArea = await context.Areas.FindAsync(fsra.AreaId);
+        }
+        else
+        {
+            targetArea = await context.Areas.FindAsync(areaId);
+            var rooms = await context.Rooms.Where(r => r.AreaId == areaId).ToListAsync();
+            fsra.AreaId = areaId;
+            fsra.Title = $"Fire Audit: {targetArea?.Name}";
+            foreach (var r in rooms) fsra.RoomAssignments.Add(new RoomFireSafetyAssignment { RoomId = r.Id, Room = r, IsCoveredByAreaAssessment = true });
+        }
+    }
+
+    RenderFragment renderRow(string label, Func<bool> getter, Action<bool> setter) => __builder =>
+    {
+        <tr>
+            <td class="ps-4 small">@label</td>
+            <td class="text-center">
+                <div class="btn-group btn-group-sm">
+                    <button class="btn @(getter() ? "btn-success" : "btn-outline-secondary")" @onclick="() => { setter(true); ClearAction(label); }">YES</button>
+                    <button class="btn @(!getter() ? "btn-danger" : "btn-outline-secondary")" @onclick="() => { setter(false); TriggerAction(label); }">NO</button>
+                </div>
+            </td>
+            <td class="small">@(getter() ? "Compliant" : "ACTION REQUIRED")</td>
+        </tr>
+    };
+
+    private void TriggerAction(string name) { if (!fsra.ActionPlan.Any(a => a.ItemName == name)) fsra.ActionPlan.Add(new FireActionPlanItem { ItemName = name }); }
+    private void ClearAction(string name) => fsra.ActionPlan.RemoveAll(a => a.ItemName == name);
+
+    private async Task SaveFSRA()
+    {
+        using var context = await DbFactory.CreateDbContextAsync();
+        if (fsra.Id == 0) context.FireRiskAssessments.Add(fsra);
+        else context.FireRiskAssessments.Update(fsra);
+        await context.SaveChangesAsync();
+        Nav.NavigateTo("/admin/hs/risk-assessments");
+    }
+}

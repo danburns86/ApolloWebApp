@@ -97,6 +97,13 @@ namespace Apollo.Data
         public DbSet<CoshhAssessment> CoshhAssessments { get; set; }
         public DbSet<FireRiskAssessmentDetails> FireRiskAssessmentDetails { get; set; }
 
+        // --- HEALTH & SAFETY EXTENSIONS ---
+        public DbSet<FireRiskAssessment> FireRiskAssessments { get; set; } // Inherited TPH
+        public DbSet<FireActionPlanItem> FireActionPlanItems { get; set; }
+        public DbSet<RoomFireSafetyAssignment> RoomFireSafetyAssignments { get; set; }
+
+
+
 
         // --- THE AUTOMATIC AUDIT LISTENER ---
         // --- THE AUTOMATIC AUDIT LISTENER ---
@@ -133,9 +140,14 @@ namespace Apollo.Data
                     InspectionLog => "Safety Inspection",      // ADDED
                     FireSystemComponent => "Fire Safety Hardware",
                     CoshhSubstance => "COSHH Registry",
+                    CoshhAssessment => "COSHH Assessment", 
+                    FireRiskAssessment => "Fire Safety Audit",
                     RiskAssessment => "Risk Assessment",
                     RAHazard => "RA Hazard Detail",
                     IncidentRecord => "Accident / Incident Log",
+                    FireActionPlanItem => "Fire Action Plan",
+                    RiskAssessmentReview => "RA Periodic Review",
+                    
                     _ => entityName
                    
                 };

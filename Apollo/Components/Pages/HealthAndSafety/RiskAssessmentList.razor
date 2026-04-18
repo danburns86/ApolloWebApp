@@ -15,28 +15,24 @@
             <p class="text-muted">Manage operational, production, and fire safety assessments.</p>
         </div>
         <div class="d-flex gap-2">
-            @* Existing General RA Button *@
             <button class="btn btn-outline-primary" @onclick="CreateNewGeneral">
                 <i class="bi bi-plus-lg me-1"></i>New General RA
             </button>
     
-            @* NEW: Fire RA Button with Room Selection *@
             <div class="dropdown">
-                <button class="btn btn-danger dropdown-toggle shadow-sm" type="button" data-bs-toggle="dropdown">
+                <button class="btn btn-danger dropdown-toggle shadow-sm" type="button" @onclick="ToggleFireDropdown">
                     <i class="bi bi-fire me-1"></i>New Fire RA
                 </button>
-                <div class="dropdown-menu shadow border-0 p-2" style="min-width: 250px; max-height: 300px; overflow-y: auto;">
-                    <h6 class="dropdown-header fw-bold text-uppercase small">Select Room/Area</h6>
-                    @foreach (var room in allRooms)
+                <ul class="dropdown-menu shadow border-0 p-2 @(showFireDropdown ? "show" : "")"
+                    style="min-width: 250px; max-height: 300px; overflow-y: auto; position: absolute; right: 0; z-index: 1050;">
+                    <li class="dropdown-header fw-bold text-uppercase small">Select Area to Audit</li>
+                    @foreach (var area in allAreas)
                     {
-                        <button class="dropdown-item rounded small" @onclick="() => StartFireRA(room.Id)">
-                            @room.Name <span class="text-muted tiny">(@room.Area?.Name)</span>
-                        </button>
+                        <li><button class="dropdown-item rounded small" type="button" @onclick="() => StartFireRA(area.Id)">@area.Name</button></li>
                     }
-                </div>
+                </ul>
             </div>
 
-            @* Existing Clone Show RA Button *@
             <div class="dropdown">
                 <button class="btn btn-primary dropdown-toggle shadow-sm" type="button" data-bs-toggle="dropdown">
                     Quick Clone Show RA
@@ -51,147 +47,107 @@
         </div>
     </div>
 
-    @* --- STATS TILES --- *@
-    <div class="row g-3 mb-4">
-        <div class="col-md-3">
-            <div class="card border-0 shadow-sm p-3 bg-white">
-                <div class="small fw-bold text-muted text-uppercase">Total</div>
-                <div class="h3 fw-bold mb-0">@allRAs.Count</div>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card border-0 shadow-sm p-3 bg-white border-start border-4 border-warning">
-                <div class="small fw-bold text-muted text-uppercase">Awaiting Review</div>
-                <div class="h3 fw-bold mb-0 text-warning">@allRAs.Count(r => !r.IsApproved)</div>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card border-0 shadow-sm p-3 bg-white border-start border-4 border-danger">
-                <div class="small fw-bold text-muted text-uppercase">Overdue</div>
-                <div class="h3 fw-bold mb-0 text-danger">@allRAs.Count(r => r.ReviewDueDate <= DateTime.Today)</div>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card border-0 shadow-sm p-3 bg-white border-start border-4 border-info">
-                <div class="small fw-bold text-muted text-uppercase">Active Productions</div>
-                <div class="h3 fw-bold mb-0 text-info">@upcomingProductions.Count</div>
-            </div>
+    @if (showFireDropdown)
+    {
+        <div style="position:fixed; top:0; left:0; width:100vw; height:100vh; z-index:1000;" @onclick="ToggleFireDropdown"></div>
+    }
+
+    <div class="card shadow-sm border-0 rounded-3">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="bg-light">
+                    <tr>
+                        <th class="ps-4">Title</th>
+                        <th>Type</th>
+                        <th>Scope</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                        <th class="text-end pe-4">Next Review</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var ra in allRAs)
+                    {
+                        <tr>
+                            <td class="ps-4">
+                                <div class="fw-bold">@ra.Title</div>
+                                <div class="small text-muted">@ra.AssessmentDate.ToShortDateString()</div>
+                            </td>
+                            <td><span class="badge bg-secondary">@ra.Type</span></td>
+                            <td>
+                                @if (ra.Production != null)
+                                {
+                                    <span class="small">Prod: @ra.Production.Title</span>
+                                }
+                                else if (ra.Area != null)
+                                {
+
+                                    <span class="small">Area: @ra.Area.Name</span>
+                                }
+                                else
+                                {
+
+                                    <span class="small text-muted">General Ops</span>
+                                }
+                            </td>
+                            <td>
+                                @if (ra.IsApproved)
+                                {
+                                    <span class="badge bg-success">Approved</span>
+                                }
+                                else
+                                {
+
+                                    <span class="badge bg-warning text-dark">Draft</span>
+                                }
+                            </td>
+                            <td>
+                                @if (ra is FireRiskAssessment fireRa && fireRa.ActionPlan.Any(a => !a.IsCompleted))
+                                {
+                                    <span class="badge bg-danger">Action Plan Required</span>
+                                }
+                            </td>
+                            <td class="text-end pe-4">
+                                <button class="btn btn-sm btn-outline-dark me-2" @onclick="() => HandleNavigation(ra)">Edit</button>
+                                <span class="small @(ra.ReviewDueDate <= DateTime.Today ? "text-danger fw-bold" : "")">@ra.ReviewDueDate.ToShortDateString()</span>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
         </div>
     </div>
-
-    @if (isLoading)
-    {
-        <div class="text-center py-5"><div class="spinner-border text-primary"></div></div>
-    }
-    else
-    {
-        <div class="card shadow-sm border-0 rounded-3">
-            <div class="table-responsive">
-                <table class="table table-hover align-middle mb-0">
-                    <thead class="bg-light">
-                        <tr>
-                            <th class="ps-4">Assessment Title</th>
-                            <th>Type</th>
-                            <th>Scope</th>
-                            <th>Next Review</th>
-                            <th class="text-center">Status</th>
-                            <th class="text-end pe-4">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach (var ra in allRAs)
-                        {
-                            <tr>
-                                <td class="ps-4">
-                                    <div class="fw-bold">@ra.Title</div>
-                                    <div class="small text-muted">By @ra.AssessedBy on @ra.AssessmentDate.ToShortDateString()</div>
-                                </td>
-                                <td><span class="badge bg-secondary">@ra.Type</span></td>
-                                <td>
-                                    @if (ra.Production != null)
-                                    {
-                                        <span class="small">Prod: @ra.Production.Title</span>
-                                    }
-                                    else if (ra.Area != null)
-                                    {
-
-                                        <span class="small">Area: @ra.Area.Name</span>
-                                    }
-                                    else
-                                    {
-
-                                        <span class="small text-muted">General Operations</span>
-                                    }
-                                </td>
-                                <td>
-                                    <div class="small @(ra.ReviewDueDate <= DateTime.Today ? "text-danger fw-bold" : "")">
-                                        @ra.ReviewDueDate.ToString("dd MMM yyyy")
-                                    </div>
-                                </td>
-                                <td class="text-center">
-                                    @if (ra.IsApproved)
-                                    {
-                                        <span class="badge bg-success">Approved</span>
-                                    }
-                                    else
-                                    {
-
-                                        <span class="badge bg-warning text-dark">Draft</span>
-                                    }
-                                </td>
-                                <td class="text-end pe-4">
-                                    @* FIX: No inline $ string navigation *@
-                                    <button class="btn btn-sm btn-outline-dark me-1" @onclick="() => EditRA(ra.Id)">Edit</button>
-                                </td>
-                            </tr>
-                        }
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    }
 </div>
 
 @code {
-
-    
     private List<RiskAssessment> allRAs = new();
     private List<Production> upcomingProductions = new();
+    private List<Area> allAreas = new();
     private bool isLoading = true;
-    private List<Room> allRooms = new();
+    private bool showFireDropdown = false;
 
     protected override async Task OnInitializedAsync() => await LoadData();
 
-    private void StartFireRA(int roomId) => Nav.NavigateTo($"/admin/hs/fire-risk-assessment/{roomId}");
-
     private async Task LoadData()
     {
-        isLoading = true;
         using var context = await DbFactory.CreateDbContextAsync();
-        
-        allRAs = await context.RiskAssessments
-            .Include(r => r.Production)
-            .Include(r => r.Area)
-            .OrderByDescending(r => r.AssessmentDate)
-            .ToListAsync();
-
-        upcomingProductions = await context.Productions
-            .Where(p => p.EndDate >= DateTime.Today)
-            .OrderBy(p => p.StartDate)
-            .ToListAsync();
-
-        // Load rooms for the Fire RA selector
-        allRooms = await context.Rooms.Include(r => r.Area).OrderBy(r => r.Name).ToListAsync();
-            
+        allRAs = await context.RiskAssessments.Include(r => r.Production).Include(r => r.Area).OrderByDescending(r => r.AssessmentDate).ToListAsync();
+        upcomingProductions = await context.Productions.Where(p => p.EndDate >= DateTime.Today).OrderBy(p => p.StartDate).ToListAsync();
+        allAreas = await context.Areas.OrderBy(a => a.Name).ToListAsync();
         isLoading = false;
     }
 
-    private void CreateNewGeneral() => Nav.NavigateTo("/admin/hs/risk-assessments/edit/0");
-    
-    private void EditRA(int id) => Nav.NavigateTo($"/admin/hs/risk-assessments/edit/{id}");
+    private void ToggleFireDropdown() => showFireDropdown = !showFireDropdown;
 
-    private void CloneForProduction(int prodId)
+    private void StartFireRA(int areaId) { showFireDropdown = false; Nav.NavigateTo($"/admin/hs/fire-risk-assessment/new/{areaId}"); }
+
+    private void CreateNewGeneral() => Nav.NavigateTo("/admin/hs/risk-assessments/edit/0");
+
+    private void CloneForProduction(int prodId) => Nav.NavigateTo($"/admin/hs/risk-assessments/edit/0?prodId={prodId}");
+
+    private void HandleNavigation(RiskAssessment ra)
     {
-        Nav.NavigateTo($"/admin/hs/risk-assessments/edit/0?prodId={prodId}");
+        if (ra.Type == RiskAssessmentType.Fire) Nav.NavigateTo($"/admin/hs/fire-risk-assessment/edit/{ra.Id}");
+        else Nav.NavigateTo($"/admin/hs/risk-assessments/edit/{ra.Id}");
     }
 }
