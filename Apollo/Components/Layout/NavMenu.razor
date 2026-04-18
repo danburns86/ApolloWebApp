@@ -17,6 +17,7 @@
     var memberChevron = MembersExpanded ? "bi-chevron-down" : "bi-chevron-right";
     var reportChevron = ReportsExpanded ? "bi-chevron-down" : "bi-chevron-right";
     var adminChevron = AdminExpanded ? "bi-chevron-down" : "bi-chevron-right";
+    var hsChevron = HSExpanded ? "bi-chevron-down" : "bi-chevron-right";
 }
 
 <div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
@@ -185,6 +186,31 @@
             </div>
         }
 
+        @* --- HEALTH & SAFETY --- *@
+        <div class="nav-item px-3">
+            <button class="nav-link bg-transparent border-0 w-100 text-start shadow-none d-flex align-items-center" @onclick="ToggleHS" @onclick:stopPropagation="true">
+                <span class="bi bi-shield-check me-2" aria-hidden="true"></span> Health & Safety
+                <span class="bi @hsChevron ms-auto" aria-hidden="true"></span>
+            </button>
+        </div>
+        @if (HSExpanded)
+        {
+            <div class="nav-item px-3 ms-3">
+                <NavLink class="nav-link py-1" href="admin/hs/fire-system" Match="NavLinkMatch.All">
+                    <span class="bi bi-fire me-2"></span> Fire Hardware
+                </NavLink>
+                <NavLink class="nav-link py-1" href="admin/hs/risk-assessments" Match="NavLinkMatch.All">
+                    <span class="bi bi-clipboard2-check me-2"></span> Risk Assessments
+                </NavLink>
+                <NavLink class="nav-link py-1" href="admin/hs/coshh" Match="NavLinkMatch.All">
+                    <span class="bi bi-droplet-half me-2"></span> COSHH Registry
+                </NavLink>
+                <NavLink class="nav-link py-1" href="admin/hs/incidents" Match="NavLinkMatch.All">
+                    <span class="bi bi-exclamation-octagon me-2"></span> Accident Book
+                </NavLink>
+            </div>
+        }
+
         @* --- GLOBAL REPORTS & ANALYTICS --- *@
         <div class="nav-item px-3 mt-2 border-top border-secondary pt-2">
             <button class="nav-link bg-transparent border-0 w-100 text-start shadow-none d-flex align-items-center" @onclick="ToggleReports" @onclick:stopPropagation="true">
@@ -280,6 +306,7 @@
     private bool MembersExpanded = false;
     private bool ReportsExpanded = false;
     private bool AdminExpanded = false;
+    private bool HSExpanded = false;
     
     private string UserDisplayName = "User";
     private PortalConfiguration? Config;
@@ -305,6 +332,7 @@
     private void ToggleAssets() => AssetsExpanded = !AssetsExpanded;
     private void ToggleProd() => ProdExpanded = !ProdExpanded;
     private void ToggleMembers() => MembersExpanded = !MembersExpanded;
+    private void ToggleHS() => HSExpanded = !HSExpanded;
     private void ToggleReports() => ReportsExpanded = !ReportsExpanded;
     private void ToggleAdmin() => AdminExpanded = !AdminExpanded;
 

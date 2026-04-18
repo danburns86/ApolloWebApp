@@ -25,6 +25,12 @@ namespace Apollo.Data
         {
             base.OnModelCreating(builder);
             // This ensures all the Identity table mapping (AspNetUsers, AspNetRoles, etc.) is included.
+
+            builder.Entity<RAHazard>()
+        .HasOne(h => h.RiskAssessment)
+        .WithMany(ra => ra.Hazards)
+        .HasForeignKey(h => h.RiskAssessmentId)
+        .OnDelete(DeleteBehavior.Cascade);
         }
 
         // --- KEY MANAGEMENT ---
@@ -80,6 +86,13 @@ namespace Apollo.Data
 
         public DbSet<PerformanceCrewOverride> PerformanceCrewOverrides { get; set; }
 
+        // --- HEALTH & SAFETY ---
+        public DbSet<FireSystemComponent> FireSystemComponents { get; set; }
+        public DbSet<CoshhSubstance> CoshhSubstances { get; set; }
+        public DbSet<RiskAssessment> RiskAssessments { get; set; }
+        public DbSet<RAHazard> RAHazards { get; set; }
+        public DbSet<IncidentRecord> IncidentRecords { get; set; }
+
 
         // --- THE AUTOMATIC AUDIT LISTENER ---
         // --- THE AUTOMATIC AUDIT LISTENER ---
@@ -114,7 +127,13 @@ namespace Apollo.Data
                     AssetCategory => "Asset Category",         // ADDED
                     Asset => "Asset & Equipment",              // ADDED
                     InspectionLog => "Safety Inspection",      // ADDED
+                    FireSystemComponent => "Fire Safety Hardware",
+                    CoshhSubstance => "COSHH Registry",
+                    RiskAssessment => "Risk Assessment",
+                    RAHazard => "RA Hazard Detail",
+                    IncidentRecord => "Accident / Incident Log",
                     _ => entityName
+                   
                 };
 
                 // 2. Fix the Negative ID Bug

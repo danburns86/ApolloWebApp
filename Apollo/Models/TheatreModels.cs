@@ -684,4 +684,113 @@ namespace Apollo.Models
         public Member? Member { get; set; }
         public string? ExternalName { get; set; }
     }
+
+    #region HEALTH & SAFETY MODULE
+
+    public enum RiskAssessmentType { General, Production, Fire, COSHH }
+    public enum IncidentSeverity { NearMiss, Minor, Major, RIDDOR }
+
+    public class FireSystemComponent
+    {
+        [Key]
+        public int Id { get; set; }
+        [Required]
+        public string UniqueID { get; set; } = string.Empty; // e.g., CP 01, S101, S102
+
+        [Required]
+        public string Type { get; set; } = "Smoke Head"; // Smoke Head, Heat, Sounder, Call Point, Em Light
+        public bool IsMaintained { get; set; } // For Emergency Lights
+
+        public int RoomId { get; set; }
+        [ForeignKey("RoomId")]
+        public Room? Room { get; set; }
+
+        public string? SpecificLocation { get; set; } // e.g. "Behind the LX rack"
+        public DateTime? LastTested { get; set; }
+        public bool IsActive { get; set; } = true;
+    }
+
+    public class CoshhSubstance
+    {
+        [Key]
+        public int Id { get; set; }
+        [Required]
+        public string Name { get; set; } = string.Empty;
+        public string? Manufacturer { get; set; }
+        public string? MsdsFilePath { get; set; } // Storage path for the PDF
+        public DateTime? MsdsExpiry { get; set; }
+
+        public string? HazardPictograms { get; set; } // Store as comma-sep string: "Flammable, Toxic"
+        public string? UseInstructions { get; set; }
+    }
+
+    public class RiskAssessment
+    {
+        [Key]
+        public int Id { get; set; }
+        [Required]
+        public string Title { get; set; } = string.Empty;
+        public RiskAssessmentType Type { get; set; } = RiskAssessmentType.General;
+
+        public int? ProductionId { get; set; }
+        [ForeignKey("ProductionId")]
+        public Production? Production { get; set; }
+
+        public int? AreaId { get; set; }
+        [ForeignKey("AreaId")]
+        public Area? Area { get; set; }
+
+        public string? AssessedBy { get; set; }
+        public DateTime AssessmentDate { get; set; } = DateTime.Now;
+        public DateTime ReviewDueDate { get; set; } = DateTime.Now.AddYears(1);
+
+        public bool IsApproved { get; set; }
+        public string? ApprovedBy { get; set; }
+
+        public ICollection<RAHazard> Hazards { get; set; } = new List<RAHazard>();
+    }
+
+    public class RAHazard
+    {
+        [Key]
+        public int Id { get; set; }
+        public int RiskAssessmentId { get; set; }
+        [ForeignKey("RiskAssessmentId")]
+        public RiskAssessment? RiskAssessment { get; set; }
+
+        [Required]
+        public string HazardName { get; set; } = string.Empty;
+        public string? WhoIsAtRisk { get; set; }
+
+        public int InitialLikelihood { get; set; } // 1-5
+        public int InitialSeverity { get; set; }   // 1-5
+
+        public string? MitigationMeasures { get; set; }
+
+        public int ResidualLikelihood { get; set; } // 1-5
+        public int ResidualSeverity { get; set; }   // 1-5
+    }
+
+    public class IncidentRecord
+    {
+        [Key]
+        public int Id { get; set; }
+        public DateTime Timestamp { get; set; } = DateTime.Now;
+        public IncidentSeverity Severity { get; set; } = IncidentSeverity.Minor;
+
+        [Required]
+        public string Description { get; set; } = string.Empty;
+        public string? PersonsInvolved { get; set; }
+        public string? TreatmentGiven { get; set; }
+
+        public int? RoomId { get; set; }
+        [ForeignKey("RoomId")]
+        public Room? Room { get; set; }
+
+        public bool IsRiddorReportable { get; set; }
+        public DateTime? RiddorReportedDate { get; set; }
+    }
+
+    #endregion
+
 }

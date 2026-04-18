@@ -1,0 +1,286 @@
+﻿@page "/admin/hs/fire-system"
+@using Apollo.Models
+@using Apollo.Data
+@using Microsoft.EntityFrameworkCore
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject NavigationManager Nav
+
+<PageTitle>Fire System Hardware Registry</PageTitle>
+
+<div class="container-fluid px-4 py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="fw-bold mb-0">Fire System Registry</h2>
+            <p class="text-muted">Unique tracking for sensors, sounders, and emergency lighting.</p>
+        </div>
+        <div class="d-flex gap-2">
+            <button class="btn btn-primary shadow-sm" @onclick="() => OpenModal()">
+                <i class="bi bi-plus-lg me-1"></i>Add Component
+            </button>
+        </div>
+    </div>
+
+    @* --- FILTERS --- *@
+    <div class="card border-0 shadow-sm mb-4 bg-light">
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <input type="text" class="form-control" placeholder="Search ID or Location..." @bind="searchQuery" @bind:event="oninput" />
+                </div>
+                <div class="col-md-3">
+                    <select class="form-select" @bind="filterType">
+                        <option value="">All Types</option>
+                        <option value="Smoke Head">Smoke Head</option>
+                        <option value="Heat Detector">Heat Detector</option>
+                        <option value="Sounder">Sounder</option>
+                        <option value="Call Point">Call Point</option>
+                        <option value="Emergency Light">Emergency Light</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <select class="form-select" @bind="filterAreaId">
+                        <option value="0">All Areas</option>
+                        @foreach (var a in allAreas)
+                        {
+                            <option value="@a.Id">@a.Name</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <button class="btn btn-dark w-100" @onclick="LoadData">Apply Filter</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @if (isLoading)
+    {
+        <div class="text-center py-5"><div class="spinner-border text-primary"></div></div>
+    }
+    else
+    {
+        <div class="card shadow-sm border-0 rounded-3 overflow-hidden">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="bg-dark text-white">
+                    <tr>
+                        <th class="ps-4">Unique ID</th>
+                        <th>Type</th>
+                        <th>Room / Location</th>
+                        <th>Last Tested</th>
+                        <th class="text-center">Status</th>
+                        <th class="text-end pe-4">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var item in filteredComponents)
+                    {
+                        <tr>
+                            <td class="ps-4 fw-bold">@item.UniqueID</td>
+                            <td>
+                                <span class="badge @GetTypeBadgeClass(item.Type)">@item.Type</span>
+                                @if (item.IsMaintained)
+                                {
+                                    <i class="bi bi-battery-charging text-success ms-1" title="Maintained Unit"></i>
+                                }
+                            </td>
+                            <td>
+                                <div class="fw-bold">@item.Room?.Name</div>
+                                <div class="small text-muted">@item.SpecificLocation</div>
+                            </td>
+                            <td class="small text-muted">@(item.LastTested?.ToString("dd MMM yyyy") ?? "Never Recorded")</td>
+                            <td class="text-center">
+                                @if (item.IsActive)
+                                {
+                                    <span class="badge bg-success-subtle text-success border border-success">Active</span>
+                                }
+                                else
+                                {
+
+                                    <span class="badge bg-danger-subtle text-danger border border-danger">Out of Service</span>
+                                }
+                            </td>
+                            <td class="text-end pe-4">
+                                <button class="btn btn-sm btn-outline-primary me-1" @onclick="() => MarkTested(item)" title="Quick Test Log">
+                                    <i class="bi bi-check2-circle"></i>
+                                </button>
+                                <button class="btn btn-sm btn-outline-danger me-1" @onclick="() => ReportFailure(item)" title="Log Maintenance Snag">
+                                    <i class="bi bi-exclamation-triangle"></i>
+                                </button>
+                                <button class="btn btn-sm btn-light" @onclick="() => OpenModal(item)"><i class="bi bi-pencil"></i></button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+@* --- ADD/EDIT MODAL --- *@
+@if (showModal)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow-lg">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title fw-bold">@(editingItem.Id == 0 ? "Add Fire Component" : "Edit Component")</h5>
+                    <button type="button" class="btn-close btn-close-white" @onclick="() => showModal = false"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="small fw-bold">Unique ID (e.g. S101, CP01)</label>
+                            <input type="text" class="form-control" @bind="editingItem.UniqueID" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="small fw-bold">Component Type</label>
+                            <select class="form-select" @bind="editingItem.Type">
+                                <option value="Smoke Head">Smoke Head</option>
+                                <option value="Heat Detector">Heat Detector</option>
+                                <option value="Sounder">Sounder</option>
+                                <option value="Call Point">Call Point</option>
+                                <option value="Emergency Light">Emergency Light</option>
+                            </select>
+                        </div>
+                        <div class="col-12">
+                            <label class="small fw-bold">Room</label>
+                            <select class="form-select" @bind="editingItem.RoomId">
+                                <option value="0">-- Select Room --</option>
+                                @foreach (var r in allRooms)
+                                {
+                                    <option value="@r.Id">@r.Name (@r.Area?.Name)</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-12">
+                            <label class="small fw-bold">Specific Location Detail</label>
+                            <input type="text" class="form-control" @bind="editingItem.SpecificLocation" placeholder="e.g. Above the prompt desk" />
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-check form-switch mt-2">
+                                <input class="form-check-input" type="checkbox" @bind="editingItem.IsMaintained" id="maintSwitch" />
+                                <label class="form-check-label small fw-bold" for="maintSwitch">Maintained (Em Light only)</label>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-check form-switch mt-2">
+                                <input class="form-check-input" type="checkbox" @bind="editingItem.IsActive" id="activeSwitch" />
+                                <label class="form-check-label small fw-bold" for="activeSwitch">In Service</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light">
+                    <button class="btn btn-secondary" @onclick="() => showModal = false">Cancel</button>
+                    <button class="btn btn-primary px-4 fw-bold" @onclick="Save">Save Component</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<FireSystemComponent> allComponents = new();
+    private List<FireSystemComponent> filteredComponents = new();
+    private List<Area> allAreas = new();
+    private List<Room> allRooms = new();
+    
+    private bool isLoading = true;
+    private bool showModal = false;
+    private FireSystemComponent editingItem = new();
+    
+    // Filters
+    private string searchQuery = "";
+    private string filterType = "";
+    private int filterAreaId = 0;
+
+    protected override async Task OnInitializedAsync() => await LoadData();
+
+    private async Task LoadData()
+    {
+        isLoading = true;
+        using var context = await DbFactory.CreateDbContextAsync();
+        
+        allAreas = await context.Areas.OrderBy(a => a.Name).ToListAsync();
+        allRooms = await context.Rooms.Include(r => r.Area).OrderBy(r => r.Name).ToListAsync();
+        
+        var query = context.FireSystemComponents
+            .Include(f => f.Room).ThenInclude(r => r!.Area)
+            .AsQueryable();
+
+        if (!string.IsNullOrEmpty(filterType)) query = query.Where(f => f.Type == filterType);
+        if (filterAreaId != 0) query = query.Where(f => f.Room!.AreaId == filterAreaId);
+        
+        allComponents = await query.OrderBy(f => f.UniqueID).ToListAsync();
+        ApplySearch();
+        isLoading = false;
+    }
+
+    private void ApplySearch()
+    {
+        if (string.IsNullOrWhiteSpace(searchQuery)) { filteredComponents = allComponents; }
+        else
+        {
+            var q = searchQuery.ToLower();
+            filteredComponents = allComponents.Where(f =>
+                f.UniqueID.ToLower().Contains(q) ||
+                (f.SpecificLocation?.ToLower().Contains(q) ?? false) ||
+                f.Room!.Name.ToLower().Contains(q)).ToList();
+        }
+    }
+
+    private void OpenModal(FireSystemComponent? item = null)
+    {
+        editingItem = item != null ? new FireSystemComponent
+        {
+            Id = item.Id,
+            UniqueID = item.UniqueID,
+            Type = item.Type,
+            RoomId = item.RoomId,
+            SpecificLocation = item.SpecificLocation,
+            IsMaintained = item.IsMaintained,
+            IsActive = item.IsActive
+        } : new FireSystemComponent { Type = "Smoke Head", IsActive = true };
+        showModal = true;
+    }
+
+    private async Task Save()
+    {
+        if (string.IsNullOrWhiteSpace(editingItem.UniqueID) || editingItem.RoomId == 0) return;
+        using var context = await DbFactory.CreateDbContextAsync();
+        
+        if (editingItem.Id == 0) context.FireSystemComponents.Add(editingItem);
+        else context.FireSystemComponents.Update(editingItem);
+        
+        await context.SaveChangesAsync();
+        showModal = false;
+        await LoadData();
+    }
+
+    private async Task MarkTested(FireSystemComponent item)
+    {
+        using var context = await DbFactory.CreateDbContextAsync();
+        var dbItem = await context.FireSystemComponents.FindAsync(item.Id);
+        if (dbItem != null)
+        {
+            dbItem.LastTested = DateTime.Now;
+            await context.SaveChangesAsync();
+            await LoadData();
+        }
+    }
+
+    private void ReportFailure(FireSystemComponent item)
+    {
+        // Redirect to maintenance with pre-filled detail
+        Nav.NavigateTo($"/admin/maintenance/new?desc=FAILURE: Fire {item.Type} ({item.UniqueID}) in {item.Room?.Name}");
+    }
+
+    private string GetTypeBadgeClass(string type) => type switch
+    {
+        "Call Point" => "bg-danger",
+        "Emergency Light" => "bg-warning text-dark",
+        "Sounder" => "bg-info text-dark",
+        _ => "bg-secondary"
+    };
+}
