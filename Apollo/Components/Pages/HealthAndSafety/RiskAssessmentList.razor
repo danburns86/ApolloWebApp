@@ -130,10 +130,25 @@
 
     private async Task LoadData()
     {
+        isLoading = true;
         using var context = await DbFactory.CreateDbContextAsync();
-        allRAs = await context.RiskAssessments.Include(r => r.Production).Include(r => r.Area).OrderByDescending(r => r.AssessmentDate).ToListAsync();
-        upcomingProductions = await context.Productions.Where(p => p.EndDate >= DateTime.Today).OrderBy(p => p.StartDate).ToListAsync();
+    
+        // We use .Include on the base class, then use string-based Include for the derived property
+        // This ensures we get Production, Area, AND the Fire-specific ActionPlan list
+        allRAs = await context.RiskAssessments
+            .Include(r => r.Production)
+            .Include(r => r.Area)
+            .Include("ActionPlan") // This loads the ActionPlan if the row is a FireRiskAssessment
+            .OrderByDescending(r => r.AssessmentDate)
+            .ToListAsync();
+
+        upcomingProductions = await context.Productions
+            .Where(p => p.EndDate >= DateTime.Today)
+            .OrderBy(p => p.StartDate)
+            .ToListAsync();
+
         allAreas = await context.Areas.OrderBy(a => a.Name).ToListAsync();
+    
         isLoading = false;
     }
 

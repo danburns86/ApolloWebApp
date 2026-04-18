@@ -880,6 +880,9 @@ namespace Apollo.Models
         public bool Q_Manage_Training { get; set; }
 
         public string Narrative_HazardsFound { get; set; } = string.Empty;
+        // Update these specific fields in your FireRiskAssessment class
+        public string Narrative_IgnitionSources { get; set; } = string.Empty;
+        public string Narrative_FuelSources { get; set; } = string.Empty;
         public string Narrative_PeopleAtRisk { get; set; } = string.Empty;
         public string Narrative_EvaluationNotes { get; set; } = string.Empty;
 
