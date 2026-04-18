@@ -222,6 +222,20 @@ namespace Apollo.Models
         }
     }
 
+    public class SystemCredential
+    {
+        [Key]
+        public int Id { get; set; }
+        [Required]
+        public string SystemName { get; set; } = string.Empty; // e.g., "Main Fire Panel", "Intruder Alarm"
+        public string Category { get; set; } = "Building"; // Building, Security, Box Office
+        public string? Description { get; set; }
+        public string? AccessCode { get; set; } // For pin codes
+        public string? Username { get; set; }
+        public string? Password { get; set; }
+        public DateTime LastChanged { get; set; } = DateTime.Now;
+        public string? LocationDetail { get; set; } // e.g., "Panel in Stage Left Wing"
+    }
     public class InspectionRecord
     {
         [Key]
@@ -537,6 +551,8 @@ namespace Apollo.Models
         public bool SkillBar { get; set; }
 
         public string FullName => $"{FirstName} {LastName}";
+
+        public List<ProductionCrew> CrewingHistory { get; set; } = new();
     }
 
     public class ProductionCategory

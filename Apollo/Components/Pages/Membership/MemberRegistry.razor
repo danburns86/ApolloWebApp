@@ -89,84 +89,121 @@
     }
 </div>
 
-@* MEMBER PROFILE MODAL *@
+@* MEMBER PROFILE MODAL - 360 VIEW *@
 @if (showDetailsModal && selectedMember != null)
 {
     <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5); overflow-y: auto; z-index: 1050;">
-        <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-dialog modal-xl modal-dialog-centered">
             <div class="modal-content border-0 shadow-lg">
                 <div class="modal-header bg-dark text-white border-0">
-                    <h5 class="modal-title fw-bold">
-                        <i class="bi bi-person-badge me-2"></i>Member Profile: @selectedMember.FullName
-                    </h5>
+                    <h5 class="modal-title fw-bold">Member 360: @selectedMember.FullName</h5>
                     <button type="button" class="btn-close btn-close-white" @onclick="CloseDetails"></button>
                 </div>
-                <div class="modal-body p-4 bg-light">
-                    <div class="row g-4">
-                        <div class="col-md-5">
-                            <div class="card border-0 shadow-sm p-3 mb-3">
-                                <h6 class="fw-bold border-bottom pb-2 mb-3">Identity & Status</h6>
-                                <p class="mb-1 small text-muted">Member Number</p>
-                                <p class="fw-bold">#@selectedMember.MemberNumber</p>
-                                
-                                <p class="mb-1 small text-muted">Membership Status</p>
-                                <p><span class="badge @(selectedMember.MembershipStatus == "Active" ? "bg-success" : "bg-danger")">@selectedMember.MembershipStatus</span></p>
+                <div class="modal-body p-0 bg-light">
+                    @* Tab Navigation *@
+                    <ul class="nav nav-tabs px-3 pt-2 bg-white">
+                        <li class="nav-item">
+                            <button class="nav-link @(activeTab == "profile" ? "active fw-bold" : "")" @onclick='() => activeTab = "profile"'>Profile & Skills</button>
+                        </li>
+                        <li class="nav-item">
+                            <button class="nav-link @(activeTab == "history" ? "active fw-bold" : "")" @onclick='() => activeTab = "history"'>Crewing & Keys</button>
+                        </li>
+                    </ul>
 
-                                <p class="mb-1 small text-muted">Contact Details</p>
-                                <div class="mb-2"><i class="bi bi-envelope me-2"></i>@selectedMember.Email</div>
-                                <div><i class="bi bi-phone me-2"></i>@selectedMember.MobileNumber</div>
-                            </div>
-
-                            <div class="card border-0 shadow-sm p-3">
-                                <h6 class="fw-bold border-bottom pb-2 mb-3">Safety & Compliance</h6>
-                                <div class="d-flex justify-content-between mb-2">
-                                    <span>First Aider</span>
-                                    <i class="bi @(selectedMember.IsFirstAider ? "bi-check-circle-fill text-success" : "bi-x-circle text-muted")"></i>
+                    <div class="p-4">
+                        @if (activeTab == "profile")
+                        {
+                            <div class="row g-4">
+                                <div class="col-md-4">
+                                    <div class="card border-0 shadow-sm p-3 mb-3">
+                                        <h6 class="fw-bold border-bottom pb-2 mb-3">Identity & Status</h6>
+                                        <p class="mb-1 small text-muted">Member Number</p>
+                                        <p class="fw-bold">#@selectedMember.MemberNumber</p>
+                                        <p class="mb-1 small text-muted">Contact</p>
+                                        <div class="mb-1 small">@selectedMember.Email</div>
+                                        <div class="small">@selectedMember.MobileNumber</div>
+                                    </div>
+                                    <div class="card border-0 shadow-sm p-3">
+                                        <h6 class="fw-bold border-bottom pb-2 mb-3">Safety & Compliance</h6>
+                                        <div class="d-flex justify-content-between mb-2">
+                                            <span>First Aider</span>
+                                            <i class="bi @(selectedMember.IsFirstAider ? "bi-check-circle-fill text-success" : "bi-x-circle text-muted")"></i>
+                                        </div>
+                                        <div class="d-flex justify-content-between">
+                                            <span>DBS Checked</span>
+                                            <i class="bi @(selectedMember.HasDBS ? "bi-check-circle-fill text-success" : "bi-x-circle text-muted")"></i>
+                                        </div>
+                                    </div>
                                 </div>
-                                <div class="d-flex justify-content-between">
-                                    <span>DBS Checked</span>
-                                    <i class="bi @(selectedMember.HasDBS ? "bi-check-circle-fill text-success" : "bi-x-circle text-muted")"></i>
+                                <div class="col-md-8">
+                                    <div class="card border-0 shadow-sm p-3">
+                                        <h6 class="fw-bold border-bottom pb-2 mb-3">Mojo Interests</h6>
+                                        <div class="row g-2">
+                                            @foreach (var skill in GetSkillDisplayList(selectedMember))
+                                            {
+                                                <div class="col-6 col-md-4">
+                                                    <div class="p-2 border rounded @(skill.IsSet ? "bg-primary-subtle border-primary" : "bg-white") small d-flex justify-content-between">
+                                                        @skill.Name @if(skill.IsSet){
+                                                        <i class="bi bi-check-lg"></i>
+                                                    }
+                                                </div>
+                                            </div>
+                                        }
+                                    </div>
                                 </div>
                             </div>
                         </div>
-
-                        <div class="col-md-7">
-                            <div class="card border-0 shadow-sm p-3 h-100">
-                                <h6 class="fw-bold border-bottom pb-2 mb-3">Technical & Creative Interests</h6>
-                                <div class="row g-2">
-                                    @foreach (var skill in GetSkillDisplayList(selectedMember))
+                    }
+                        else
+                    {
+                        <div class="row g-4">
+                            <div class="col-md-7">
+                                <h6 class="fw-bold text-muted small text-uppercase mb-3">Crewing History</h6>
+                                <div class="list-group shadow-sm">
+                                    @if (!memberCrewing.Any())
                                     {
-                                        <div class="col-6">
-                                            <div class="p-2 border rounded bg-white small d-flex justify-content-between align-items-center">
-                                                @skill.Name
-                                                @if (skill.IsSet)
-                                                {
-                                                    <i class="bi bi-check-lg text-primary"></i>
-                                                }
+                                        <div class="list-group-item italic text-muted">No past crewing assignments found.</div>
+                                    }
+                                    @foreach (var crew in memberCrewing)
+                                    {
+                                        <div class="list-group-item d-flex justify-content-between align-items-center">
+                                            <div>
+                                                <div class="fw-bold">@crew.Production?.Title</div>
+                                                <small class="text-muted">@(crew.Role?.Name ?? crew.CustomRoleName)</small>
                                             </div>
+                                            <div class="badge bg-light text-dark">@crew.Production?.StartDate.ToString("MMM yyyy")</div>
                                         </div>
                                     }
                                 </div>
-                                
-                                <div class="mt-4 p-3 bg-warning bg-opacity-10 border border-warning rounded">
-                                    <h6 class="fw-bold text-dark small text-uppercase">Tech Team Status</h6>
-                                    <div class="form-check form-switch mt-2">
-                                        <input class="form-check-input" type="checkbox" @bind="selectedMember.IsTechTeam" id="modalTech" />
-                                        <label class="form-check-label fw-bold" for="modalTech">Active Technical Team Member</label>
-                                    </div>
-                                    <p class="small text-muted mt-1 mb-0">Enabling this places them at the top of crewing dropdowns regardless of MemberMojo interests.</p>
+                            </div>
+                            <div class="col-md-5">
+                                <h6 class="fw-bold text-muted small text-uppercase mb-3">Key Allocation</h6>
+                                <div class="card border-0 shadow-sm p-3 bg-white">
+                                    <label class="small fw-bold text-primary mb-2">Permanent Keys Held</label>
+                                    @if (!memberKeys.Any())
+                                    {
+                                        <p class="small italic text-muted">No permanent keys assigned to this name.</p>
+                                    }
+                                    else
+                                    {
+                                        @foreach (var k in memberKeys)
+                                        {
+                                            <div class="fw-bold mb-1"><i class="bi bi-key-fill text-warning me-2"></i>@k.Lock?.LockCode (@k.Lock?.Name)</div>
+                                        }
+                                    }
                                 </div>
                             </div>
                         </div>
-                    </div>
+                    }
                 </div>
-                <div class="modal-footer border-0">
-                    <button class="btn btn-secondary" @onclick="CloseDetails">Close</button>
-                    <button class="btn btn-primary px-4 fw-bold shadow-sm" @onclick="SaveChanges">Save Profile Changes</button>
-                </div>
+            </div>
+            <div class="modal-footer border-0">
+                <button class="btn btn-secondary" @onclick="CloseDetails">Close</button>
+                <button class="btn btn-primary px-4 fw-bold" @onclick="SaveChanges">Save Profile Changes</button>
             </div>
         </div>
     </div>
+</div>
 }
 
 @code {
@@ -174,6 +211,9 @@
     private List<Member> filteredMembers = new();
     private string searchQuery = "";
     private bool isLoading = true;
+    private string activeTab = "profile";
+    private List<ProductionCrew> memberCrewing = new();
+    private List<KeyRecord> memberKeys = new();
 
     protected override async Task OnInitializedAsync() => await LoadData();
 
@@ -181,28 +221,18 @@
     {
         isLoading = true;
         using var context = await DbFactory.CreateDbContextAsync();
-        // SORTING: Tech Team first, then alphabetical by Last Name
-        allMembers = await context.Members
-            .OrderByDescending(m => m.IsTechTeam)
-            .ThenBy(m => m.LastName)
-            .ToListAsync();
+        allMembers = await context.Members.OrderByDescending(m => m.IsTechTeam).ThenBy(m => m.LastName).ToListAsync();
         ApplyFilter();
         isLoading = false;
     }
 
     private void ApplyFilter()
     {
-        if (string.IsNullOrWhiteSpace(searchQuery))
-        {
-            filteredMembers = allMembers.ToList();
-        }
+        if (string.IsNullOrWhiteSpace(searchQuery)) filteredMembers = allMembers.ToList();
         else
         {
             var q = searchQuery.ToLower();
-            filteredMembers = allMembers.Where(m =>
-                m.FirstName.ToLower().Contains(q) ||
-                m.LastName.ToLower().Contains(q) ||
-                m.MemberNumber.Contains(q)).ToList();
+            filteredMembers = allMembers.Where(m => m.FirstName.ToLower().Contains(q) || m.LastName.ToLower().Contains(q) || m.MemberNumber.Contains(q)).ToList();
         }
     }
 
@@ -212,25 +242,36 @@
         using var context = await DbFactory.CreateDbContextAsync();
         context.Members.Update(member);
         await context.SaveChangesAsync();
-        
-        // Re-sort to move them up/down in the list immediately
         await LoadData();
     }
 
     private bool showDetailsModal = false;
     private Member? selectedMember;
 
-    private void ViewDetails(Member member)
+    private async Task ViewDetails(Member member)
     {
         selectedMember = member;
+        activeTab = "profile";
+        
+        using var context = await DbFactory.CreateDbContextAsync();
+        // Fetch Crewing
+        memberCrewing = await context.ProductionCrews
+            .Include(c => c.Production)
+            .Include(c => c.Role)
+            .Where(c => c.MemberId == member.Id)
+            .OrderByDescending(c => c.Production!.StartDate)
+            .ToListAsync();
+
+        // Fetch Keys by name match
+        memberKeys = await context.Keys
+            .Include(k => k.Lock)
+            .Where(k => k.IssuedToName == member.FullName && k.Status == "Issued")
+            .ToListAsync();
+
         showDetailsModal = true;
     }
 
-    private void CloseDetails()
-    {
-        showDetailsModal = false;
-        selectedMember = null;
-    }
+    private void CloseDetails() { showDetailsModal = false; selectedMember = null; }
 
     private async Task SaveChanges()
     {
@@ -239,26 +280,19 @@
             using var context = await DbFactory.CreateDbContextAsync();
             context.Members.Update(selectedMember);
             await context.SaveChangesAsync();
-            await LoadData(); // Refresh list to reflect IsTechTeam changes
+            await LoadData();
             CloseDetails();
         }
     }
 
-    // Helper to turn the bool properties into a clean list for the UI
     private List<(string Name, bool IsSet)> GetSkillDisplayList(Member m)
     {
-        return new List<(string Name, bool IsSet)>
-        {
-            ("Lighting Design", m.SkillLXDesign),
-            ("LX Operator", m.SkillLXOp),
-            ("Sound Design", m.SkillSoundDesign),
-            ("Sound Operator", m.SkillSoundOp),
-            ("Stage Manager", m.SkillStageManager),
-            ("Stage Crew", m.SkillStageCrew),
-            ("Wardrobe", m.SkillWardrobe),
-            ("Set Building", m.SkillSetBuild),
-            ("Bar Staff", m.SkillBar),
-            ("FOH / Box Office", m.SkillFOH)
+        return new List<(string Name, bool IsSet)> {
+            ("LX Design", m.SkillLXDesign), ("LX Op", m.SkillLXOp),
+            ("Snd Design", m.SkillSoundDesign), ("Snd Op", m.SkillSoundOp),
+            ("Stage Manager", m.SkillStageManager), ("Stage Crew", m.SkillStageCrew),
+            ("Wardrobe", m.SkillWardrobe), ("Set Build", m.SkillSetBuild),
+            ("Bar", m.SkillBar), ("FOH", m.SkillFOH)
         };
     }
 }

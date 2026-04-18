@@ -98,7 +98,12 @@
                         var gapCount = p.CrewAssignments.Count(c => c.IsRequired && c.MemberId == null && string.IsNullOrEmpty(c.ExternalName));
                         <tr>
                             <td class="small">@p.StartDate.ToString("dd MMM") - @p.EndDate.ToString("dd MMM")</td>
-                            <td class="fw-bold">@p.Title</td>
+                            <td>
+                                @* CLICKABLE TITLE *@
+                                <a href="/admin/production/hub/@p.Id" class="fw-bold text-decoration-none">
+                                    @p.Title <i class="bi bi-box-arrow-in-right small opacity-50 no-print"></i>
+                                </a>
+                            </td>
                             <td>@p.Category?.Name</td>
                             <td class="text-center">
                                 @if (gapCount > 0) { <span class="text-danger fw-bold">@gapCount Gaps</span> }
@@ -116,7 +121,10 @@
                 <div class="mb-5 border rounded p-4 @(HasGaps(p) ? "border-danger bg-danger-subtle" : "border-success bg-success-subtle")" style="page-break-inside: avoid;">
                     <div class="d-flex justify-content-between align-items-start mb-3 border-bottom border-dark pb-2">
                         <div>
-                            <h4 class="fw-bold mb-0">@p.Title</h4>
+                            @* CLICKABLE TITLE *@
+                            <h4 class="fw-bold mb-0">
+                                <a href="/admin/production/hub/@p.Id" class="text-dark text-decoration-none">@p.Title</a>
+                            </h4>
                             <span class="text-muted small">@p.Category?.Name | @p.StartDate.ToShortDateString() - @p.EndDate.ToShortDateString()</span>
                         </div>
                         <div class="text-end">
@@ -160,7 +168,7 @@
 <style>
     .report-paper { max-width: 210mm; min-height: 297mm; font-size: 14px; }
     .btn-white { background: white; border-color: #dee2e6; }
-    @@media print { .no-print { display: none !important; } .shadow-lg { box-shadow: none !important; } }
+    @@media print { .no-print { display: none !important; } .shadow-lg { box-shadow: none !important; } a { color: black !important; text-decoration: none !important; } }
 </style>
 
 @code {

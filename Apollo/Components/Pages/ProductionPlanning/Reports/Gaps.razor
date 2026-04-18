@@ -94,10 +94,12 @@
                 @foreach (var item in reportData)
                 {
                     <tr>
-                        <td>
-                            <div class="fw-bold">@item.ProductionTitle</div>
-                            <div class="small text-muted">Starts: @item.StartDate.ToString("dd MMM")</div>
-                        </td>
+                       <td>
+    <a href="/admin/production/hub/@item.ProductionId" class="fw-bold text-decoration-none">
+        @item.ProductionTitle <i class="bi bi-box-arrow-in-right small opacity-50"></i>
+    </a>
+    <div class="small text-muted">Starts: @item.StartDate.ToString("dd MMM")</div>
+</td>
                         <td><span class="badge bg-secondary">@item.CategoryName</span></td>
                         <td class="text-danger fw-bold">
                             <i class="bi bi-exclamation-triangle me-2"></i>@item.RoleName
