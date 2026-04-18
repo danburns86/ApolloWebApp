@@ -3,9 +3,9 @@
 @using Apollo.Data
 @using Microsoft.EntityFrameworkCore
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject NavigationManager Nav
 
 <div class="container-fluid px-4 py-4">
-    @* --- DASHBOARD HEADER --- *@
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
             <h2 class="fw-bold mb-0">Production Hub</h2>
@@ -19,7 +19,7 @@
         </div>
     </div>
 
-    @* --- TOP TILES: AT A GLANCE --- *@
+    @* --- TOP TILES --- *@
     <div class="row g-3 mb-5">
         <div class="col-md-3">
             <div class="card border-0 shadow-sm p-3 bg-primary text-white">
@@ -73,7 +73,6 @@
     }
     else
     {
-        @* --- CATEGORY GRID: Now Wraps Correctly --- *@
         <div class="row g-4">
             @foreach (var cat in categories)
             {
@@ -92,7 +91,7 @@
                                         <h6 class="fw-bold mb-1">@p.Title</h6>
                                         @if (HasGaps(p))
                                         {
-                                            <i class="bi bi-exclamation-triangle-fill text-danger animate__animated animate__pulse animate__infinite"></i>
+                                            <i class="bi bi-exclamation-triangle-fill text-danger"></i>
                                         }
                                     </div>
                                     <div class="small text-muted mb-3">@p.StartDate.ToString("dd MMM") - @p.EndDate.ToString("dd MMM")</div>
@@ -107,7 +106,50 @@
     }
 </div>
 
-@* ... (Quick Create Modal Logic same as before) ... *@
+@* --- QUICK ADD MODAL --- *@
+@if (showModal)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow-lg">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title fw-bold">Add New Production</h5>
+                    <button type="button" class="btn-close btn-close-white" @onclick="() => showModal = false"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">Production Title</label>
+                        <input type="text" class="form-control" @bind="editingProd.Title" placeholder="e.g. Hamlet" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">Category</label>
+                        <select class="form-select" @bind="editingProd.CategoryId">
+                            <option value="0">-- Select Category --</option>
+                            @foreach (var cat in categories)
+                            {
+                                <option value="@cat.Id">@cat.Name</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="row">
+                        <div class="col-6 mb-3">
+                            <label class="form-label small fw-bold">Start Date</label>
+                            <input type="date" class="form-control" @bind="editingProd.StartDate" />
+                        </div>
+                        <div class="col-6 mb-3">
+                            <label class="form-label small fw-bold">End Date</label>
+                            <input type="date" class="form-control" @bind="editingProd.EndDate" />
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light">
+                    <button class="btn btn-secondary" @onclick="() => showModal = false">Cancel</button>
+                    <button class="btn btn-primary px-4 fw-bold" @onclick="Save">Create Production</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
 
 @code {
     private List<Production> productions = new();
@@ -115,8 +157,6 @@
     private bool isLoading = true;
     private bool showModal = false;
     private Production editingProd = new();
-
-    // Stats
     private int totalGaps = 0;
     private int next30Days = 0;
 
@@ -129,18 +169,29 @@
         categories = await context.ProductionCategories.OrderBy(c => c.Name).ToListAsync();
         productions = await context.Productions.Include(p => p.CrewAssignments).ToListAsync();
         
-        // Calculate Statistics
         totalGaps = productions.Where(p => p.StartDate >= DateTime.Today).Count(p => HasGaps(p));
         next30Days = productions.Count(p => p.StartDate >= DateTime.Today && p.StartDate <= DateTime.Today.AddDays(30));
-        
         isLoading = false;
     }
 
-    private bool HasGaps(Production p)
+    private bool HasGaps(Production p) => p.CrewAssignments.Any(c => c.IsRequired && string.IsNullOrEmpty(c.ExternalName) && c.MemberId == null);
+
+    private void OpenAddModal()
     {
-        return p.CrewAssignments.Any(c => c.IsRequired && string.IsNullOrEmpty(c.ExternalName) && c.MemberId == null);
+        editingProd = new Production { StartDate = DateTime.Today, EndDate = DateTime.Today.AddDays(7) };
+        showModal = true;
     }
-    
-    private void OpenAddModal() { /* Logic to open modal */ }
-    private async Task Save() { /* Logic to save new production */ }
+
+    private async Task Save()
+    {
+        if (string.IsNullOrWhiteSpace(editingProd.Title) || editingProd.CategoryId == 0) return;
+
+        using var context = await DbFactory.CreateDbContextAsync();
+        context.Productions.Add(editingProd);
+        await context.SaveChangesAsync();
+        
+        showModal = false;
+        await LoadData();
+        Nav.NavigateTo($"/admin/production/hub/{editingProd.Id}");
+    }
 }

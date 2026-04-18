@@ -5,70 +5,276 @@
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject NavigationManager Nav
 
-@* --- (HEADER AND OTHER CARDS OMITTED FOR BREVITY - SAME AS YOUR CURRENT VERSION) --- *@
+<div class="container-fluid py-4 max-w-7xl">
+    @* --- HEADER SECTION --- *@
+    <div class="mb-4 d-flex justify-content-between align-items-center">
+        <div>
+            <a href="/admin/production" class="text-decoration-none small text-muted">
+                <i class="bi bi-arrow-left"></i> Back to Dashboard
+            </a>
+            <h2 class="fw-bold mt-1 text-dark">
+                @prod?.Title
+                <span class="badge bg-primary ms-2 fs-6">@prod?.Category?.Name</span>
+            </h2>
+        </div>
+        <div class="d-flex gap-2 align-items-center">
+            @if (showSavedAlert)
+            {
+                <span class="text-success animate__animated animate__fadeOut me-3">
+                    <i class="bi bi-check-circle-fill"></i> Changes Saved
+                </span>
+            }
+            <button class="btn btn-primary fw-bold px-4 shadow-sm" @onclick="SaveHub">
+                <i class="bi bi-save me-2"></i>Save Hub Changes
+            </button>
+        </div>
+    </div>
 
-@* MASTER SHOW ROTA SECTION *@
-<div class="card border-0 shadow-sm mb-4">
-    <div class="card-header bg-white border-bottom p-3 d-flex justify-content-between align-items-center">
-        <h6 class="fw-bold mb-0 text-warning"><i class="bi bi-people-fill me-2"></i>Master Show Rota</h6>
-        <button class="btn btn-sm btn-outline-dark" @onclick="AddNewCrewRow">+ Add Row</button>
-    </div>
-    <div class="card-body p-0">
-        <table class="table table-hover align-middle mb-0">
-            <thead class="bg-light small">
-                <tr>
-                    <th style="width: 40px;" class="ps-3">Req?</th>
-                    <th style="width: 35%;">Role</th>
-                    <th>Assignee</th>
-                    <th style="width: 40px;"></th>
-                </tr>
-            </thead>
-            <tbody>
-                @foreach (var crew in crewList)
-                {
-                    <tr>
-                        <td class="ps-3"><input type="checkbox" @bind="crew.IsRequired" class="form-check-input" /></td>
-                        <td class="position-relative">
-                            <input type="text" class="form-control form-control-sm" value="@(crew.Role?.Name ?? crew.CustomRoleName)" @oninput="(e) => SearchRoles(crew, e)" />
-                            @* (Search dropdown logic here) *@
-                        </td>
-                        <td class="position-relative">
-                            @if (crew.MemberId != null)
-                            {
-                                <div class="input-group input-group-sm">
-                                    <span class="input-group-text bg-success-subtle text-success border-success w-100 justify-content-between">
-                                        <span>
-                                            <i class="bi bi-person-check-fill me-1"></i> @crew.Member?.FullName
-                                            
-                                            @* --- THE NEW KEY DETECTION BADGE --- *@
-                                            @if (crew.Role?.LinkedKeyBunchId != null && MemberHasPermanentKeys(crew.MemberId))
+    @if (prod == null)
+    {
+        <div class="text-center py-5"><div class="spinner-border text-primary"></div></div>
+    }
+    else
+    {
+        <div class="row g-4">
+            @* --- LEFT COLUMN: CREW & PERFORMANCES --- *@
+            <div class="col-lg-7">
+                
+                @* 1. MASTER SHOW ROTA *@
+                <div class="card border-0 shadow-sm mb-4">
+                    <div class="card-header bg-white border-bottom p-3 d-flex justify-content-between align-items-center">
+                        <h6 class="fw-bold mb-0 text-warning"><i class="bi bi-people-fill me-2"></i>Master Show Rota</h6>
+                        <button class="btn btn-sm btn-outline-dark" @onclick="AddNewCrewRow">
+                            <i class="bi bi-plus-lg me-1"></i>Add Role
+                        </button>
+                    </div>
+                    <div class="card-body p-0">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead class="bg-light small">
+                                <tr>
+                                    <th style="width: 40px;" class="ps-3">Req?</th>
+                                    <th style="width: 35%;">Role</th>
+                                    <th>Assignee</th>
+                                    <th style="width: 40px;"></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var crew in crewList)
+                                {
+                                    <tr>
+                                        <td class="ps-3"><input type="checkbox" @bind="crew.IsRequired" class="form-check-input" /></td>
+                                        <td class="position-relative">
+                                            <input type="text" class="form-control form-control-sm" value="@(crew.Role?.Name ?? crew.CustomRoleName)" @oninput="(e) => SearchRoles(crew, e)" />
+                                            @if (activeRoleSearch == crew && filteredRoles.Any())
                                             {
-                                                <span class="badge bg-info ms-2" title="Member holds permanent keys; no bunch issue required.">
-                                                    <i class="bi bi-key-fill"></i> Own Keys
-                                                </span>
+                                                <div class="list-group position-absolute z-3 shadow-lg w-100">
+                                                    @foreach (var r in filteredRoles)
+                                                    {
+                                                        <button class="list-group-item list-group-item-action small py-1" @onclick="() => SelectRole(crew, r)">@r.Name</button>
+                                                    }
+                                                </div>
                                             }
-                                        </span>
-                                        <i class="bi bi-x-lg cursor-pointer" @onclick="() => ClearAssignee(crew)"></i>
-                                    </span>
+                                        </td>
+                                        <td class="position-relative">
+                                            @if (crew.MemberId != null)
+                                            {
+                                                <div class="input-group input-group-sm">
+                                                    <span class="input-group-text bg-success-subtle text-success border-success w-100 justify-content-between">
+                                                        <span>
+                                                            <i class="bi bi-person-check-fill me-1"></i> @crew.Member?.FullName
+                                                            @if (crew.Role?.LinkedKeyBunchId != null && MemberHasPermanentKeys(crew.MemberId))
+                                                            {
+                                                                <span class="badge bg-info ms-2" title="Member holds permanent keys"><i class="bi bi-key-fill"></i> Own Keys</span>
+                                                            }
+                                                        </span>
+                                                        <i class="bi bi-x-lg cursor-pointer" @onclick="() => ClearAssignee(crew)"></i>
+                                                    </span>
+                                                </div>
+                                            }
+                                            else
+                                            {
+                                                <input type="text" class="form-control form-control-sm" placeholder="Search members..." value="@crew.ExternalName" @oninput="(e) => SearchMembers(crew, e)" />
+                                                @if (activeMemberSearch == crew && filteredMembers.Any())
+                                                {
+                                                    <div class="list-group position-absolute z-3 shadow-lg w-100">
+                                                        @foreach (var m in filteredMembers)
+                                                        {
+                                                            <button class="list-group-item list-group-item-action small py-1" @onclick="() => SelectMember(crew, m)">@m.FullName</button>
+                                                        }
+                                                    </div>
+                                                }
+                                            }
+                                        </td>
+                                        <td class="pe-3"><button class="btn btn-sm text-danger" @onclick="() => crewList.Remove(crew)"><i class="bi bi-trash"></i></button></td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                @* 2. PERFORMANCE MANAGER *@
+                <div class="card border-0 shadow-sm mb-4">
+                    <div class="card-header bg-white border-bottom p-3 d-flex justify-content-between align-items-center">
+                        <h6 class="fw-bold mb-0 text-primary"><i class="bi bi-calendar-check me-2"></i>Performances</h6>
+                        <button class="btn btn-sm btn-outline-primary" @onclick="() => showGenerator = !showGenerator">
+                            <i class="bi bi-magic me-1"></i> Run Generator
+                        </button>
+                    </div>
+
+                    @if (showGenerator)
+                    {
+                        <div class="card-body bg-light border-bottom p-3 animate__animated animate__fadeInDown">
+                            <div class="row g-3 align-items-end">
+                                <div class="col-md-3">
+                                    <label class="small fw-bold">Default Start</label>
+                                    <input type="time" class="form-control form-control-sm" @bind="genTime" />
                                 </div>
-                            }
-                            else
-                            {
-                                <input type="text" class="form-control form-control-sm" placeholder="Search members..." value="@crew.ExternalName" @oninput="(e) => SearchMembers(crew, e)" />
-                            }
-                        </td>
-                        <td class="pe-3"><button class="btn btn-sm text-danger" @onclick="() => crewList.Remove(crew)"><i class="bi bi-trash"></i></button></td>
-                    </tr>
+                                <div class="col-md-6">
+                                    <label class="small fw-bold">Days of Week</label>
+                                    <div class="d-flex flex-wrap gap-2 mt-1">
+                                        @foreach (DayOfWeek day in Enum.GetValues(typeof(DayOfWeek)))
+                                        {
+                                            <div class="form-check form-check-inline">
+                                                <input class="form-check-input" type="checkbox" @onchange="(e) => ToggleGenDay(day, e)" checked="@genDays.Contains(day)" />
+                                                <label class="small">@day.ToString().Substring(0, 3)</label>
+                                            </div>
+                                        }
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <button class="btn btn-sm btn-primary w-100 fw-bold" @onclick="GeneratePerformances">Generate Run</button>
+                                </div>
+                            </div>
+                        </div>
+                    }
+
+                    <div class="card-body p-0">
+                        <table class="table table-sm align-middle mb-0">
+                            <thead class="bg-light small">
+                                <tr>
+                                    <th class="ps-3" style="width: 200px;">Date & Time</th>
+                                    <th>Performance Title / Note</th>
+                                    <th style="width: 50px;"></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var perf in performances.OrderBy(p => p.CurtainUp))
+                                {
+                                    <tr>
+                                        @* DATE EDITING FIX: Bound to datetime-local *@
+                                        <td class="ps-3"><input type="datetime-local" class="form-control form-control-sm border-0" @bind="perf.CurtainUp" /></td>
+                                        <td><input type="text" class="form-control form-control-sm border-0" @bind="perf.PerformanceTitle" placeholder="Show Note (e.g. Matinee)" /></td>
+                                        <td class="text-end pe-3">
+                                            <button class="btn btn-sm text-danger" @onclick="() => performances.Remove(perf)"><i class="bi bi-x-circle"></i></button>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                        <button class="btn btn-sm btn-link text-decoration-none m-2" @onclick="AddSinglePerformance">+ Add Extra Performance</button>
+                    </div>
+                </div>
+            </div>
+
+            @* --- RIGHT COLUMN: TECH & LOGISTICS --- *@
+            <div class="col-lg-5">
+                @if (prod.Category?.IsExternal == true)
+                {
+                    <div class="card border-0 shadow-sm p-3 mb-4 border-start border-4 border-success">
+                        <h6 class="fw-bold text-success small text-uppercase mb-3">Hire & Access Details</h6>
+                        <div class="mb-2">
+                            <label class="small fw-bold">Hirer Name</label>
+                            <input type="text" class="form-control form-control-sm" @bind="prod.HirerName" />
+                        </div>
+                        <div class="row">
+                            <div class="col-6">
+                                <label class="small fw-bold">Access Time</label>
+                                <input type="time" class="form-control form-control-sm" @bind="prod.AccessTime" />
+                            </div>
+                            <div class="col-6 pt-4 text-end">
+                                <div class="form-check form-switch d-inline-block">
+                                    <input class="form-check-input" type="checkbox" @bind="prod.OurCrew" id="ocrew" />
+                                    <label class="form-check-label small fw-bold" for="ocrew">Apollo Crew?</label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 }
-            </tbody>
-        </table>
-    </div>
+
+                <div class="card border-0 shadow-sm p-4 bg-dark text-white mb-4">
+                    <h6 class="fw-bold border-bottom border-secondary pb-2 text-info">Technical Summary</h6>
+                    <textarea class="form-control bg-dark text-white border-secondary mt-3" rows="8" @bind="prod.TechRequirements" placeholder="Sound, Lighting, Stage notes..."></textarea>
+                </div>
+
+                @* LOGISTICS & KEY HOLDERS FIX: Added Member Selectors *@
+                <div class="card border-0 shadow-sm p-3 mb-4 border-start border-4 border-info">
+                    <h6 class="fw-bold text-info small text-uppercase mb-3">Logistics & FOH</h6>
+                    <div class="row g-2 mb-3">
+                        <div class="col-6">
+                            <label class="small fw-bold">Running Time (Mins)</label>
+                            <input type="number" class="form-control form-control-sm" @bind="prod.RunningTimeMinutes" />
+                        </div>
+                        <div class="col-6">
+                            <label class="small fw-bold">Interval (Mins)</label>
+                            <input type="number" class="form-control form-control-sm" @bind="prod.IntervalMinutes" />
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="small fw-bold">Unlocking Personnel</label>
+                        <select class="form-select form-select-sm" @bind="prod.UnlockingMemberId">
+                            <option value="">-- Select Member --</option>
+                            @foreach (var m in allMembers)
+                            {
+                                <option value="@m.Id">@m.FullName</option>
+                            }
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="small fw-bold">Locking Personnel</label>
+                        <select class="form-select form-select-sm" @bind="prod.LockingMemberId">
+                            <option value="">-- Select Member --</option>
+                            @foreach (var m in allMembers)
+                            {
+                                <option value="@m.Id">@m.FullName</option>
+                            }
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="small fw-bold text-danger">Content Warnings</label>
+                        <input type="text" class="form-control form-control-sm" @bind="prod.ContentWarnings" placeholder="Strobes, Loud Noises, Smoke..." />
+                    </div>
+
+                    <div class="mb-0">
+                        <label class="small fw-bold">FOH Instructions</label>
+                        <textarea class="form-control form-control-sm" rows="3" @bind="prod.FOHNotes"></textarea>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
 </div>
 
-@* --- (REST OF CARDS OMITTED) --- *@
-
 @code {
-    // ... existing variables ...
+    [Parameter] public int id { get; set; }
+    private Production? prod;
+    private List<ProductionCrew> crewList = new();
+    private List<Performance> performances = new();
+    
+    // UI States
+    private bool showSavedAlert = false;
+    private bool showGenerator = false;
+    private DateTime genTime = DateTime.Today.AddHours(19).AddMinutes(30);
+    private List<DayOfWeek> genDays = new() { DayOfWeek.Tuesday, DayOfWeek.Wednesday, DayOfWeek.Thursday, DayOfWeek.Friday, DayOfWeek.Saturday };
+    private List<ProductionRole> allTemplateRoles = new();
+    private List<ProductionRole> filteredRoles = new();
+    private ProductionCrew? activeRoleSearch;
+    private List<Member> allMembers = new();
+    private List<Member> filteredMembers = new();
+    private ProductionCrew? activeMemberSearch;
     private List<string> membersWithPermanentKeys = new();
 
     protected override async Task OnInitializedAsync()
@@ -78,9 +284,11 @@
         
         if (prod != null)
         {
-            // (Existing data loading...)
+            crewList = await context.ProductionCrews.Include(c => c.Role).Include(c => c.Member).Where(c => c.ProductionId == id).ToListAsync();
+            performances = await context.Performances.Include(p => p.Overrides).Where(p => p.ProductionId == id).ToListAsync();
+            allMembers = await context.Members.OrderByDescending(m => m.IsTechTeam).ToListAsync();
+            allTemplateRoles = await context.ProductionRoles.Where(r => r.CategoryId == prod.CategoryId).ToListAsync();
             
-            // Pre-fetch a list of names who have permanent keys to speed up UI rendering
             membersWithPermanentKeys = await context.Keys
                 .Where(k => k.Status == "Issued" && !string.IsNullOrEmpty(k.IssuedToName))
                 .Select(k => k.IssuedToName!)
@@ -93,11 +301,80 @@
     {
         if (memberId == null) return false;
         var member = allMembers.FirstOrDefault(m => m.Id == memberId);
-        if (member == null) return false;
-        
-        // Match by Full Name
-        return membersWithPermanentKeys.Contains(member.FullName);
+        return member != null && membersWithPermanentKeys.Contains(member.FullName);
     }
+
+    // --- SEARCH LOGIC ---
+    private void SearchRoles(ProductionCrew crew, ChangeEventArgs e)
+    {
+        var val = e.Value?.ToString() ?? "";
+        activeRoleSearch = crew; crew.RoleId = null; crew.Role = null; crew.CustomRoleName = val;
+        filteredRoles = allTemplateRoles.Where(r => r.Name.Contains(val, StringComparison.OrdinalIgnoreCase)).ToList();
+    }
+    private void SelectRole(ProductionCrew crew, ProductionRole r)
+    {
+        crew.RoleId = r.Id; crew.Role = r; crew.CustomRoleName = null; activeRoleSearch = null;
+    }
+    private void SearchMembers(ProductionCrew crew, ChangeEventArgs e)
+    {
+        var val = e.Value?.ToString() ?? "";
+        activeMemberSearch = crew; crew.ExternalName = val;
+        filteredMembers = allMembers.Where(m => m.FullName.Contains(val, StringComparison.OrdinalIgnoreCase)).Take(10).ToList();
+    }
+    private void SelectMember(ProductionCrew crew, Member m)
+    {
+        crew.MemberId = m.Id; crew.Member = m; crew.ExternalName = null; activeMemberSearch = null;
+    }
+    private void ClearAssignee(ProductionCrew crew) { crew.MemberId = null; crew.Member = null; crew.ExternalName = null; }
+
+    private void AddNewCrewRow() => crewList.Add(new ProductionCrew { ProductionId = id, IsRequired = true });
+    private void AddSinglePerformance() => performances.Add(new Performance { ProductionId = id, CurtainUp = prod!.StartDate.AddHours(19.5) });
     
-    // ... (rest of search/save methods) ...
+    private void ToggleGenDay(DayOfWeek d, ChangeEventArgs e) { if ((bool)e.Value!) genDays.Add(d); else genDays.Remove(d); }
+    private void GeneratePerformances()
+    {
+        for (var date = prod!.StartDate; date <= prod.EndDate; date = date.AddDays(1))
+        {
+            if (genDays.Contains(date.DayOfWeek)) performances.Add(new Performance { ProductionId = id, CurtainUp = date.Date.Add(genTime.TimeOfDay), PerformanceTitle = "Standard Show" });
+        }
+        showGenerator = false;
+    }
+
+    private async Task SaveHub()
+    {
+        using var context = await DbFactory.CreateDbContextAsync();
+        context.Productions.Update(prod!);
+
+        // Sync Crew
+        var oldCrew = await context.ProductionCrews.Where(c => c.ProductionId == id).ToListAsync();
+        context.ProductionCrews.RemoveRange(oldCrew);
+        context.ProductionCrews.AddRange(crewList.Select(c => new ProductionCrew
+        {
+            ProductionId = id,
+            RoleId = c.RoleId,
+            CustomRoleName = c.CustomRoleName,
+            MemberId = c.MemberId,
+            ExternalName = c.ExternalName,
+            IsRequired = c.IsRequired
+        }));
+
+        // Sync Performances (Identity Insert Fix)
+        var oldPerf = await context.Performances.Include(p => p.Overrides).Where(p => p.ProductionId == id).ToListAsync();
+        context.Performances.RemoveRange(oldPerf);
+        foreach (var p in performances)
+        {
+            var newPerf = new Performance
+            {
+                ProductionId = id,
+                CurtainUp = p.CurtainUp,
+                PerformanceTitle = p.PerformanceTitle,
+                Overrides = p.Overrides.Select(o => new PerformanceCrewOverride { RoleId = o.RoleId, CustomRoleName = o.CustomRoleName, MemberId = o.MemberId, ExternalName = o.ExternalName }).ToList()
+            };
+            context.Performances.Add(newPerf);
+        }
+
+        await context.SaveChangesAsync();
+        showSavedAlert = true; StateHasChanged();
+        await Task.Delay(2000); showSavedAlert = false; StateHasChanged();
+    }
 }

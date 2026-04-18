@@ -157,7 +157,7 @@
         else selectedCategoryIds.Remove(id);
     }
 
-    private async Task LoadReport()
+private async Task LoadReport()
     {
         reportData = null;
         using var context = await DbFactory.CreateDbContextAsync();
@@ -170,19 +170,28 @@
             .Where(c => c.Production!.StartDate >= dateFrom && c.Production.StartDate <= dateTo);
 
         if (selectedCategoryIds.Any())
-        {
             query = query.Where(c => selectedCategoryIds.Contains(c.Production!.CategoryId));
-        }
 
         var results = await query.ToListAsync();
 
         reportData = results.Select(c => new GapReportItem {
+            ProductionId = c.ProductionId, // ADDED THIS LINE
             ProductionTitle = c.Production!.Title,
             StartDate = c.Production.StartDate,
             CategoryName = c.Production.Category?.Name ?? "N/A",
             RoleName = c.Role?.Name ?? c.CustomRoleName ?? "Unknown Role",
             TechNote = c.Production.TechRequirements
         }).OrderBy(r => r.StartDate).ToList();
+    }
+
+    public class GapReportItem
+    {
+        public int ProductionId { get; set; } // ADDED THIS LINE
+        public string ProductionTitle { get; set; } = "";
+        public DateTime StartDate { get; set; }
+        public string CategoryName { get; set; } = "";
+        public string RoleName { get; set; } = "";
+        public string? TechNote { get; set; }
     }
 
     private async Task PrintReport() => await JS.InvokeVoidAsync("window.print");
@@ -201,14 +210,5 @@
             fileLink.download = 'Crew_Gaps_Report.doc';
             fileLink.click();
         ");
-    }
-
-    public class GapReportItem
-    {
-        public string ProductionTitle { get; set; } = "";
-        public DateTime StartDate { get; set; }
-        public string CategoryName { get; set; } = "";
-        public string RoleName { get; set; } = "";
-        public string? TechNote { get; set; }
     }
 }

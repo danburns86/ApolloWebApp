@@ -8,208 +8,257 @@
 @{
     var logoUrl = Config?.NavbarLogoUrl ?? "/images/default-logo.png";
     var theatreName = Config?.TheatreName ?? "APOLLO";
-    var chevronClass = KeysExpanded ? "bi-chevron-down" : "bi-chevron-right";
-    var maintChevronClass = MaintExpanded ? "bi-chevron-down" : "bi-chevron-right";
-    var assetChevronClass = AssetsExpanded ? "bi-chevron-down" : "bi-chevron-right";
+    
+    // Chevron Classes for UI state
+    var keysChevron = KeysExpanded ? "bi-chevron-down" : "bi-chevron-right";
+    var maintChevron = MaintExpanded ? "bi-chevron-down" : "bi-chevron-right";
+    var assetChevron = AssetsExpanded ? "bi-chevron-down" : "bi-chevron-right";
+    var prodChevron = ProdExpanded ? "bi-chevron-down" : "bi-chevron-right";
+    var memberChevron = MembersExpanded ? "bi-chevron-down" : "bi-chevron-right";
+    var reportChevron = ReportsExpanded ? "bi-chevron-down" : "bi-chevron-right";
+    var adminChevron = AdminExpanded ? "bi-chevron-down" : "bi-chevron-right";
 }
 
 <div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
     
+    @* --- BRANDING SECTION --- *@
     <div class="text-center py-3 border-bottom border-secondary mb-2" style="background-color: rgba(0,0,0,0.1);">
-        <img src="@logoUrl" alt="Theatre Logo" style="max-height: 60px; max-width: 80%; object-fit: contain;" onerror="this.style.display='none';" />
+        <img src="@logoUrl" alt="Logo" style="max-height: 60px; max-width: 80%; object-fit: contain;"
+             onerror="this.style.display='none';" />
         <div class="text-white fw-bold mt-1" style="font-size: 1.1rem; letter-spacing: 1px;">@theatreName</div>
     </div>
 
     <nav class="flex-column">
         
+        @* --- GLOBAL DASHBOARD --- *@
         <div class="nav-item px-3">
             <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
                 <span class="bi bi-speedometer2 me-2" aria-hidden="true"></span> Dashboard
             </NavLink>
         </div>
 
-        @* KEY MANAGEMENT GROUP *@
-        <AuthorizeView Policy="@Apollo.Models.SystemPermissions.ViewInventory">
-            <Authorized>
-                <div class="nav-item px-3">
-                    <button class="nav-link bg-transparent border-0 w-100 text-start shadow-none d-flex align-items-center" @onclick="ToggleKeys" @onclick:stopPropagation="true">
-                        <span class="bi bi-key-fill me-2" aria-hidden="true"></span> Key Management
-                        <span class="bi @chevronClass ms-auto" aria-hidden="true"></span>
-                    </button>
-                </div>
-                
-                @if (KeysExpanded)
-                {
-                    <div class="nav-item px-3 ms-3">
-                        <NavLink class="nav-link py-2" href="keys/dashboard" Match="NavLinkMatch.All">
-                            <span class="bi bi-house me-2" aria-hidden="true"></span> Key Dashboard
-                        </NavLink>
-                    </div>
-                    <div class="nav-item px-3 ms-3">
-                        <NavLink class="nav-link py-2" href="keys" Match="NavLinkMatch.All">
-                            <span class="bi bi-list-ul me-2" aria-hidden="true"></span> Key Inventory
-                        </NavLink>
-                    </div>
-                    <div class="nav-item px-3 ms-3">
-                        <NavLink class="nav-link py-2" href="bunches" Match="NavLinkMatch.All">
-                            <span class="bi bi-circle me-2" aria-hidden="true"></span> Bunches
-                        </NavLink>
-                    </div>
+        @* --- PERSONNEL & MEMBERSHIP --- *@
+        <div class="nav-item px-3">
+            <button class="nav-link bg-transparent border-0 w-100 text-start shadow-none d-flex align-items-center" @onclick="ToggleMembers" @onclick:stopPropagation="true">
+                <span class="bi bi-people-fill me-2" aria-hidden="true"></span> Personnel
+                <span class="bi @memberChevron ms-auto" aria-hidden="true"></span>
+            </button>
+        </div>
+        @if (MembersExpanded)
+        {
+            <div class="nav-item px-3 ms-3">
+                <NavLink class="nav-link py-1" href="admin/members" Match="NavLinkMatch.All">
+                    <span class="bi bi-person-lines-fill me-2" aria-hidden="true"></span> Member Registry
+                </NavLink>
+                <NavLink class="nav-link py-1" href="admin/members/import" Match="NavLinkMatch.All">
+                    <span class="bi bi-cloud-arrow-down me-2" aria-hidden="true"></span> Mojo Sync (CSV)
+                </NavLink>
+            </div>
+        }
 
-                    <AuthorizeView Policy="@Apollo.Models.SystemPermissions.ManageSystemSettings" Context="LockContext">
-                        <Authorized>
-                            <div class="nav-item px-3 ms-3">
-                                <NavLink class="nav-link py-2" href="locks">
-                                    <span class="bi bi-door-closed me-2" aria-hidden="true"></span> Lock Setup
-                                </NavLink>
-                            </div>
-                        </Authorized>
-                    </AuthorizeView>
-                    
-                    <AuthorizeView Policy="@Apollo.Models.SystemPermissions.IssueReturn" Context="IssueContext">
-                        <Authorized>
-                            <div class="nav-item px-3 ms-3">
-                                <NavLink class="nav-link py-2" href="issue-return">
-                                    <span class="bi bi-arrow-left-right me-2" aria-hidden="true"></span> Issue & Return
-                                </NavLink>
-                            </div>
-                        </Authorized>
-                    </AuthorizeView>
+        @* --- PRODUCTION PLANNING --- *@
+        <div class="nav-item px-3">
+            <button class="nav-link bg-transparent border-0 w-100 text-start shadow-none d-flex align-items-center" @onclick="ToggleProd" @onclick:stopPropagation="true">
+                <span class="bi bi-calendar-event me-2" aria-hidden="true"></span> Production
+                <span class="bi @prodChevron ms-auto" aria-hidden="true"></span>
+            </button>
+        </div>
+        @if (ProdExpanded)
+        {
+            <div class="nav-item px-3 ms-3">
+                <NavLink class="nav-link py-1" href="admin/production" Match="NavLinkMatch.All">
+                    <span class="bi bi-grid-3x3-gap me-2" aria-hidden="true"></span> Show Dashboard
+                </NavLink>
+                <NavLink class="nav-link py-1" href="admin/production/roles" Match="NavLinkMatch.All">
+                    <span class="bi bi-person-badge-fill me-2" aria-hidden="true"></span> Role Templates
+                </NavLink>
+                <NavLink class="nav-link py-1" href="admin/production/settings" Match="NavLinkMatch.All">
+                    <span class="bi bi-sliders me-2" aria-hidden="true"></span> Show Settings
+                </NavLink>
+                <NavLink class="nav-link py-1" href="reports/ProductionDashboard" Match="NavLinkMatch.All">
+                    <span class="bi bi-file-earmark-bar-graph me-2" aria-hidden="true"></span> Module Reports
+                </NavLink>
+            </div>
+        }
 
-                    <AuthorizeView Policy="@Apollo.Models.SystemPermissions.PerformAudit" Context="AuditContext">
-                        <Authorized>
-                            <div class="nav-item px-3 ms-3">
-                                <NavLink class="nav-link py-2" href="audit">
-                                    <span class="bi bi-clipboard-check me-2" aria-hidden="true"></span> Key Audit
-                                </NavLink>
-                            </div>
-                        </Authorized>
-                    </AuthorizeView>
-                }
-            </Authorized>
-        </AuthorizeView>
+        @* --- KEY MANAGEMENT --- *@
+        <div class="nav-item px-3">
+            <button class="nav-link bg-transparent border-0 w-100 text-start shadow-none d-flex align-items-center" @onclick="ToggleKeys" @onclick:stopPropagation="true">
+                <span class="bi bi-key-fill me-2" aria-hidden="true"></span> Key Management
+                <span class="bi @keysChevron ms-auto" aria-hidden="true"></span>
+            </button>
+        </div>
+        @if (KeysExpanded)
+        {
+            <div class="nav-item px-3 ms-3">
+                <NavLink class="nav-link py-1" href="keys/dashboard" Match="NavLinkMatch.All">
+                    <span class="bi bi-house-door me-2" aria-hidden="true"></span> Dashboard
+                </NavLink>
+                <NavLink class="nav-link py-1" href="keys" Match="NavLinkMatch.All">
+                    <span class="bi bi-list-ul me-2" aria-hidden="true"></span> Key Inventory
+                </NavLink>
+                <NavLink class="nav-link py-1" href="bunches" Match="NavLinkMatch.All">
+                    <span class="bi bi-circle me-2" aria-hidden="true"></span> Bunches
+                </NavLink>
+                <NavLink class="nav-link py-1" href="issue-return" Match="NavLinkMatch.All">
+                    <span class="bi bi-arrow-left-right me-2" aria-hidden="true"></span> Issue & Return
+                </NavLink>
+                <NavLink class="nav-link py-1" href="audit" Match="NavLinkMatch.All">
+                    <span class="bi bi-clipboard-check me-2" aria-hidden="true"></span> Key Audit
+                </NavLink>
 
-        @* MAINTENANCE HUB GROUP *@
-        <AuthorizeView Policy="@Apollo.Models.SystemPermissions.ManageMaintenance">
-            <Authorized>
-                <div class="nav-item px-3">
-                    <button class="nav-link bg-transparent border-0 w-100 text-start shadow-none d-flex align-items-center" @onclick="ToggleMaintenance" @onclick:stopPropagation="true">
-                        <span class="bi bi-tools me-2" aria-hidden="true"></span> Maintenance Hub
-                        <span class="bi @maintChevronClass ms-auto" aria-hidden="true"></span>
-                    </button>
-                </div>
-                
-                @if (MaintExpanded)
-                {
-                    <div class="nav-item px-3 ms-3">
-                        <NavLink class="nav-link py-2" href="admin/maintenance/new">
-                            <span class="bi bi-plus-circle me-2" aria-hidden="true"></span> Log New Job
-                        </NavLink>
-                    </div>
-                    <div class="nav-item px-3 ms-3">
-                        <NavLink class="nav-link py-2" href="admin/maintenance" Match="NavLinkMatch.All">
-                            <span class="bi bi-clipboard-pulse me-2" aria-hidden="true"></span> Triage Dashboard
-                        </NavLink>
-                    </div>
-                    <div class="nav-item px-3 ms-3">
-                        <NavLink class="nav-link py-2" href="admin/maintenance/log">
-                            <span class="bi bi-journal-text me-2" aria-hidden="true"></span> Master Log
-                        </NavLink>
-                    </div>
-                }
-            </Authorized>
-        </AuthorizeView>
+                <div class="small text-muted mt-2 mb-1 ms-2 border-bottom border-secondary border-opacity-25">Setup & Registry</div>
+                <NavLink class="nav-link py-1" href="locks">
+                    <span class="bi bi-door-closed me-2" aria-hidden="true"></span> Locks
+                </NavLink>
+                <NavLink class="nav-link py-1" href="signatories">
+                    <span class="bi bi-person-check me-2" aria-hidden="true"></span> Signatories
+                </NavLink>
+                <NavLink class="nav-link py-1" href="suppliers">
+                    <span class="bi bi-truck me-2" aria-hidden="true"></span> Suppliers
+                </NavLink>
+                <NavLink class="nav-link py-1" href="storage-locations">
+                    <span class="bi bi-archive me-2" aria-hidden="true"></span> Storage
+                </NavLink>
+                <NavLink class="nav-link py-1" href="form-factors">
+                    <span class="bi bi-tag me-2" aria-hidden="true"></span> Form Factors
+                </NavLink>
+                <NavLink class="nav-link py-1" href="user-overrides">
+                    <span class="bi bi-person-gear me-2" aria-hidden="true"></span> Overrides
+                </NavLink>
+                <NavLink class="nav-link py-1" href="keys/reports" Match="NavLinkMatch.All">
+                    <span class="bi bi-file-earmark-text me-2" aria-hidden="true"></span> Module Reports
+                </NavLink>
+            </div>
+        }
 
-        @* ASSET TRACKING GROUP *@
-        <AuthorizeView Policy="@Apollo.Models.SystemPermissions.ViewAssets">
-            <Authorized>
-                <div class="nav-item px-3">
-                    <button class="nav-link bg-transparent border-0 w-100 text-start shadow-none d-flex align-items-center" @onclick="ToggleAssets" @onclick:stopPropagation="true">
-                        <span class="bi bi-boxes me-2" aria-hidden="true"></span> Asset Tracking
-                        <span class="bi @assetChevronClass ms-auto" aria-hidden="true"></span>
-                    </button>
-                </div>
-                
-                @if (AssetsExpanded)
-                {
-                    <div class="nav-item px-3 ms-3">
-                        @* Added Match="NavLinkMatch.All" to prevent dashboard highlighting sub-items *@
-                        <NavLink class="nav-link py-2" href="admin/assets/dashboard" Match="NavLinkMatch.All">
-                            <span class="bi bi-speedometer2 me-2" aria-hidden="true"></span> Asset Dashboard
-                        </NavLink>
-                    </div>
-                    <div class="nav-item px-3 ms-3">
-                        @* Added Match="NavLinkMatch.All" to prevent Registry highlighting when in Reports *@
-                        <NavLink class="nav-link py-2" href="admin/assets" Match="NavLinkMatch.All">
-                            <span class="bi bi-list-ul me-2" aria-hidden="true"></span> Registry
-                        </NavLink>
-                    </div>
-                    <div class="nav-item px-3 ms-3">
-                        @* Added Match="NavLinkMatch.All" here too for consistency *@
-                        <NavLink class="nav-link py-2" href="admin/assets/reports" Match="NavLinkMatch.All">
-                            <span class="bi bi-bar-chart-fill me-2" aria-hidden="true"></span> Reports Hub
-                        </NavLink>
-                    </div>
-                }
-            </Authorized>
-        </AuthorizeView>
+        @* --- MAINTENANCE HUB --- *@
+        <div class="nav-item px-3">
+            <button class="nav-link bg-transparent border-0 w-100 text-start shadow-none d-flex align-items-center" @onclick="ToggleMaintenance" @onclick:stopPropagation="true">
+                <span class="bi bi-tools me-2" aria-hidden="true"></span> Maintenance
+                <span class="bi @maintChevron ms-auto" aria-hidden="true"></span>
+            </button>
+        </div>
+        @if (MaintExpanded)
+        {
+            <div class="nav-item px-3 ms-3">
+                <NavLink class="nav-link py-1" href="admin/maintenance" Match="NavLinkMatch.All">
+                    <span class="bi bi-clipboard-pulse me-2" aria-hidden="true"></span> Triage Dashboard
+                </NavLink>
+                <NavLink class="nav-link py-1" href="admin/maintenance/new">
+                    <span class="bi bi-plus-circle me-2" aria-hidden="true"></span> Log New Job
+                </NavLink>
+                <NavLink class="nav-link py-1" href="admin/maintenance/log">
+                    <span class="bi bi-journal-text me-2" aria-hidden="true"></span> Master Log
+                </NavLink>
+                <NavLink class="nav-link py-1" href="admin/maintenance/reports" Match="NavLinkMatch.All">
+                    <span class="bi bi-file-earmark-medical me-2" aria-hidden="true"></span> Module Reports
+                </NavLink>
+            </div>
+        }
 
-        @* REPORTS & ANALYTICS GROUP *@
-        <AuthorizeView Policy="@Apollo.Models.SystemPermissions.ManageSystemSettings" Context="ReportContext">
-            <Authorized>
-                <div class="nav-item px-3 mt-2 pt-2 border-top border-secondary border-opacity-25">
-                    <button class="nav-link bg-transparent border-0 w-100 text-start shadow-none d-flex align-items-center" @onclick="ToggleReports" @onclick:stopPropagation="true">
-                        <span class="bi bi-graph-up me-2" aria-hidden="true"></span> Reports & Analytics
-                        <span class="bi @(ReportsExpanded ? "bi-chevron-down" : "bi-chevron-right") ms-auto" aria-hidden="true"></span>
-                    </button>
-                </div>
-                
-                @if (ReportsExpanded)
-                {
-                    <div class="nav-item px-3 ms-3">
-                        <NavLink class="nav-link py-2" href="reports" Match="NavLinkMatch.All">
-                            <span class="bi bi-grid-1x2 me-2" aria-hidden="true"></span> Master Hub
-                        </NavLink>
-                    </div>
-                    <div class="nav-item px-3 ms-3">
-                        <NavLink class="nav-link py-2" href="keys/reports">
-                            <span class="bi bi-key me-2" aria-hidden="true"></span> Key Reports
-                        </NavLink>
-                    </div>
-                    <div class="nav-item px-3 ms-3">
-                        <NavLink class="nav-link py-2" href="admin/maintenance/reports">
-                            <span class="bi bi-tools me-2" aria-hidden="true"></span> Maintenance Lists
-                        </NavLink>
-                    </div>
-                }
-            </Authorized>
-        </AuthorizeView>
+        @* --- ASSET TRACKING --- *@
+        <div class="nav-item px-3">
+            <button class="nav-link bg-transparent border-0 w-100 text-start shadow-none d-flex align-items-center" @onclick="ToggleAssets" @onclick:stopPropagation="true">
+                <span class="bi bi-boxes me-2" aria-hidden="true"></span> Asset Tracking
+                <span class="bi @assetChevron ms-auto" aria-hidden="true"></span>
+            </button>
+        </div>
+        @if (AssetsExpanded)
+        {
+            <div class="nav-item px-3 ms-3">
+                <NavLink class="nav-link py-1" href="admin/assets/dashboard" Match="NavLinkMatch.All">
+                    <span class="bi bi-speedometer2 me-2" aria-hidden="true"></span> Asset Dashboard
+                </NavLink>
+                <NavLink class="nav-link py-1" href="admin/assets" Match="NavLinkMatch.All">
+                    <span class="bi bi-list-ul me-2" aria-hidden="true"></span> Asset Registry
+                </NavLink>
+                <NavLink class="nav-link py-1" href="admin/assets/categories" Match="NavLinkMatch.All">
+                    <span class="bi bi-tags me-2" aria-hidden="true"></span> Categories
+                </NavLink>
+                <NavLink class="nav-link py-1" href="admin/assets/import" Match="NavLinkMatch.All">
+                    <span class="bi bi-upload me-2" aria-hidden="true"></span> Import Tool
+                </NavLink>
+                <NavLink class="nav-link py-1" href="admin/assets/reports" Match="NavLinkMatch.All">
+                    <span class="bi bi-file-earmark-check me-2" aria-hidden="true"></span> Module Reports
+                </NavLink>
+            </div>
+        }
 
-        @* SYSTEM ADMIN SECTION *@
+        @* --- GLOBAL REPORTS & ANALYTICS --- *@
+        <div class="nav-item px-3 mt-2 border-top border-secondary pt-2">
+            <button class="nav-link bg-transparent border-0 w-100 text-start shadow-none d-flex align-items-center" @onclick="ToggleReports" @onclick:stopPropagation="true">
+                <span class="bi bi-graph-up me-2" aria-hidden="true"></span> Reports Hub
+                <span class="bi @reportChevron ms-auto" aria-hidden="true"></span>
+            </button>
+        </div>
+        @if (ReportsExpanded)
+        {
+            <div class="nav-item px-3 ms-3">
+                <NavLink class="nav-link py-1" href="reports" Match="NavLinkMatch.All">
+                    <span class="bi bi-grid-1x2 me-2" aria-hidden="true"></span> Master Hub
+                </NavLink>
+                <NavLink class="nav-link py-1" href="reports/ProductionDashboard">
+                    <span class="bi bi-calendar-check me-2"></span> Production
+                </NavLink>
+                <NavLink class="nav-link py-1" href="keys/reports">
+                    <span class="bi bi-key me-2"></span> Keys
+                </NavLink>
+                <NavLink class="nav-link py-1" href="admin/maintenance/reports">
+                    <span class="bi bi-tools me-2"></span> Maintenance
+                </NavLink>
+                <NavLink class="nav-link py-1" href="admin/assets/reports">
+                    <span class="bi bi-boxes me-2"></span> Assets
+                </NavLink>
+            </div>
+        }
+
+        @* --- SYSTEM ADMINISTRATION --- *@
         <AuthorizeView Policy="@Apollo.Models.SystemPermissions.ManageSystemSettings">
             <Authorized>
-                <div class="nav-item px-3 mt-2 pt-2 border-top border-secondary border-opacity-25">
-                    <NavLink class="nav-link" href="admin/locations">
-                        <i class="bi bi-geo-alt me-2"></i> Facilities
-                    </NavLink>
+                <div class="nav-item px-3 mt-2 border-top border-secondary pt-2">
+                    <button class="nav-link bg-transparent border-0 w-100 text-start shadow-none d-flex align-items-center" @onclick="ToggleAdmin" @onclick:stopPropagation="true">
+                        <span class="bi bi-gear-fill me-2" aria-hidden="true"></span> System Admin
+                        <span class="bi @adminChevron ms-auto" aria-hidden="true"></span>
+                    </button>
                 </div>
-                <div class="nav-item px-3">
-                    <NavLink class="nav-link" href="admin" Match="NavLinkMatch.All">
-                        <span class="bi bi-gear me-2" aria-hidden="true"></span> Admin Dashboard
-                    </NavLink>
-                </div>
-                <div class="nav-item px-3 ms-3">
-                    <NavLink class="nav-link py-2" href="admin/assets/categories">
-                        <span class="bi bi-tags me-2" aria-hidden="true"></span> ID Sequences
-                    </NavLink>
-                </div>
+                @if (AdminExpanded)
+                {
+                    <div class="nav-item px-3 ms-3">
+                        <NavLink class="nav-link py-1" href="admin" Match="NavLinkMatch.All">
+                            <span class="bi bi-gear me-2"></span> Admin Panel
+                        </NavLink>
+                        <NavLink class="nav-link py-1" href="admin/locations">
+                            <span class="bi bi-geo-alt me-2"></span> Facilities/Rooms
+                        </NavLink>
+                        <NavLink class="nav-link py-1" href="admin/portal-settings">
+                            <span class="bi bi-palette me-2"></span> Branding/Config
+                        </NavLink>
+                        <NavLink class="nav-link py-1" href="admin/users">
+                            <span class="bi bi-person-lock me-2"></span> User Permissions
+                        </NavLink>
+                        <NavLink class="nav-link py-1" href="admin/activity-log">
+                            <span class="bi bi-clock-history me-2"></span> System Activity
+                        </NavLink>
+                    </div>
+                }
             </Authorized>
         </AuthorizeView>
 
-        @* LOGOUT *@
+        @* --- BULK TOGGLES --- *@
+        <div class="nav-item px-3 mt-4 pt-2 border-top border-secondary d-flex gap-1">
+            <button class="btn btn-sm btn-outline-light w-50 flex-grow-1" style="font-size: 0.7rem;" @onclick="ExpandAll">
+                <i class="bi bi-plus-square"></i> ALL
+            </button>
+            <button class="btn btn-sm btn-outline-light w-50 flex-grow-1" style="font-size: 0.7rem;" @onclick="CollapseAll">
+                <i class="bi bi-dash-square"></i> NONE
+            </button>
+        </div>
+
+        @* --- LOGOUT SECTION --- *@
         <AuthorizeView>
             <Authorized>
-                <div class="nav-item px-3 border-top border-secondary mt-2 pt-2">
+                <div class="nav-item px-3 border-top border-secondary mt-2 pt-2 mb-4">
                     <form action="Account/Logout" method="post">
                         <AntiforgeryToken />
                         <input type="hidden" name="ReturnUrl" value="" />
@@ -224,15 +273,18 @@
 </div>
 
 @code {
-    private bool KeysExpanded = true;
-    private bool MaintExpanded = true;
-    private bool AssetsExpanded = true; // New
+    private bool KeysExpanded = false;
+    private bool MaintExpanded = false;
+    private bool AssetsExpanded = false;
+    private bool ProdExpanded = false;
+    private bool MembersExpanded = false;
     private bool ReportsExpanded = false;
+    private bool AdminExpanded = false;
+    
     private string UserDisplayName = "User";
     private PortalConfiguration? Config;
 
-    [CascadingParameter]
-    private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
+    [CascadingParameter] private Task<AuthenticationState> AuthStateTask { get; set; } = default!;
 
     protected override async Task OnInitializedAsync()
     {
@@ -241,18 +293,28 @@
 
         var authState = await AuthStateTask;
         var user = authState.User;
-
-        if (user?.Identity is { IsAuthenticated: true, Name: not null })
+        if (user?.Identity?.IsAuthenticated == true)
         {
             var appUser = await db.Users.FirstOrDefaultAsync(u => u.UserName == user.Identity.Name);
-            UserDisplayName = appUser != null && !string.IsNullOrWhiteSpace(appUser.FirstName)
-                ? $"{appUser.FirstName} {appUser.LastName}".Trim()
-                : user.Identity.Name;
+            UserDisplayName = appUser?.FirstName ?? user.Identity.Name ?? "User";
         }
     }
 
     private void ToggleKeys() => KeysExpanded = !KeysExpanded;
     private void ToggleMaintenance() => MaintExpanded = !MaintExpanded;
     private void ToggleAssets() => AssetsExpanded = !AssetsExpanded;
+    private void ToggleProd() => ProdExpanded = !ProdExpanded;
+    private void ToggleMembers() => MembersExpanded = !MembersExpanded;
     private void ToggleReports() => ReportsExpanded = !ReportsExpanded;
+    private void ToggleAdmin() => AdminExpanded = !AdminExpanded;
+
+    private void ExpandAll()
+    {
+        KeysExpanded = MaintExpanded = AssetsExpanded = ProdExpanded = MembersExpanded = ReportsExpanded = AdminExpanded = true;
+    }
+
+    private void CollapseAll()
+    {
+        KeysExpanded = MaintExpanded = AssetsExpanded = ProdExpanded = MembersExpanded = ReportsExpanded = AdminExpanded = false;
+    }
 }
