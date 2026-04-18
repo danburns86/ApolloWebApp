@@ -1,0 +1,220 @@
+﻿@page "/reports/Production/SeasonView"
+@using Apollo.Models
+@using Apollo.Data
+@using Microsoft.EntityFrameworkCore
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject IJSRuntime JS
+
+<PageTitle>Seasonal Overview & Crewing</PageTitle>
+
+<div class="container py-4 max-w-7xl no-print">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="fw-bold mb-0">Seasonal Overview</h2>
+            <p class="text-muted">Master schedule and crewing status report.</p>
+        </div>
+        <div class="d-flex gap-2">
+            <div class="btn-group me-2">
+                <button class="btn @(viewMode == "headline" ? "btn-dark" : "btn-outline-dark")" @onclick='() => viewMode = "headline"'>Headline View</button>
+                <button class="btn @(viewMode == "crewing" ? "btn-dark" : "btn-outline-dark")" @onclick='() => viewMode = "crewing"'>Crewing Detail</button>
+            </div>
+            <button class="btn btn-outline-dark" @onclick='() => JS.InvokeVoidAsync("window.print")'><i class="bi bi-printer me-2"></i>Print</button>
+            <button class="btn btn-outline-primary" @onclick="ExportToWord"><i class="bi bi-file-earmark-word me-2"></i>Word</button>
+        </div>
+    </div>
+
+    @* --- MASTER FILTERS --- *@
+    <div class="card border-0 shadow-sm bg-light mb-4">
+        <div class="card-body">
+            <div class="row g-3 align-items-end">
+                <div class="col-md-3">
+                    <label class="small fw-bold">Date From</label>
+                    <input type="date" class="form-control" @bind="dateFrom" />
+                </div>
+                <div class="col-md-3">
+                    <label class="small fw-bold">Date To</label>
+                    <input type="date" class="form-control" @bind="dateTo" />
+                </div>
+                <div class="col-md-4">
+                    <label class="small fw-bold">Categories</label>
+                    <div class="dropdown">
+                        <button class="btn btn-white border w-100 text-start dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                            @(selectedCategoryIds.Any() ? $"{selectedCategoryIds.Count} Selected" : "All Categories")
+                        </button>
+                        <div class="dropdown-menu p-3 w-100">
+                            @foreach (var cat in categories)
+                            {
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="sv_@cat.Id" 
+                                           checked="@selectedCategoryIds.Contains(cat.Id)"
+                                           @onchange="(e) => ToggleCategory(cat.Id, e)" />
+                                    <label class="form-check-label" for="sv_@cat.Id">@cat.Name</label>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <button class="btn btn-primary w-100 fw-bold" @onclick="LoadReport">Filter View</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@* --- REPORT CONTENT --- *@
+<div id="reportContent" class="report-paper shadow-lg p-5 mx-auto bg-white mb-5">
+    <div class="text-center border-bottom pb-4 mb-4">
+        <h1 class="fw-bold text-uppercase">Season Production Report</h1>
+        <p class="mb-0 text-muted">@dateFrom.ToString("dd MMM yyyy") — @dateTo.ToString("dd MMM yyyy")</p>
+        <span class="badge bg-dark">View: @(viewMode == "headline" ? "Headline Overview" : "Detailed Crewing")</span>
+    </div>
+
+    @if (productions == null)
+    {
+        <div class="text-center py-5 no-print"><div class="spinner-border text-primary"></div></div>
+    }
+    else if (!productions.Any())
+    {
+        <div class="alert alert-info text-center py-5">No productions found for the selected filters.</div>
+    }
+    else
+    {
+        @if (viewMode == "headline")
+        {
+            <table class="table table-bordered align-middle">
+                <thead class="table-dark">
+                    <tr>
+                        <th>Dates</th>
+                        <th>Show Title</th>
+                        <th>Category</th>
+                        <th class="text-center">Crew Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var p in productions)
+                    {
+                        var gapCount = p.CrewAssignments.Count(c => c.IsRequired && c.MemberId == null && string.IsNullOrEmpty(c.ExternalName));
+                        <tr>
+                            <td class="small">@p.StartDate.ToString("dd MMM") - @p.EndDate.ToString("dd MMM")</td>
+                            <td class="fw-bold">@p.Title</td>
+                            <td>@p.Category?.Name</td>
+                            <td class="text-center">
+                                @if (gapCount > 0) { <span class="text-danger fw-bold">@gapCount Gaps</span> }
+                                else { <span class="text-success"><i class="bi bi-check-circle-fill me-1"></i>Full</span> }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+        else
+        {
+            @foreach (var p in productions)
+            {
+                <div class="mb-5 border rounded p-4 @(HasGaps(p) ? "border-danger bg-danger-subtle" : "border-success bg-success-subtle")" style="page-break-inside: avoid;">
+                    <div class="d-flex justify-content-between align-items-start mb-3 border-bottom border-dark pb-2">
+                        <div>
+                            <h4 class="fw-bold mb-0">@p.Title</h4>
+                            <span class="text-muted small">@p.Category?.Name | @p.StartDate.ToShortDateString() - @p.EndDate.ToShortDateString()</span>
+                        </div>
+                        <div class="text-end">
+                            @if (HasGaps(p)) { <span class="badge bg-danger">CREW GAPS FOUND</span> }
+                            else { <span class="badge bg-success">CREW COMPLETE</span> }
+                        </div>
+                    </div>
+                    
+                    <div class="row row-cols-2 row-cols-md-3 g-2">
+                        @foreach (var crew in p.CrewAssignments.OrderBy(c => c.Role?.Name))
+                        {
+                            <div class="col small">
+                                <div class="p-2 bg-white rounded border shadow-sm h-100">
+                                    <div class="fw-bold border-bottom mb-1">@(crew.Role?.Name ?? crew.CustomRoleName)</div>
+                                    @if (crew.MemberId != null)
+                                    {
+                                        <div class="text-success">@crew.Member?.FullName</div>
+                                    }
+                                    else if (!string.IsNullOrEmpty(crew.ExternalName))
+                                    {
+                                        <div class="text-primary">@crew.ExternalName</div>
+                                    }
+                                    else if (crew.IsRequired)
+                                    {
+                                        <div class="text-danger fw-bold italic"><i class="bi bi-exclamation-triangle me-1"></i>MISSING</div>
+                                    }
+                                    else
+                                    {
+                                        <div class="text-muted small">Optional</div>
+                                    }
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+        }
+    }
+</div>
+
+<style>
+    .report-paper { max-width: 210mm; min-height: 297mm; font-size: 14px; }
+    .btn-white { background: white; border-color: #dee2e6; }
+    @@media print { .no-print { display: none !important; } .shadow-lg { box-shadow: none !important; } }
+</style>
+
+@code {
+    private DateTime dateFrom = DateTime.Today;
+    private DateTime dateTo = DateTime.Today.AddMonths(3);
+    private List<int> selectedCategoryIds = new();
+    private List<ProductionCategory> categories = new();
+    private List<Production>? productions;
+    private string viewMode = "headline";
+
+    protected override async Task OnInitializedAsync()
+    {
+        using var context = await DbFactory.CreateDbContextAsync();
+        categories = await context.ProductionCategories.OrderBy(c => c.Name).ToListAsync();
+        await LoadReport();
+    }
+
+    private void ToggleCategory(int id, ChangeEventArgs e)
+    {
+        if ((bool)e.Value!) selectedCategoryIds.Add(id);
+        else selectedCategoryIds.Remove(id);
+    }
+
+    private async Task LoadReport()
+    {
+        productions = null;
+        using var context = await DbFactory.CreateDbContextAsync();
+
+        var query = context.Productions
+            .Include(p => p.Category)
+            .Include(p => p.CrewAssignments).ThenInclude(c => c.Role)
+            .Include(p => p.CrewAssignments).ThenInclude(c => c.Member)
+            .Where(p => p.StartDate >= dateFrom && p.StartDate <= dateTo);
+
+        if (selectedCategoryIds.Any())
+            query = query.Where(p => selectedCategoryIds.Contains(p.CategoryId));
+
+        productions = await query.OrderBy(p => p.StartDate).ToListAsync();
+    }
+
+    private bool HasGaps(Production p) => p.CrewAssignments.Any(c => c.IsRequired && c.MemberId == null && string.IsNullOrEmpty(c.ExternalName));
+
+    private async Task ExportToWord()
+    {
+        var filename = $"Season_Report_{DateTime.Now:yyyyMMdd}.doc";
+        await JS.InvokeVoidAsync("eval", $@"
+            var header = '<html xmlns:o=""urn:schemas-microsoft-com:office:office"" xmlns:w=""urn:schemas-microsoft-com:office:word"" xmlns=""http://www.w3.org/TR/REC-html40""><head><meta charset=""utf-8""></head><body>';
+            var footer = '</body></html>';
+            var sourceHTML = header + document.getElementById('reportContent').innerHTML + footer;
+            var source = 'data:application/vnd.ms-word;charset=utf-8,' + encodeURIComponent(sourceHTML);
+            var fileLink = document.createElement('a');
+            fileLink.href = source;
+            fileLink.download = '{filename}';
+            fileLink.click();
+        ");
+    }
+}

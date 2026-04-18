@@ -1,0 +1,122 @@
+﻿@page "/reports/Production/Programme"
+@using Apollo.Models
+@using Apollo.Data
+@using Microsoft.EntityFrameworkCore
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject IJSRuntime JS
+
+<PageTitle>Programme Export</PageTitle>
+
+<div class="container py-4 max-w-4xl no-print">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="fw-bold mb-0 text-success">Programme Export</h2>
+            <p class="text-muted">Clean text copy for show programmes and marketing.</p>
+        </div>
+        <div class="d-flex gap-2">
+            @if (selectedProd != null)
+            {
+                <button class="btn btn-outline-primary" @onclick="CopyToClipboard"><i class="bi bi-clipboard me-2"></i>Copy Text</button>
+                <button class="btn btn-outline-success" @onclick="ExportToWord"><i class="bi bi-file-earmark-word me-2"></i>Word</button>
+            }
+            <a href="/reports/ProductionDashboard" class="btn btn-secondary">Back</a>
+        </div>
+    </div>
+
+    <div class="card border-0 shadow-sm mb-4 bg-light">
+        <div class="card-body">
+            <label class="small fw-bold">Select Production</label>
+            <select class="form-select" @onchange="OnProductionSelected">
+                <option value="0">-- Select Show --</option>
+                @foreach (var p in allProductions)
+                {
+                    <option value="@p.Id">@p.Title</option>
+                }
+            </select>
+        </div>
+    </div>
+</div>
+
+@if (selectedProd != null)
+{
+    <div id="reportContent" class="report-paper shadow-lg p-5 mx-auto bg-white mb-5" style="max-width: 800px; font-family: 'Courier New', Courier, monospace;">
+        <div class="border-bottom pb-2 mb-4">
+            <h4 class="fw-bold text-uppercase">CREDITS: @selectedProd.Title</h4>
+            <small class="text-muted">Exported @DateTime.Now.ToString("g")</small>
+        </div>
+
+        <div id="copyTarget">
+            <h5 class="fw-bold text-uppercase" style="text-decoration: underline;">Production Team</h5>
+            @foreach (var crew in selectedProd.CrewAssignments.OrderBy(c => c.Role?.Name))
+            {
+                <p class="mb-1">
+                    <strong>@(crew.Role?.Name ?? crew.CustomRoleName):</strong> 
+                    @(crew.Member?.FullName ?? crew.ExternalName ?? "TBC")
+                </p>
+            }
+
+            @if (selectedProd.Credits.Any())
+            {
+                <h5 class="fw-bold text-uppercase mt-4" style="text-decoration: underline;">Additional Credits</h5>
+                @foreach (var credit in selectedProd.Credits.OrderBy(c => c.DisplayOrder))
+                {
+                    <p class="mb-1"><strong>@credit.Label:</strong> @credit.Value</p>
+                }
+            }
+        </div>
+    </div>
+}
+
+<style>
+    .report-paper { min-height: 500px; line-height: 1.6; }
+    @@media print { .no-print { display: none !important; } }
+</style>
+
+@code {
+    private List<Production> allProductions = new();
+    private Production? selectedProd;
+
+    protected override async Task OnInitializedAsync()
+    {
+        using var context = await DbFactory.CreateDbContextAsync();
+        allProductions = await context.Productions.OrderByDescending(p => p.StartDate).ToListAsync();
+    }
+
+    private async Task OnProductionSelected(ChangeEventArgs e)
+    {
+        int id = int.Parse(e.Value?.ToString() ?? "0");
+        if (id == 0) { selectedProd = null; return; }
+
+        using var context = await DbFactory.CreateDbContextAsync();
+        selectedProd = await context.Productions
+            .Include(p => p.CrewAssignments).ThenInclude(c => c.Role)
+            .Include(p => p.CrewAssignments).ThenInclude(c => c.Member)
+            .Include(p => p.Credits)
+            .FirstOrDefaultAsync(p => p.Id == id);
+    }
+
+    private async Task CopyToClipboard()
+    {
+        await JS.InvokeVoidAsync("eval", @"
+            var text = document.getElementById('copyTarget').innerText;
+            navigator.clipboard.writeText(text);
+            alert('Credits copied to clipboard!');
+        ");
+    }
+
+    private async Task ExportToWord()
+    {
+        var filename = $"{selectedProd?.Title.Replace(" ", "_")}_Credits.doc";
+        await JS.InvokeVoidAsync("eval", $@"
+            var header = '<html xmlns:o=""urn:schemas-microsoft-com:office:office"" xmlns:w=""urn:schemas-microsoft-com:office:word"" xmlns=""http://www.w3.org/TR/REC-html40""><head><meta charset=""utf-8""></head><body>';
+            var footer = '</body></html>';
+            var sourceHTML = header + document.getElementById('reportContent').innerHTML + footer;
+            var source = 'data:application/vnd.ms-word;charset=utf-8,' + encodeURIComponent(sourceHTML);
+            var fileLink = document.createElement('a');
+            fileLink.href = source;
+            fileLink.download = '{filename}';
+            fileLink.click();
+        ");
+    }
+}

@@ -558,8 +558,6 @@ namespace Apollo.Models
     {
         public int Id { get; set; }
         public string Title { get; set; } = string.Empty;
-
-        // Linked to the new Category table
         public int CategoryId { get; set; }
         public ProductionCategory? Category { get; set; }
 
@@ -567,12 +565,14 @@ namespace Apollo.Models
         public DateTime EndDate { get; set; }
         public string? TicketSourceId { get; set; }
 
+        // --- LOGISTICS & HIRE ---
         public string? HirerName { get; set; }
         public string? HirerContact { get; set; }
         public DateTime? AccessTime { get; set; }
         public string? TechRequirements { get; set; }
         public bool OurCrew { get; set; }
 
+        // --- SECURITY (Linking to Members) ---
         public int? UnlockingMemberId { get; set; }
         public Member? UnlockingMember { get; set; }
         public int? LockingMemberId { get; set; }
@@ -581,13 +581,32 @@ namespace Apollo.Models
         public string? InternalNotes { get; set; }
         public string? DriveLink { get; set; }
 
-        public List<Performance> Performances { get; set; } = new();
+        // --- FOH SPECIFICS ---
+        public int RunningTimeMinutes { get; set; }
+        public int IntervalMinutes { get; set; }
+        public string? ContentWarnings { get; set; }
+        public string? FOHNotes { get; set; }
 
+        // --- NAVIGATION ---
+        public List<Performance> Performances { get; set; } = new();
         public List<ProductionCrew> CrewAssignments { get; set; } = new();
         public List<ProductionCredit> Credits { get; set; } = new();
         public List<ProductionEvent> Events { get; set; } = new();
     }
 
+    public class Performance
+    {
+        public int Id { get; set; }
+        public int ProductionId { get; set; }
+
+        // THIS LINE FIXES YOUR BUILD ERRORS:
+        public Production? Production { get; set; }
+
+        public DateTime CurtainUp { get; set; }
+        public string? PerformanceTitle { get; set; }
+        public string? ScheduleNotes { get; set; }
+        public List<PerformanceCrewOverride> Overrides { get; set; } = new();
+    }
     public class ProductionRole
     {
         public int Id { get; set; }
@@ -631,16 +650,6 @@ namespace Apollo.Models
         public string Label { get; set; } = string.Empty;
         public string Value { get; set; } = string.Empty;
         public int DisplayOrder { get; set; }
-    }
-
-    public class Performance
-    {
-        public int Id { get; set; }
-        public int ProductionId { get; set; }
-        public DateTime CurtainUp { get; set; }
-        public string? PerformanceTitle { get; set; } // e.g., "Gala Night"
-        public string? ScheduleNotes { get; set; } // e.g., "19:00 Welcome, 19:30 Speeches"
-        public List<PerformanceCrewOverride> Overrides { get; set; } = new();
     }
 
     public class PerformanceCrewOverride

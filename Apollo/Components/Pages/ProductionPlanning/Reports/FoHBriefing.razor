@@ -1,0 +1,120 @@
+﻿@page "/reports/Production/FOHBriefing"
+@using Apollo.Models
+@using Apollo.Data
+@using Microsoft.EntityFrameworkCore
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject IJSRuntime JS
+
+<div class="container py-4 max-w-5xl no-print">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="fw-bold mb-0 text-info">FOH Briefing Sheet</h2>
+        <div class="d-flex gap-2">
+            <button class="btn btn-outline-dark" @onclick='() => JS.InvokeVoidAsync("window.print")'><i class="bi bi-printer me-2"></i>Print</button>
+            <a href="/reports/ProductionDashboard" class="btn btn-secondary">Back</a>
+        </div>
+    </div>
+
+    <div class="card border-0 shadow-sm bg-light mb-4">
+        <div class="card-body">
+            <label class="small fw-bold">Select Performance</label>
+            <select class="form-select form-select-lg" @onchange="OnPerformanceSelected">
+                <option value="0">-- Select a Specific Performance --</option>
+                @foreach (var p in allPerformances)
+                {
+                    <option value="@p.Id">@p.CurtainUp.ToString("ddd dd MMM HH:mm") - @p.Production?.Title</option>
+                }
+            </select>
+        </div>
+    </div>
+</div>
+
+@if (selectedPerf != null)
+{
+    <div id="reportContent" class="report-paper p-5 mx-auto bg-white shadow-lg mb-5" style="max-width: 210mm; border: 2px solid #000;">
+        <div class="text-center border-bottom border-3 border-dark pb-3 mb-4">
+            <h1 class="display-4 fw-bold text-uppercase mb-0">FOH BRIEFING</h1>
+            <h2 class="fw-bold">@selectedPerf.Production?.Title</h2>
+            <div class="fs-4">@selectedPerf.CurtainUp.ToString("dddd dd MMMM yyyy")</div>
+        </div>
+
+        <div class="row g-4 mb-4">
+            <div class="col-6">
+                <div class="p-3 border border-2 border-dark text-center">
+                    <h6 class="fw-bold text-uppercase small mb-1">Curtain Up</h6>
+                    <div class="display-6 fw-bold">@selectedPerf.CurtainUp.ToString("HH:mm")</div>
+                </div>
+            </div>
+            <div class="col-6">
+                <div class="p-3 border border-2 border-dark text-center">
+                    <h6 class="fw-bold text-uppercase small mb-1">Expected End</h6>
+                    <div class="display-6 fw-bold">
+                        @selectedPerf.CurtainUp.AddMinutes(selectedPerf.Production?.RunningTimeMinutes ?? 0 + selectedPerf.Production?.IntervalMinutes ?? 0).ToString("HH:mm")
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row g-4 mb-4">
+            <div class="col-12">
+                <table class="table table-bordered border-dark align-middle">
+                    <tr>
+                        <th class="bg-light w-25">RUNNING TIME</th>
+                        <td class="fs-5 fw-bold">@(selectedPerf.Production?.RunningTimeMinutes) Minutes</td>
+                    </tr>
+                    <tr>
+                        <th class="bg-light">INTERVAL</th>
+                        <td class="fs-5 fw-bold">@(selectedPerf.Production?.IntervalMinutes) Minutes</td>
+                    </tr>
+                    <tr>
+                        <th class="bg-light text-danger">CONTENT WARNINGS</th>
+                        <td class="fs-5 fw-bold text-danger text-uppercase">
+                            @(string.IsNullOrEmpty(selectedPerf.Production?.ContentWarnings) ? "NONE RECORDED" : selectedPerf.Production.ContentWarnings)
+                        </td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+
+        <div class="mb-4">
+            <h6 class="fw-bold text-uppercase border-bottom border-2 border-dark pb-1">Performance Notes / Gala Details</h6>
+            <div class="p-3 bg-light border border-dark mt-2" style="min-height: 100px;">
+                @if (!string.IsNullOrEmpty(selectedPerf.ScheduleNotes)) { <p class="fw-bold">@selectedPerf.ScheduleNotes</p> }
+                <p>@selectedPerf.Production?.FOHNotes</p>
+            </div>
+        </div>
+
+        <div class="mt-5 text-center">
+            <p class="small text-muted">Please ensure all Bar and Ushering staff are briefed on content warnings before doors open.</p>
+        </div>
+    </div>
+}
+
+<style>
+    @@media print { .no-print { display: none !important; } }
+    .report-paper { min-height: 280mm; color: #000; }
+</style>
+
+@code {
+    private List<Performance> allPerformances = new();
+    private Performance? selectedPerf;
+
+    protected override async Task OnInitializedAsync()
+    {
+        using var context = await DbFactory.CreateDbContextAsync();
+        allPerformances = await context.Performances
+            .Include(p => p.Production)
+            .Where(p => p.CurtainUp >= DateTime.Today.AddDays(-1))
+            .OrderBy(p => p.CurtainUp)
+            .ToListAsync();
+    }
+
+    private async Task OnPerformanceSelected(ChangeEventArgs e)
+    {
+        int id = int.Parse(e.Value?.ToString() ?? "0");
+        using var context = await DbFactory.CreateDbContextAsync();
+        selectedPerf = await context.Performances
+            .Include(p => p.Production).ThenInclude(pr => pr!.Category)
+            .FirstOrDefaultAsync(p => p.Id == id);
+    }
+}

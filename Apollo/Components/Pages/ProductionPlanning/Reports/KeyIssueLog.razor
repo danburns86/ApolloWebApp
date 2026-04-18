@@ -1,0 +1,124 @@
+﻿@page "/reports/Production/KeyIssueLog"
+@using Apollo.Models
+@using Apollo.Data
+@using Microsoft.EntityFrameworkCore
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject IJSRuntime JS
+
+<div class="container py-4 max-w-5xl no-print">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="fw-bold mb-0">Key Issue Log</h2>
+        <button class="btn btn-outline-dark" @onclick='() => JS.InvokeVoidAsync("window.print")'><i class="bi bi-printer me-2"></i>Print Log</button>
+    </div>
+
+    <div class="card border-0 shadow-sm bg-light mb-4">
+        <div class="card-body">
+            <label class="small fw-bold">Date to Log</label>
+            <input type="date" class="form-control" @bind="targetDate" @bind:event="onchange" />
+            <button class="btn btn-primary mt-3" @onclick="LoadLog">Generate Log</button>
+        </div>
+    </div>
+</div>
+
+@if (logItems != null)
+{
+    <div class="report-paper p-5 mx-auto bg-white shadow-lg mb-5" style="max-width: 210mm;">
+        <div class="text-center mb-5">
+            <h2 class="fw-bold mb-0">KEY ISSUE & SECURITY LOG</h2>
+            <h4 class="text-muted">@targetDate.ToString("dddd dd MMMM yyyy")</h4>
+        </div>
+
+        <table class="table table-bordered align-middle">
+            <thead class="table-dark">
+                <tr>
+                    <th>Crew Member</th>
+                    <th>Role</th>
+                    <th class="text-center">Key Bunch ID</th>
+                    <th style="width: 200px;">Signature on Issue</th>
+                    <th style="width: 200px;">Signature on Return</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var item in logItems)
+                {
+                    <tr style="height: 60px;">
+                        <td><strong>@item.MemberName</strong></td>
+                        <td class="small">@item.RoleName</td>
+                        <td class="text-center fw-bold fs-5">@item.KeyBunchId</td>
+                        <td></td>
+                        <td></td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+
+        @if (!logItems.Any())
+        {
+            <div class="alert alert-light text-center border-dashed">
+                No specific key bunches are assigned to crew roles for this date.
+            </div>
+        }
+
+        <div class="mt-5 p-3 border rounded bg-light">
+            <h6 class="fw-bold small mb-2 text-uppercase">Stage Door / Duty Manager Notes:</h6>
+            <div style="height: 100px;"></div>
+        </div>
+    </div>
+}
+
+@code {
+    private DateTime targetDate = DateTime.Today;
+    private List<KeyLogItem>? logItems;
+
+    private async Task LoadLog()
+    {
+        using var context = await DbFactory.CreateDbContextAsync();
+        
+        // 1. Get all performances on this day
+        var performances = await context.Performances
+            .Include(p => p.Production)
+            .Include(p => p.Overrides).ThenInclude(o => o.Role)
+            .Where(p => p.CurtainUp.Date == targetDate.Date)
+            .ToListAsync();
+
+        var prodIds = performances.Select(p => p.ProductionId).Distinct().ToList();
+
+        // 2. Get master crew for these productions
+        var masterCrew = await context.ProductionCrews
+            .Include(c => c.Role)
+            .Include(c => c.Member)
+            .Where(c => prodIds.Contains(c.ProductionId))
+            .ToListAsync();
+
+        var items = new List<KeyLogItem>();
+
+        foreach (var perf in performances)
+        {
+            foreach (var mc in masterCrew.Where(c => c.ProductionId == perf.ProductionId))
+            {
+                // Check if there is a swap for this specific performance
+                var swap = perf.Overrides.FirstOrDefault(o => o.RoleId == mc.RoleId && o.CustomRoleName == mc.CustomRoleName);
+                
+                // If the role has a LinkedKeyBunchId, add to log
+                if (mc.Role?.LinkedKeyBunchId != null)
+                {
+                    items.Add(new KeyLogItem
+                    {
+                        MemberName = swap?.Member?.FullName ?? swap?.ExternalName ?? mc.Member?.FullName ?? mc.ExternalName ?? "VACANT",
+                        RoleName = mc.Role.Name,
+                        KeyBunchId = mc.Role.LinkedKeyBunchId.Value.ToString()
+                    });
+                }
+            }
+        }
+        logItems = items;
+    }
+
+    public class KeyLogItem
+    {
+        public string MemberName { get; set; } = "";
+        public string RoleName { get; set; } = "";
+        public string KeyBunchId { get; set; } = "";
+    }
+}

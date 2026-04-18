@@ -4,6 +4,7 @@ using Apollo.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Apollo.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260418174824_AddFOHFields")]
+    partial class AddFOHFields
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1692,13 +1695,11 @@ namespace Apollo.Migrations
 
             modelBuilder.Entity("Apollo.Models.Performance", b =>
                 {
-                    b.HasOne("Apollo.Models.Production", "Production")
+                    b.HasOne("Apollo.Models.Production", null)
                         .WithMany("Performances")
                         .HasForeignKey("ProductionId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
-
-                    b.Navigation("Production");
                 });
 
             modelBuilder.Entity("Apollo.Models.PerformanceCrewOverride", b =>

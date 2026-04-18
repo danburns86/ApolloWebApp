@@ -1,0 +1,132 @@
+﻿@page "/reports/Production/Rota"
+@using Apollo.Models
+@using Apollo.Data
+@using Microsoft.EntityFrameworkCore
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject IJSRuntime JS
+
+<div class="container py-4 max-w-6xl no-print">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="fw-bold mb-0">Crew Rota & Swaps</h2>
+<button class="btn btn-outline-dark" @onclick="PrintPage">
+    <i class="bi bi-printer me-2"></i>Print
+</button>
+
+ </div>
+
+    <div class="card border-0 shadow-sm mb-4 bg-light">
+        <div class="card-body">
+            <label class="small fw-bold">Select Production</label>
+            <select class="form-select" @onchange="OnProductionSelected">
+                <option value="0">-- Select Show --</option>
+                @foreach (var p in allProductions) { <option value="@p.Id">@p.Title</option> }
+            </select>
+        </div>
+    </div>
+</div>
+
+@if (selectedProd != null)
+{
+    <div class="report-paper p-5 mx-auto bg-white shadow-lg mb-5" style="max-width: 1000px;">
+        <div class="text-center border-bottom pb-4 mb-5">
+            <h1 class="fw-bold">CREW ROTA: @selectedProd.Title</h1>
+            <p class="text-muted">Master List & Performance Overrides</p>
+        </div>
+
+        @* SECTION A: MASTER CREW *@
+        <div class="mb-5">
+            <h5 class="fw-bold text-primary mb-3"><i class="bi bi-star-fill me-2"></i>Master Production Team</h5>
+            <table class="table table-bordered">
+                <thead class="table-light">
+                    <tr><th>Role</th><th>Lead Assignee</th><th>Standard Note</th></tr>
+                </thead>
+                <tbody>
+                    @foreach (var crew in selectedProd.CrewAssignments)
+                    {
+                        <tr>
+                            <td class="fw-bold">@(crew.Role?.Name ?? crew.CustomRoleName)</td>
+                            <td>@(crew.Member?.FullName ?? crew.ExternalName ?? "VACANT")</td>
+                            <td class="small text-muted">Run Default</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        @* SECTION B: PERFORMANCE DEPS / SWAPS *@
+        <div>
+            <h5 class="fw-bold text-danger mb-3"><i class="bi bi-person-exclamation me-2"></i>Performance Overrides (Swaps)</h5>
+            <table class="table table-striped align-middle">
+                <thead>
+                    <tr>
+                        <th>Date & Time</th>
+                        <th>Role</th>
+                        <th>Master Assignee</th>
+                        <th class="table-warning">Replacement (Dep)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @{ bool hasSwaps = false; }
+                    @foreach (var perf in selectedProd.Performances.OrderBy(p => p.CurtainUp))
+                    {
+                        @foreach (var swap in perf.Overrides)
+                        {
+                            hasSwaps = true;
+                            <tr>
+                                <td class="small">@perf.CurtainUp.ToString("ddd dd MMM, HH:mm")</td>
+                                <td class="fw-bold">@(swap.Role?.Name ?? swap.CustomRoleName)</td>
+                                <td class="text-muted">
+                                    @* Find the master name for this role *@
+                                    @(selectedProd.CrewAssignments.FirstOrDefault(c => c.RoleId == swap.RoleId && c.CustomRoleName == swap.CustomRoleName)?.Member?.FullName 
+                                      ?? selectedProd.CrewAssignments.FirstOrDefault(c => c.RoleId == swap.RoleId && c.CustomRoleName == swap.CustomRoleName)?.ExternalName 
+                                      ?? "Master")
+                                </td>
+                                <td class="fw-bold text-danger">
+                                    <i class="bi bi-arrow-right-short me-1"></i>
+                                    @(swap.Member?.FullName ?? swap.ExternalName)
+                                </td>
+                            </tr>
+                        }
+                    }
+                    @if (!hasSwaps)
+                    {
+                        <tr><td colspan="4" class="text-center py-4 text-muted">No crew swaps recorded for this run.</td></tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+
+<style>
+    @@media print { .no-print { display: none !important; } }
+    .report-paper { min-height: 297mm; }
+</style>
+
+@code {
+    private List<Production> allProductions = new();
+    private Production? selectedProd;
+
+    protected override async Task OnInitializedAsync()
+    {
+        using var context = await DbFactory.CreateDbContextAsync();
+        allProductions = await context.Productions.OrderByDescending(p => p.StartDate).ToListAsync();
+    }
+
+    private async Task OnProductionSelected(ChangeEventArgs e)
+    {
+        int id = int.Parse(e.Value?.ToString() ?? "0");
+        if (id == 0) { selectedProd = null; return; }
+
+        using var context = await DbFactory.CreateDbContextAsync();
+        selectedProd = await context.Productions
+            .Include(p => p.CrewAssignments).ThenInclude(c => c.Role)
+            .Include(p => p.CrewAssignments).ThenInclude(c => c.Member)
+            .Include(p => p.Performances).ThenInclude(p => p.Overrides).ThenInclude(o => o.Role)
+            .Include(p => p.Performances).ThenInclude(p => p.Overrides).ThenInclude(o => o.Member)
+            .FirstOrDefaultAsync(p => p.Id == id);
+    }
+
+    private async Task PrintPage() => await JS.InvokeVoidAsync("window.print");
+}

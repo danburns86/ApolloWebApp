@@ -4,6 +4,7 @@ using Apollo.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Apollo.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260418173716_AddReportNavigationProperties")]
+    partial class AddReportNavigationProperties
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -994,17 +997,11 @@ namespace Apollo.Migrations
                     b.Property<int>("CategoryId")
                         .HasColumnType("int");
 
-                    b.Property<string>("ContentWarnings")
-                        .HasColumnType("nvarchar(max)");
-
                     b.Property<string>("DriveLink")
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<DateTime>("EndDate")
                         .HasColumnType("datetime2");
-
-                    b.Property<string>("FOHNotes")
-                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("HirerContact")
                         .HasColumnType("nvarchar(max)");
@@ -1015,17 +1012,11 @@ namespace Apollo.Migrations
                     b.Property<string>("InternalNotes")
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<int>("IntervalMinutes")
-                        .HasColumnType("int");
-
                     b.Property<int?>("LockingMemberId")
                         .HasColumnType("int");
 
                     b.Property<bool>("OurCrew")
                         .HasColumnType("bit");
-
-                    b.Property<int>("RunningTimeMinutes")
-                        .HasColumnType("int");
 
                     b.Property<DateTime>("StartDate")
                         .HasColumnType("datetime2");
@@ -1692,13 +1683,11 @@ namespace Apollo.Migrations
 
             modelBuilder.Entity("Apollo.Models.Performance", b =>
                 {
-                    b.HasOne("Apollo.Models.Production", "Production")
+                    b.HasOne("Apollo.Models.Production", null)
                         .WithMany("Performances")
                         .HasForeignKey("ProductionId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
-
-                    b.Navigation("Production");
                 });
 
             modelBuilder.Entity("Apollo.Models.PerformanceCrewOverride", b =>
