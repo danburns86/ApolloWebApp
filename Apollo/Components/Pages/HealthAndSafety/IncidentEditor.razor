@@ -1,0 +1,160 @@
+﻿@page "/admin/hs/incidents/edit/{id:int}"
+@rendermode InteractiveServer
+@using Apollo.Models
+@using Apollo.Data
+@using Microsoft.EntityFrameworkCore
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject NavigationManager Nav
+@inject AuthenticationStateProvider AuthProvider
+
+<div class="container py-4 max-w-5xl">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="fw-bold"><i class="bi bi-clipboard-pulse text-danger me-2"></i>Incident Record #@(id == 0 ? "NEW" : id.ToString())</h2>
+        <div class="d-flex gap-2">
+            <button class="btn btn-outline-secondary" @onclick='() => Nav.NavigateTo("/admin/hs/incidents")'>Back to Log</button>
+            <button class="btn btn-primary fw-bold px-4 shadow" @onclick="SaveIncident">Save Record</button>
+        </div>
+    </div>
+
+    <div class="row g-4">
+        @* --- LEFT: THE INCIDENT DATA --- *@
+        <div class="col-md-7">
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-header bg-dark text-white fw-bold">1. Event Details</div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="small fw-bold">Date & Time of Event</label>
+                            <input type="datetime-local" class="form-control" @bind="inc.IncidentDateTime" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="small fw-bold">Incident Type</label>
+                            <select class="form-select" @bind="inc.Type">
+                                @foreach (var t in Enum.GetValues<IncidentType>())
+                                {
+                                    <option value="@t">@t</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="small fw-bold">Severity</label>
+                            <select class="form-select" @bind="inc.Severity">
+                                @foreach (var s in Enum.GetValues<IncidentSeverity>())
+                                {
+                                    <option value="@s">@s</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="small fw-bold">Location (Room/Area)</label>
+                            <select class="form-select" @bind="inc.RoomId">
+                                <option value="">-- Outside / Unknown --</option>
+                                @foreach (var r in allRooms)
+                                {
+                                    <option value="@r.Id">@r.Name</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-12">
+                            <label class="small fw-bold">What Happened? (Full Narrative)</label>
+                            <textarea class="form-control" rows="4" @bind="inc.DescriptionOfEvent" placeholder="Describe the sequence of events..."></textarea>
+                        </div>
+                        <div class="col-12">
+                            <label class="small fw-bold">Injuries Sustained (If any)</label>
+                            <input type="text" class="form-control" @bind="inc.InjuriesSustained" placeholder="e.g. Scraped knee, Sprained ankle" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        @* --- RIGHT: PEOPLE & INVESTIGATION --- *@
+        <div class="col-md-5">
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-header bg-secondary text-white fw-bold small">2. People Involved</div>
+                <div class="card-body small">
+                    <label class="fw-bold">Person Affected</label>
+                    <input type="text" class="form-control mb-2" @bind="inc.PersonInvolvedName" />
+                    
+                    <label class="fw-bold">Relationship to Theatre</label>
+                    <select class="form-select mb-2" @bind="inc.PersonInvolvedType">
+                        <option value="Staff">Staff</option>
+                        <option value="Crew">Freelance Crew</option>
+                        <option value="Public">Public / Audience</option>
+                        <option value="Member">Society Member</option>
+                    </select>
+
+                    <label class="fw-bold">Witnesses</label>
+                    <textarea class="form-control" rows="2" @bind="inc.WitnessDetails"></textarea>
+                </div>
+            </div>
+
+            @* --- INVESTIGATION SECTION --- *@
+            <div class="card border-0 shadow-sm border-start border-4 border-warning">
+                <div class="card-header bg-white fw-bold text-warning small text-uppercase">3. Investigation & Close-out</div>
+                <div class="card-body small bg-light-subtle">
+                    <label class="fw-bold">Status</label>
+                    <select class="form-select mb-3" @bind="inc.Status">
+                        @foreach (var s in Enum.GetValues<IncidentStatus>())
+                        {
+                            <option value="@s">@s</option>
+                        }
+                    </select>
+
+                    <label class="fw-bold">Investigation Findings</label>
+                    <textarea class="form-control mb-2" rows="3" @bind="inc.InvestigationFindings"></textarea>
+
+                    <label class="fw-bold text-danger">Root Cause</label>
+                    <input type="text" class="form-control mb-3" @bind="inc.RootCause" placeholder="e.g. Failure of equipment, Human error" />
+
+                    @if (inc.Status == IncidentStatus.Closed)
+                    {
+                        <div class="alert alert-success py-2">
+                            <i class="bi bi-check-circle me-2"></i>Closed on @(inc.DateClosed?.ToShortDateString() ?? "Now")
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public int id { get; set; }
+    private IncidentRecord inc = new();
+    private List<Room> allRooms = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        using var context = await DbFactory.CreateDbContextAsync();
+        allRooms = await context.Rooms.OrderBy(r => r.Name).ToListAsync();
+
+        if (id != 0)
+        {
+            inc = await context.IncidentRecords.FindAsync(id) ?? new();
+        }
+        else
+        {
+            var authState = await AuthProvider.GetAuthenticationStateAsync();
+            inc = new IncidentRecord { ReportedBy = authState.User.Identity?.Name ?? "Unknown Staff" };
+        }
+    }
+
+    private async Task SaveIncident()
+    {
+        using var context = await DbFactory.CreateDbContextAsync();
+        
+        // Handle closure date
+        if (inc.Status == IncidentStatus.Closed && inc.DateClosed == null) inc.DateClosed = DateTime.Now;
+        if (inc.Status != IncidentStatus.Closed) inc.DateClosed = null;
+
+        // Clear navigation properties to avoid Identity insert errors
+        inc.Room = null;
+
+        if (inc.Id == 0) context.IncidentRecords.Add(inc);
+        else context.IncidentRecords.Update(inc);
+
+        await context.SaveChangesAsync();
+        Nav.NavigateTo("/admin/hs/incidents");
+    }
+}

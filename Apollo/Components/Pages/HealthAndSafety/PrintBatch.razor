@@ -1,0 +1,117 @@
+﻿@page "/admin/hs/risk-assessments/print-batch"
+@layout Apollo.Components.Layout.EmptyLayout
+@rendermode InteractiveServer
+@using Apollo.Models
+@using Apollo.Data
+@using Microsoft.EntityFrameworkCore
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+
+<PageTitle>Batch Print (@batchRAs.Count items)</PageTitle>
+
+@* --- NAVIGATION BAR (HIDDEN DURING PRINT) --- *@
+<div class="no-print bg-dark text-white p-3 d-flex justify-content-between align-items-center sticky-top shadow">
+    <div>
+        <h5 class="mb-0 fw-bold">Batch Print Registry</h5>
+        <span class="small opacity-75">@batchRAs.Count documents ready in queue</span>
+    </div>
+    <div class="d-flex gap-3 align-items-center">
+        <div class="form-check form-switch">
+            <input class="form-check-input" type="checkbox" @bind="includeMsds" id="msdsToggle" />
+            <label class="form-check-label small" for="msdsToggle">Include Chemical Summaries</label>
+        </div>
+        <button class="btn btn-primary fw-bold px-4" @onclick="TriggerPrint">
+            <i class="bi bi-printer me-2"></i>Start Batch Print
+        </button>
+        <button class="btn btn-outline-light btn-sm" @onclick='() => Nav.NavigateTo("/admin/hs/risk-assessments")'>Cancel</button>
+    </div>
+</div>
+
+@* --- THE PRINT AREA --- *@
+<div class="print-area">
+    @foreach (var ra in batchRAs)
+    {
+        <div class="report-wrapper">
+            <PrintAssessmentView Assessment="ra" />
+        </div>
+    }
+
+    @if (includeMsds)
+    {
+        @foreach (var sub in relatedSubstances)
+        {
+            <div class="report-wrapper">
+                <ChemicalSafetySummaryView 
+                    Substance="sub" 
+                    Assessment="coshhAssessments.FirstOrDefault(a => a.SubstanceId == sub.Id)" />
+            </div>
+        }
+    }
+</div>
+
+<style>
+    .report-wrapper {
+        page-break-after: always;
+        padding: 2rem;
+        background: white;
+        border-bottom: 1px dashed #eee;
+    }
+
+    @@media print {
+        .no-print { display: none !important; }
+        .report-wrapper { 
+            padding: 0;
+            border: none;
+            page-break-after: always;
+        }
+    }
+</style>
+
+@code {
+    [SupplyParameterFromQuery] public string? ids { get; set; }
+    private List<RiskAssessment> batchRAs = new();
+    private List<CoshhSubstance> relatedSubstances = new();
+    private List<CoshhAssessment> coshhAssessments = new();
+    private bool includeMsds = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (string.IsNullOrEmpty(ids)) return;
+        var idList = ids.Split(',').Select(int.Parse).ToList();
+        
+        using var context = await DbFactory.CreateDbContextAsync();
+        
+        // Load RAs
+        batchRAs = await context.RiskAssessments
+            .Include(r => r.Production)
+            .Include(r => r.Area)
+            .Include(r => r.Hazards)
+            .Include("ActionPlan")
+            .Include("RoomAssignments.Room")
+            .Where(r => idList.Contains(r.Id))
+            .ToListAsync();
+
+        if (includeMsds)
+        {
+            // Find all rooms mentioned in these Fire RAs
+            var roomIds = batchRAs.OfType<FireRiskAssessment>()
+                .SelectMany(f => f.RoomAssignments)
+                .Select(a => a.RoomId)
+                .Distinct().ToList();
+            
+            // Find COSHH tied to those rooms
+            coshhAssessments = await context.CoshhAssessments
+                .Include(a => a.Substance)
+                .Where(a => a.RoomId == null || (a.RoomId.HasValue && roomIds.Contains(a.RoomId.Value)))
+                .ToListAsync();
+
+            relatedSubstances = coshhAssessments
+                .Select(a => a.Substance!)
+                .DistinctBy(s => s.Id)
+                .ToList();
+        }
+    }
+
+    private async Task TriggerPrint() => await JS.InvokeVoidAsync("window.print");
+}

@@ -4,6 +4,7 @@ using Apollo.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Apollo.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260421184558_EnhanceCoshhWithSignoff")]
+    partial class EnhanceCoshhWithSignoff
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -367,83 +370,6 @@ namespace Apollo.Migrations
                     b.ToTable("CheckoutTransactions");
                 });
 
-            modelBuilder.Entity("Apollo.Models.ComplianceConfiguration", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<int>("CoshhWarningDays")
-                        .HasColumnType("int");
-
-                    b.Property<string>("EmergencyPhoneNumber")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("MainAssemblyPoint")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<int>("RAWarningDays")
-                        .HasColumnType("int");
-
-                    b.Property<string>("SiteAddress")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("ComplianceConfigurations");
-                });
-
-            modelBuilder.Entity("Apollo.Models.ContractorRAMS", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("ApprovalNotes")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("DocumentTitle")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<DateTime>("ExpiryDate")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("FilePath")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<bool>("IsReviewed")
-                        .HasColumnType("bit");
-
-                    b.Property<int?>("MaintenanceIssueId")
-                        .HasColumnType("int");
-
-                    b.Property<string>("ReviewedBy")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<DateTime>("SubmissionDate")
-                        .HasColumnType("datetime2");
-
-                    b.Property<int>("SupplierId")
-                        .HasColumnType("int");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("MaintenanceIssueId");
-
-                    b.HasIndex("SupplierId");
-
-                    b.ToTable("ContractorRAMS");
-                });
-
             modelBuilder.Entity("Apollo.Models.CoshhAssessment", b =>
                 {
                     b.Property<int>("Id")
@@ -570,6 +496,9 @@ namespace Apollo.Migrations
 
                     b.Property<int>("FireRiskAssessmentId")
                         .HasColumnType("int");
+
+                    b.Property<bool>("IsCompleted")
+                        .HasColumnType("bit");
 
                     b.Property<bool>("IsResolved")
                         .HasColumnType("bit");
@@ -764,32 +693,6 @@ namespace Apollo.Migrations
                     b.ToTable("Locks");
                 });
 
-            modelBuilder.Entity("Apollo.Models.IncidentEvidence", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("Caption")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("FilePath")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<int>("IncidentRecordId")
-                        .HasColumnType("int");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("IncidentRecordId");
-
-                    b.ToTable("IncidentEvidence");
-                });
-
             modelBuilder.Entity("Apollo.Models.IncidentRecord", b =>
                 {
                     b.Property<int>("Id")
@@ -798,62 +701,29 @@ namespace Apollo.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
-                    b.Property<DateTime?>("DateClosed")
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<bool>("IsRiddorReportable")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("PersonsInvolved")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime?>("RiddorReportedDate")
                         .HasColumnType("datetime2");
-
-                    b.Property<string>("DescriptionOfEvent")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("EntryMethod")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("ImmediateActionTaken")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<DateTime>("IncidentDateTime")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("InjuriesSustained")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("InvestigatedBy")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("InvestigationFindings")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<int?>("LinkedMaintenanceIssueId")
-                        .HasColumnType("int");
-
-                    b.Property<string>("PersonInvolvedName")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("PersonInvolvedType")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("ReportedBy")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
 
                     b.Property<int?>("RoomId")
                         .HasColumnType("int");
 
-                    b.Property<string>("RootCause")
-                        .HasColumnType("nvarchar(max)");
-
                     b.Property<int>("Severity")
                         .HasColumnType("int");
 
-                    b.Property<int>("Status")
-                        .HasColumnType("int");
+                    b.Property<DateTime>("Timestamp")
+                        .HasColumnType("datetime2");
 
-                    b.Property<int>("Type")
-                        .HasColumnType("int");
-
-                    b.Property<string>("WitnessDetails")
+                    b.Property<string>("TreatmentGiven")
                         .HasColumnType("nvarchar(max)");
 
                     b.HasKey("Id");
@@ -1793,9 +1663,6 @@ namespace Apollo.Migrations
                     b.Property<string>("NearestExit")
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<string>("SpecificAssemblyPoint")
-                        .HasColumnType("nvarchar(max)");
-
                     b.HasKey("Id");
 
                     b.HasIndex("AreaId");
@@ -1810,6 +1677,9 @@ namespace Apollo.Migrations
                         .HasColumnType("int");
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("ExceptionNote")
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<int>("FireRiskAssessmentId")
                         .HasColumnType("int");
@@ -2097,6 +1967,10 @@ namespace Apollo.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<string>("Narrative_HazardsFound")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<string>("Narrative_IgnitionSources")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
@@ -2210,23 +2084,6 @@ namespace Apollo.Migrations
                     b.Navigation("KeyRecord");
                 });
 
-            modelBuilder.Entity("Apollo.Models.ContractorRAMS", b =>
-                {
-                    b.HasOne("Apollo.Models.MaintenanceIssue", "LinkedJob")
-                        .WithMany()
-                        .HasForeignKey("MaintenanceIssueId");
-
-                    b.HasOne("Apollo.Models.Supplier", "Supplier")
-                        .WithMany()
-                        .HasForeignKey("SupplierId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("LinkedJob");
-
-                    b.Navigation("Supplier");
-                });
-
             modelBuilder.Entity("Apollo.Models.CoshhAssessment", b =>
                 {
                     b.HasOne("Apollo.Models.Room", "Room")
@@ -2298,15 +2155,6 @@ namespace Apollo.Migrations
                     b.Navigation("Room");
 
                     b.Navigation("Supplier");
-                });
-
-            modelBuilder.Entity("Apollo.Models.IncidentEvidence", b =>
-                {
-                    b.HasOne("Apollo.Models.IncidentRecord", null)
-                        .WithMany("Evidence")
-                        .HasForeignKey("IncidentRecordId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
                 });
 
             modelBuilder.Entity("Apollo.Models.IncidentRecord", b =>
@@ -2697,11 +2545,6 @@ namespace Apollo.Migrations
             modelBuilder.Entity("Apollo.Models.HardwareLock", b =>
                 {
                     b.Navigation("Keys");
-                });
-
-            modelBuilder.Entity("Apollo.Models.IncidentRecord", b =>
-                {
-                    b.Navigation("Evidence");
                 });
 
             modelBuilder.Entity("Apollo.Models.KeyRecord", b =>

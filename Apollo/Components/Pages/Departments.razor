@@ -4,6 +4,7 @@
 @using Microsoft.EntityFrameworkCore
 @inject ApplicationDbContext Db
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Administrator")]
+@rendermode InteractiveServer
 
 <PageTitle>Departments & Managers</PageTitle>
 

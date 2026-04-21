@@ -5,6 +5,7 @@
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Policy = SystemPermissions.ManageAssets)]
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject NavigationManager Nav
+@rendermode InteractiveServer
 
 <PageTitle>Inspection - @(asset?.AssetTag ?? "...")</PageTitle>
 

@@ -5,6 +5,7 @@
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject IJSRuntime JS
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Administrator")]
+@rendermode InteractiveServer
 
 <PageTitle>Portal Configuration</PageTitle>
 

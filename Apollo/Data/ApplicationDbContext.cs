@@ -102,6 +102,10 @@ namespace Apollo.Data
         public DbSet<FireActionPlanItem> FireActionPlanItems { get; set; }
         public DbSet<RoomFireSafetyAssignment> RoomFireSafetyAssignments { get; set; }
 
+          public DbSet<IncidentEvidence> IncidentEvidence { get; set; }
+        public DbSet<ContractorRAMS> ContractorRAMS { get; set; }
+        public DbSet<ComplianceConfiguration> ComplianceConfigurations { get; set; }
+
 
 
 

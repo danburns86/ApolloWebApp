@@ -1,0 +1,149 @@
+﻿@page "/admin/hs/incidents"
+@rendermode InteractiveServer
+@using Apollo.Models
+@using Apollo.Data
+@using Microsoft.EntityFrameworkCore
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject NavigationManager Nav
+
+<PageTitle>Accident Book & Incident Log</PageTitle>
+
+<div class="container-fluid px-4 py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="fw-bold mb-0">Accident Book</h2>
+            <p class="text-muted">Recording and investigating accidents, near-misses, and RIDDOR events.</p>
+        </div>
+        <button class="btn btn-danger shadow-sm fw-bold" @onclick="LogNewIncident">
+            <i class="bi bi-exclamation-octagon me-2"></i>Log New Incident
+        </button>
+    </div>
+
+    @* --- STATS OVERVIEW --- *@
+    <div class="row g-3 mb-4">
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm p-3 bg-white border-start border-4 border-primary">
+                <div class="small fw-bold text-muted text-uppercase">Total YTD</div>
+                <div class="h3 fw-bold mb-0">@incidents.Count(i => i.IncidentDateTime.Year == DateTime.Today.Year)</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm p-3 bg-white border-start border-4 border-warning">
+                <div class="small fw-bold text-muted text-uppercase">Open Investigations</div>
+                <div class="h3 fw-bold mb-0 text-warning">@incidents.Count(i => i.Status != IncidentStatus.Closed)</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm p-3 bg-white border-start border-4 border-danger">
+                <div class="small fw-bold text-muted text-uppercase">RIDDOR / Major</div>
+                <div class="h3 fw-bold mb-0 text-danger">@incidents.Count(i => i.Severity >= IncidentSeverity.Major)</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm p-3 bg-white border-start border-4 border-info">
+                <div class="small fw-bold text-muted text-uppercase">Near Misses</div>
+                <div class="h3 fw-bold mb-0 text-info">@incidents.Count(i => i.Type == IncidentType.NearMiss)</div>
+            </div>
+        </div>
+    </div>
+
+    @if (isLoading)
+    {
+        <div class="text-center py-5"><div class="spinner-border text-primary"></div></div>
+    }
+    else
+    {
+        <div class="card shadow-sm border-0 rounded-3 overflow-hidden">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="bg-dark text-white small fw-bold">
+                        <tr>
+                            <th class="ps-4">Date & Time</th>
+                            <th>Incident Type</th>
+                            <th>Person Involved</th>
+                            <th>Location</th>
+                            <th class="text-center">Severity</th>
+                            <th class="text-center">Status</th>
+                            <th class="text-end pe-4">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var inc in incidents)
+                        {
+                            <tr>
+                                <td class="ps-4">
+                                    <div class="fw-bold">@inc.IncidentDateTime.ToString("dd MMM yyyy")</div>
+                                    <div class="small text-muted">@inc.IncidentDateTime.ToString("HH:mm")</div>
+                                </td>
+                                <td>
+                                    <span class="badge @(inc.Type == IncidentType.Accident ? "bg-danger" : "bg-info")">@inc.Type</span>
+                                </td>
+                                <td>
+                                    <div class="fw-bold">@inc.PersonInvolvedName</div>
+                                    <div class="small text-muted">@inc.PersonInvolvedType</div>
+                                </td>
+                                <td>@(inc.Room?.Name ?? "General Site")</td>
+                                <td class="text-center">
+                                    <span class="badge @(GetSeverityClass(inc.Severity))">@inc.Severity</span>
+                                </td>
+                                <td class="text-center">
+                                    @if (inc.Status == IncidentStatus.Open)
+                                    {
+                                        <span class="badge bg-light text-danger border border-danger">Open</span>
+                                    }
+                                    else if (inc.Status == IncidentStatus.UnderInvestigation)
+                                    {
+
+                                        <span class="badge bg-light text-warning border border-warning">Investigating</span>
+                                    }
+                                    else
+                                    {
+
+                                        <span class="badge bg-light text-success border border-success">Closed</span>
+                                    }
+                                </td>
+                                <td class="text-end pe-4">
+                                    <button class="btn btn-sm btn-outline-dark" @onclick="() => EditIncident(inc.Id)">
+                                        <i class="bi bi-search me-1"></i>Investigate
+                                    </button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private List<IncidentRecord> incidents = new();
+    private bool isLoading = true;
+
+    protected override async Task OnInitializedAsync() => await LoadData();
+
+    private async Task LoadData()
+    {
+        isLoading = true;
+        using var context = await DbFactory.CreateDbContextAsync();
+        incidents = await context.IncidentRecords
+            .Include(i => i.Room)
+            .OrderByDescending(i => i.IncidentDateTime)
+            .ToListAsync();
+        isLoading = false;
+    }
+
+    private void LogNewIncident() => Nav.NavigateTo("/admin/hs/incidents/edit/0");
+    private void EditIncident(int id) => Nav.NavigateTo($"/admin/hs/incidents/edit/{id}");
+
+    private string GetSeverityClass(IncidentSeverity sev) => sev switch
+    {
+        IncidentSeverity.Minor => "bg-secondary",
+        IncidentSeverity.FirstAid => "bg-info text-dark",
+        IncidentSeverity.Hospitalization => "bg-warning text-dark",
+        IncidentSeverity.Major => "bg-danger",
+        IncidentSeverity.RIDDOR => "bg-dark text-white shadow",
+        _ => "bg-light"
+    };
+}

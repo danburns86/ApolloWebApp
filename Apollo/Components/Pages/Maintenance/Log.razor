@@ -3,6 +3,7 @@
 @using Apollo.Data
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Policy = SystemPermissions.ManageMaintenance)]
 @inject IMaintenanceService MaintenanceService
+@rendermode InteractiveServer
 
 <PageTitle>Maintenance Log</PageTitle>
 

@@ -3,6 +3,7 @@
 @using Apollo.Data
 @using Microsoft.EntityFrameworkCore
 @attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@rendermode InteractiveServer
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
 
 <div class="container py-4 max-w-5xl">

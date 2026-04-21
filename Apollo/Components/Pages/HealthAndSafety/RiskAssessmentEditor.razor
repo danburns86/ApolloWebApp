@@ -2,6 +2,7 @@
 @using Apollo.Models
 @using Apollo.Data
 @using Microsoft.EntityFrameworkCore
+@rendermode InteractiveServer
 @attribute [Microsoft.AspNetCore.Authorization.Authorize]
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject NavigationManager Nav

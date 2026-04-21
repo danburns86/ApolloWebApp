@@ -1,0 +1,271 @@
+﻿@page "/admin/hs/risk-assessments/print/{raId:int}"
+@layout Apollo.Components.Layout.EmptyLayout
+@rendermode InteractiveServer
+@using Apollo.Models
+@using Apollo.Data
+@using Microsoft.EntityFrameworkCore
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject IJSRuntime JS
+
+<PageTitle>Print - @ra?.Title</PageTitle>
+
+@if (ra == null)
+{
+    <div class="text-center p-5">
+        <div class="spinner-border text-primary"></div>
+        <p>Generating document...</p>
+    </div>
+}
+else
+{
+    <div class="print-container">
+        @* --- HEADER --- *@
+        <div class="d-flex justify-content-between align-items-start border-bottom pb-3 mb-4">
+            <div>
+                <h1 class="fw-bold mb-0 text-uppercase">Apollo Theatre Management</h1>
+                <h3 class="text-muted">Health & Safety Document</h3>
+            </div>
+            <div class="text-end">
+                <div class="fw-bold">Reference: #RA-@ra.Id</div>
+                <div>Printed: @DateTime.Now.ToString("dd MMM yyyy HH:mm")</div>
+            </div>
+        </div>
+
+        @* --- CORE INFO --- *@
+        <div class="card border-dark mb-4">
+            <div class="card-header bg-dark text-white fw-bold">Assessment Details</div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-6">
+                        <label class="tiny-label">Title</label>
+                        <div class="fw-bold">@ra.Title</div>
+                    </div>
+                    <div class="col-3">
+                        <label class="tiny-label">Type</label>
+                        <div>@ra.Type</div>
+                    </div>
+                    <div class="col-3">
+                        <label class="tiny-label">Status</label>
+                        <div class="fw-bold text-uppercase">@(ra.IsApproved ? "Approved" : "Draft Only")</div>
+                    </div>
+                    <div class="col-6">
+                        <label class="tiny-label">Scope</label>
+                        <div>
+                            @if (ra.Production != null) { <span>Production: @ra.Production.Title</span> }
+                            else if (ra.Area != null) { <span>Area: @ra.Area.Name</span> }
+                            else { <span>General Operations</span> }
+                        </div>
+                    </div>
+                    <div class="col-3">
+                        <label class="tiny-label">Assessed By</label>
+                        <div>@ra.AssessedBy</div>
+                    </div>
+                    <div class="col-3 text-danger">
+                        <label class="tiny-label">Review Due</label>
+                        <div class="fw-bold">@ra.ReviewDueDate.ToShortDateString()</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        @if (ra is FireRiskAssessment fire)
+        {
+            @* --- FIRE SAFETY SPECIFIC LAYOUT --- *@
+            <div class="card border-dark mb-4">
+                <div class="card-header bg-secondary text-white fw-bold">Step 1 & 2: Hazard Identification</div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label class="fw-bold small">SOURCES OF IGNITION</label>
+                        <p class="print-text">@(string.IsNullOrWhiteSpace(fire.Narrative_IgnitionSources) ? "None identified" : fire.Narrative_IgnitionSources)</p>
+                    </div>
+                    <div class="mb-3">
+                        <label class="fw-bold small">SOURCES OF FUEL</label>
+                        <p class="print-text">@(string.IsNullOrWhiteSpace(fire.Narrative_FuelSources) ? "None identified" : fire.Narrative_FuelSources)</p>
+                    </div>
+                    <div>
+                        <label class="fw-bold small">PEOPLE AT RISK</label>
+                        <p class="print-text">@(string.IsNullOrWhiteSpace(fire.Narrative_PeopleAtRisk) ? "Standard Occupancy" : fire.Narrative_PeopleAtRisk)</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mb-4">
+                <h5 class="fw-bold border-bottom">Step 3: Control Checklist</h5>
+                <table class="table table-sm table-bordered border-dark align-middle">
+                    <thead class="bg-light">
+                        <tr>
+                            <th>Safety Control Point</th>
+                            <th class="text-center" style="width: 80px;">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @renderCheckRow("Fixed electrical installations inspected (5yr)?", fire.Q_Elec_FixedInspected)
+                        @renderCheckRow("Portable heaters inspected & maintained?", fire.Q_Heat_Maintenance)
+                        @renderCheckRow("Standard of housekeeping adequate (no fuel buildup)?", fire.Q_Housekeeping_Clear)
+                        @renderCheckRow("Premises adequately secured against arson?", fire.Q_Arson_Secure)
+                        @renderCheckRow("Escape routes clear of obstructions?", fire.Q_Escape_Obstructions)
+                        @renderCheckRow("Fire alarm system coverage adequate?", fire.Q_Warning_AlarmSuitable)
+                        @renderCheckRow("Emergency lighting standard adequate?", fire.Q_Warning_DetectorsAdequate)
+                        @renderCheckRow("Staff trained on fire plan?", fire.Q_Manage_Training)
+                    </tbody>
+                </table>
+            </div>
+
+            @if (fire.ActionPlan.Any())
+            {
+                <div class="mb-4 page-break-inside-avoid">
+                    <h5 class="fw-bold border-bottom">Step 4: Remedial Action Plan</h5>
+                    <table class="table table-sm table-bordered border-dark small">
+                        <thead class="bg-light">
+                            <tr>
+                                <th>Deficiency Item</th>
+                                <th>Action Required</th>
+                                <th>Owner</th>
+                                <th>Due</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var item in fire.ActionPlan)
+                            {
+                                <tr class="@(item.IsResolved ? "text-muted" : "fw-bold")">
+                                    <td>@item.ItemName</td>
+                                    <td>@item.ProposedAction</td>
+                                    <td>@item.PersonResponsible</td>
+                                    <td>@item.Timescale</td>
+                                    <td>
+                                        @if (item.IsResolved) { <span>FIXED: @item.ResolvedDate?.ToShortDateString()</span> }
+                                        else { <span class="text-danger">OPEN</span> }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+
+            <div class="mb-4">
+                <h6 class="fw-bold small">Area Coverage</h6>
+                <div class="p-2 border rounded bg-light small">
+                    Rooms covered by this audit: 
+                    @string.Join(", ", fire.RoomAssignments.Where(a => a.IsCoveredByAreaAssessment).Select(a => a.Room?.Name))
+                </div>
+            </div>
+        }
+        else
+        {
+            @* --- STANDARD RISK ASSESSMENT GRID --- *@
+            <table class="table table-bordered border-dark align-middle small">
+                <thead class="bg-dark text-white text-center">
+                    <tr>
+                        <th style="width: 20%;">Hazard / Risk</th>
+                        <th style="width: 15%;">Who is at risk?</th>
+                        <th style="width: 60px;">Init. Score</th>
+                        <th>Mitigation / Control Measures</th>
+                        <th style="width: 60px;">Res. Score</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var h in ra.Hazards)
+                    {
+                        <tr>
+                            <td class="fw-bold">@h.HazardName</td>
+                            <td>@h.WhoIsAtRisk</td>
+                            <td class="text-center" style="background-color: @GetMatrixColor(h.InitialLikelihood * h.InitialSeverity)">
+                                @(h.InitialLikelihood * h.InitialSeverity)
+                            </td>
+                            <td>@h.MitigationMeasures</td>
+                            <td class="text-center" style="background-color: @GetMatrixColor(h.ResidualLikelihood * h.ResidualSeverity)">
+                                @(h.ResidualLikelihood * h.ResidualSeverity)
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+
+        @* --- SIGNATURE BLOCK --- *@
+        <div class="mt-5 pt-4 border-top page-break-inside-avoid">
+            <div class="row">
+                <div class="col-6">
+                    <div class="mb-4">
+                        <label class="tiny-label">Assessor Signature</label>
+                        <div class="border-bottom border-dark mt-4" style="height: 30px; width: 80%;"></div>
+                        <div class="small mt-1">@ra.AssessedBy (@ra.AssessmentDate.ToShortDateString())</div>
+                    </div>
+                </div>
+                <div class="col-6 text-end">
+                    @if (ra.IsApproved)
+                    {
+                        <div class="badge border border-dark p-3 text-dark fw-bold h5">
+                            APPROVED BY: @ra.ApprovedBy
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="text-muted italic">Draft document - not for operational use.</div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<style>
+    .print-container { max-width: 1000px; margin: 0 auto; color: #000; background: #fff; }
+    .tiny-label { font-size: 0.65rem; font-weight: bold; text-transform: uppercase; color: #666; display: block; }
+    .print-text { white-space: pre-wrap; margin-bottom: 0.5rem; }
+    
+    @@media print {
+        body { background: #fff !important; }
+        .no-print { display: none !important; }
+        .card { border: 1px solid #000 !important; }
+        .card-header { background: #eee !important; color: #000 !important; border-bottom: 1px solid #000 !important; }
+        .bg-dark { background: #eee !important; color: #000 !important; }
+        .table { border-color: #000 !important; }
+        .page-break-inside-avoid { page-break-inside: avoid; }
+    }
+</style>
+
+@code {
+    [Parameter] public int raId { get; set; }
+    private RiskAssessment? ra;
+
+    protected override async Task OnInitializedAsync()
+    {
+        using var context = await DbFactory.CreateDbContextAsync();
+        
+        // Polymorphic Load
+        ra = await context.RiskAssessments
+            .Include(r => r.Production)
+            .Include(r => r.Area)
+            .Include(r => r.Hazards)
+            .Include("ActionPlan") // String based to catch FireRiskAssessment items
+            .Include("RoomAssignments.Room")
+            .FirstOrDefaultAsync(r => r.Id == raId);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && ra != null)
+        {
+            // Give the browser a split second to render the styles
+            await Task.Delay(500);
+            await JS.InvokeVoidAsync("window.print");
+        }
+    }
+
+    RenderFragment renderCheckRow(string label, bool val) => __builder => {
+        <tr>
+            <td>@label</td>
+            <td class="text-center fw-bold">@(val ? "YES" : "NO")</td>
+        </tr>
+    };
+
+    private string GetMatrixColor(int score) => score switch {
+        <= 4 => "#d1e7dd",
+        <= 9 => "#fff3cd",
+        <= 15 => "#f8d7da",
+        _ => "#f1aeb5"
+    };
+}

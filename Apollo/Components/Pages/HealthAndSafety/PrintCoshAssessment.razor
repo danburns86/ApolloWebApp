@@ -1,0 +1,144 @@
+﻿@page "/admin/hs/coshh/print/{id:int}"
+@layout Apollo.Components.Layout.EmptyLayout
+@rendermode InteractiveServer
+@using Apollo.Models
+@using Apollo.Data
+@using Microsoft.EntityFrameworkCore
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject IJSRuntime JS
+
+<PageTitle>COSHH - @assessment?.Substance?.Name</PageTitle>
+
+@if (assessment != null)
+{
+    <div class="print-container p-4">
+        @* --- HEADER --- *@
+        <div class="row align-items-center border-bottom pb-3 mb-4">
+            <div class="col-8">
+                <h1 class="fw-bold mb-0">COSHH ASSESSMENT</h1>
+                <p class="text-muted mb-0">Legal Compliance Document: Control of Substances Hazardous to Health</p>
+            </div>
+            <div class="col-4 text-end small">
+                <div class="fw-bold">Reference: #COSHH-@assessment.Id</div>
+                <div>Printed: @DateTime.Now.ToString("dd MMM yyyy")</div>
+            </div>
+        </div>
+
+        @* --- PRODUCT DETAILS --- *@
+        <div class="card border-dark mb-4">
+            <div class="card-header bg-dark text-white fw-bold small">PRODUCT INFORMATION</div>
+            <div class="card-body py-2">
+                <div class="row">
+                    <div class="col-6"><strong>Product:</strong> @assessment.Substance?.Name</div>
+                    <div class="col-6"><strong>Manufacturer:</strong> @assessment.Substance?.Manufacturer</div>
+                    <div class="col-12 mt-2"><strong>Pictograms:</strong> @assessment.Substance?.HazardPictograms</div>
+                </div>
+            </div>
+        </div>
+
+        @* --- THE TASK --- *@
+        <div class="row g-4 mb-4">
+            <div class="col-8">
+                <h5 class="fw-bold border-bottom">Assessed Task</h5>
+                <p class="fs-5">@assessment.TaskDescription</p>
+                <p class="small">Location: <strong>@(assessment.Room?.Name ?? "All building areas")</strong></p>
+            </div>
+            <div class="col-4">
+                <div class="p-3 bg-light border text-center">
+                    <div class="small fw-bold">REVIEW STATUS</div>
+                    <div class="fw-bold text-uppercase @(assessment.ReviewDueDate < DateTime.Today ? "text-danger" : "")">
+                        Due: @assessment.ReviewDueDate.ToShortDateString()
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        @* --- HAZARDS & FIRST AID --- *@
+        <div class="row g-4 mb-4">
+            <div class="col-6">
+                <div class="p-3 border-start border-4 border-danger bg-light-subtle h-100">
+                    <h6 class="fw-bold text-danger">HEALTH RISKS</h6>
+                    <p class="small mb-0">@assessment.HealthRisks</p>
+                </div>
+            </div>
+            <div class="col-6">
+                <div class="p-3 border-start border-4 border-info bg-light-subtle h-100">
+                    <h6 class="fw-bold text-info">FIRST AID MEASURES</h6>
+                    <p class="small mb-0">@assessment.FirstAidMeasures</p>
+                </div>
+            </div>
+        </div>
+
+        @* --- CONTROLS --- *@
+        <div class="mb-4">
+            <h5 class="fw-bold border-bottom">Control Measures & Mitigations</h5>
+            <div class="p-3 bg-white border">
+                @assessment.ControlMeasures
+            </div>
+        </div>
+
+        @* --- PPE & DISPOSAL --- *@
+        <div class="row g-3 mb-5">
+            <div class="col-6">
+                <div class="p-3 border bg-light">
+                    <strong>PPE REQUIRED:</strong><br />@assessment.PPE_Required
+                </div>
+            </div>
+            <div class="col-6">
+                <div class="p-3 border bg-light">
+                    <strong>DISPOSAL:</strong><br />@assessment.DisposalInstructions
+                </div>
+            </div>
+        </div>
+
+        @* --- FOOTER / SIGN OFF --- *@
+        <div class="row mt-5 pt-4 border-top">
+            <div class="col-6">
+                <label class="small text-muted text-uppercase fw-bold">Assessor Signature</label>
+                <div class="border-bottom border-dark mt-4 mb-1" style="width: 250px; height: 30px;"></div>
+                <div class="small">Date: @assessment.AssessmentDate.ToShortDateString()</div>
+            </div>
+            <div class="col-6 text-end">
+                @if (assessment.IsApproved)
+                {
+                    <div class="p-3 border border-dark d-inline-block text-center">
+                        <div class="small fw-bold">LEGALLY APPROVED BY</div>
+                        <div class="h5 mb-0 fw-bold">@assessment.ApprovedBy</div>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+}
+
+<style>
+    .print-container { max-width: 900px; margin: 0 auto; color: #000; }
+    @@media print {
+        body { background: white; }
+        .no-print { display: none; }
+        .card-header { background-color: #eee !important; color: black !important; border: 1px solid black; }
+    }
+</style>
+
+@code {
+    [Parameter] public int id { get; set; }
+    private CoshhAssessment? assessment;
+
+    protected override async Task OnInitializedAsync()
+    {
+        using var context = await DbFactory.CreateDbContextAsync();
+        assessment = await context.CoshhAssessments
+            .Include(a => a.Substance)
+            .Include(a => a.Room)
+            .FirstOrDefaultAsync(a => a.Id == id);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && assessment != null)
+        {
+            await Task.Delay(500);
+            await JS.InvokeVoidAsync("window.print");
+        }
+    }
+}

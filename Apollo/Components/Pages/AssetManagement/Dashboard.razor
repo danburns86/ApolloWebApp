@@ -4,6 +4,7 @@
 @using Microsoft.EntityFrameworkCore
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Policy = SystemPermissions.ViewAssets)]
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
+@rendermode InteractiveServer
 
 <PageTitle>Assets Dashboard</PageTitle>
 

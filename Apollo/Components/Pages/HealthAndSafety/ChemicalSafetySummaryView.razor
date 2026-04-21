@@ -1,0 +1,93 @@
+﻿@using Apollo.Models
+
+<div class="chemical-summary page-break-before">
+    <div class="d-flex justify-content-between border-bottom border-3 border-dark pb-2 mb-3">
+        <h2 class="fw-bold mb-0">CHEMICAL SAFETY SUMMARY</h2>
+        <div class="text-end">
+            <span class="badge bg-dark text-white p-2">COSHH REFERENCE: #@Substance.Id</span>
+        </div>
+    </div>
+
+    <div class="row mb-4">
+        <div class="col-8">
+            <h3 class="fw-bold text-primary">@Substance.Name</h3>
+            <p class="lead">Manufacturer: <strong>@Substance.Manufacturer</strong></p>
+        </div>
+        <div class="col-4 text-end">
+            @* Visual Pictograms Summary *@
+            <div class="d-flex flex-wrap justify-content-end gap-2">
+                @if (!string.IsNullOrEmpty(Substance.HazardPictograms))
+                {
+                    @foreach (var pic in Substance.HazardPictograms.Split(','))
+                    {
+                        <div class="pictogram-box">
+                            <i class="bi bi-exclamation-triangle-fill"></i>
+                            <div class="tiny">@pic.Trim()</div>
+                        </div>
+                    }
+                }
+            </div>
+        </div>
+    </div>
+
+    <div class="card border-dark mb-4">
+        <div class="card-header bg-light fw-bold small">CRITICAL FIRST AID & HEALTH RISKS</div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-6 border-end">
+                    <h6 class="fw-bold text-danger">Health Hazards</h6>
+                    <p class="small">@Assessment?.HealthRisks</p>
+                </div>
+                <div class="col-6 ps-4">
+                    <h6 class="fw-bold text-info">Emergency First Aid</h6>
+                    <p class="small">@Assessment?.FirstAidMeasures</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="mb-4">
+        <h6 class="fw-bold border-bottom pb-1">Handling & Control Measures</h6>
+        <p class="small">@Assessment?.ControlMeasures</p>
+    </div>
+
+    <div class="row g-3 mb-5">
+        <div class="col-6">
+            <div class="p-3 border rounded bg-light-subtle h-100">
+                <h6 class="fw-bold small mb-1">PPE REQUIRED</h6>
+                <div class="fw-bold">@Assessment?.PPE_Required</div>
+            </div>
+        </div>
+        <div class="col-6">
+            <div class="p-3 border rounded bg-light-subtle h-100">
+                <h6 class="fw-bold small mb-1">SAFE DISPOSAL</h6>
+                <div>@Assessment?.DisposalInstructions</div>
+            </div>
+        </div>
+    </div>
+
+    @* --- THE LINK TO FULL PDF --- *@
+    <div class="mt-auto pt-4 border-top text-center page-break-inside-avoid">
+        <div class="d-inline-block p-3 border border-dark rounded bg-white">
+            <div class="small fw-bold text-muted mb-2 text-uppercase">Scan for Full Manufacturer SDS (PDF)</div>
+            <div class="qr-placeholder mx-auto mb-2">
+                <i class="bi bi-qr-code fs-1"></i>
+            </div>
+            <div class="small font-monospace">apollo.theatre/msds/@Substance.Id</div>
+        </div>
+        <p class="tiny text-muted mt-3 italic">This summary is generated from Apollo for quick-reference. Always refer to the original Safety Data Sheet in the SDS folder or via the code above for full technical data.</p>
+    </div>
+</div>
+
+<style>
+    .chemical-summary { min-height: 25cm; padding: 1rem; color: #000; }
+    .pictogram-box { border: 2px solid #000; width: 60px; height: 60px; display: flex; flex-direction: column; align-items: center; justify-content: center; transform: rotate(45deg); margin: 10px; }
+    .pictogram-box > * { transform: rotate(-45deg); }
+    .qr-placeholder { width: 100px; height: 100px; background: #eee; display: flex; align-items: center; justify-content: center; border: 1px solid #ddd; }
+    .page-break-before { page-break-before: always; }
+</style>
+
+@code {
+    [Parameter] public CoshhSubstance Substance { get; set; } = default!;
+    [Parameter] public CoshhAssessment? Assessment { get; set; }
+}

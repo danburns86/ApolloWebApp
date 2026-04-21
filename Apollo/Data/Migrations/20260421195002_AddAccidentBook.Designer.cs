@@ -4,6 +4,7 @@ using Apollo.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Apollo.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260421195002_AddAccidentBook")]
+    partial class AddAccidentBook
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -571,6 +574,9 @@ namespace Apollo.Migrations
                     b.Property<int>("FireRiskAssessmentId")
                         .HasColumnType("int");
 
+                    b.Property<bool>("IsCompleted")
+                        .HasColumnType("bit");
+
                     b.Property<bool>("IsResolved")
                         .HasColumnType("bit");
 
@@ -803,9 +809,6 @@ namespace Apollo.Migrations
 
                     b.Property<string>("DescriptionOfEvent")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("EntryMethod")
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("ImmediateActionTaken")
@@ -1811,6 +1814,9 @@ namespace Apollo.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
+                    b.Property<string>("ExceptionNote")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<int>("FireRiskAssessmentId")
                         .HasColumnType("int");
 
@@ -2094,6 +2100,10 @@ namespace Apollo.Migrations
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("Narrative_FuelSources")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Narrative_HazardsFound")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 

@@ -1,4 +1,5 @@
 ﻿@page "/admin/hs/risk-assessments"
+@rendermode InteractiveServer
 @using Apollo.Models
 @using Apollo.Data
 @using Microsoft.EntityFrameworkCore
@@ -15,7 +16,17 @@
             <p class="text-muted">Master registry for operational risks and fire safety audits.</p>
         </div>
         <div class="d-flex gap-2">
-            <button class="btn btn-outline-primary" @onclick="CreateNewGeneral">
+            @if (selectedIds.Any())
+            {
+                <div class="btn-group shadow-sm me-2">
+                    <button class="btn btn-dark fw-bold" @onclick="PrintBatch">
+                        <i class="bi bi-printer me-2"></i>Print Selected (@selectedIds.Count)
+                    </button>
+                    <button class="btn btn-outline-dark" @onclick="() => selectedIds.Clear()">Clear</button>
+                </div>
+            }
+
+            <button class="btn btn-outline-primary shadow-sm" @onclick="CreateNewGeneral">
                 <i class="bi bi-plus-lg me-1"></i>New General RA
             </button>
     
@@ -35,6 +46,32 @@
         </div>
     </div>
 
+    @* --- QUICK SELECT BAR --- *@
+    <div class="card border-0 shadow-sm mb-4 bg-light">
+        <div class="card-body py-2 d-flex gap-3 align-items-center">
+            <span class="small fw-bold text-muted text-uppercase">Quick Batch Selection:</span>
+            <select class="form-select form-select-sm w-auto" @onchange="SelectByArea">
+                <option value="">-- Select by Area --</option>
+                @foreach (var area in allAreas)
+                {
+                    <option value="@area.Id">@area.Name</option>
+                }
+            </select>
+            <select class="form-select form-select-sm w-auto" @onchange="SelectByRoom">
+                <option value="">-- Select by Room --</option>
+                @foreach (var area in allAreas)
+                {
+                    <optgroup label="@area.Name">
+                        @foreach (var room in area.Rooms ?? new List<Room>())
+                        {
+                            <option value="@room.Id">@room.Name</option>
+                        }
+                    </optgroup>
+                }
+            </select>
+        </div>
+    </div>
+
     @if (showFireDropdown)
     {
         <div style="position:fixed; top:0; left:0; width:100vw; height:100vh; z-index:1000;" @onclick="ToggleFireDropdown"></div>
@@ -50,11 +87,15 @@
             <table class="table table-hover align-middle mb-0">
                 <thead class="bg-dark text-white small fw-bold">
                     <tr>
-                        <th class="ps-4">Title / Reference</th>
+                        <th class="ps-4" style="width: 40px;">
+                            <input type="checkbox" class="form-check-input"
+                                   checked="@(allRAs.Any() && selectedIds.Count == allRAs.Count)"
+                                   @onchange="ToggleSelectAll" />
+                        </th>
+                        <th>Title / Reference</th>
                         <th>Type</th>
                         <th>Scope</th>
-                        <th class="text-center">Compliance Status</th>
-                        <th class="text-end pe-4">Next Review</th>
+                        <th class="text-center">Status</th>
                         <th class="text-end pe-4">Actions</th>
                     </tr>
                 </thead>
@@ -63,6 +104,11 @@
                     {
                         <tr>
                             <td class="ps-4">
+                                <input type="checkbox" class="form-check-input"
+                                       checked="@selectedIds.Contains(ra.Id)"
+                                       @onchange="(e) => ToggleSelection(ra.Id, (bool)e.Value!)" />
+                            </td>
+                            <td>
                                 <div class="fw-bold">@ra.Title</div>
                                 <div class="small text-muted">Created @ra.AssessmentDate.ToShortDateString()</div>
                             </td>
@@ -86,31 +132,21 @@
                             <td class="text-center">
                                 @if (!ra.IsApproved)
                                 {
-                                    <span class="badge bg-secondary shadow-sm">Draft</span>
+                                    <span class="badge bg-secondary">Draft</span>
                                 }
-                                else if (ra is FireRiskAssessment fireRa && fireRa.ActionPlan.Any(a => !a.IsResolved))
+                                else if (ra is FireRiskAssessment f && f.ActionPlan.Any(a => !a.IsResolved))
                                 {
-                                    <span class="badge bg-warning text-dark border border-warning shadow-sm">
-                                        <i class="bi bi-exclamation-triangle me-1"></i>Action Required
-                                    </span>
+
+                                    <span class="badge bg-warning text-dark">Action Required</span>
                                 }
                                 else
                                 {
-                                    <span class="badge bg-success shadow-sm">
-                                        <i class="bi bi-shield-check me-1"></i>Compliant
-                                    </span>
+
+                                    <span class="badge bg-success">Compliant</span>
                                 }
                             </td>
                             <td class="text-end pe-4">
-                                <div class="small @(ra.ReviewDueDate <= DateTime.Today ? "text-danger fw-bold" : "text-muted")">
-                                    @ra.ReviewDueDate.ToShortDateString()
-                                </div>
-                            </td>
-                            <td class="text-end pe-4">
-                                <button class="btn btn-sm btn-outline-dark me-1" @onclick="() => HandleNavigation(ra)">
-                                    <i class="bi bi-pencil-square me-1"></i>Edit
-                                </button>
-                                <button class="btn btn-sm btn-light border" title="Export PDF"><i class="bi bi-file-earmark-pdf"></i></button>
+                                <button class="btn btn-sm btn-outline-dark me-1" @onclick="() => HandleNavigation(ra)">Edit</button>
                             </td>
                         </tr>
                     }
@@ -123,6 +159,7 @@
 @code {
     private List<RiskAssessment> allRAs = new();
     private List<Area> allAreas = new();
+    private List<int> selectedIds = new();
     private bool isLoading = true;
     private bool showFireDropdown = false;
 
@@ -133,7 +170,6 @@
         isLoading = true;
         using var context = await DbFactory.CreateDbContextAsync();
         
-        // Use string-based include for the polymorphic ActionPlan property
         allRAs = await context.RiskAssessments
             .Include(r => r.Production)
             .Include(r => r.Area)
@@ -141,7 +177,7 @@
             .OrderByDescending(r => r.AssessmentDate)
             .ToListAsync();
 
-        allAreas = await context.Areas.OrderBy(a => a.Name).ToListAsync();
+        allAreas = await context.Areas.Include(a => a.Rooms).OrderBy(a => a.Name).ToListAsync();
         isLoading = false;
     }
 
@@ -149,11 +185,44 @@
     private void CreateNewGeneral() => Nav.NavigateTo("/admin/hs/risk-assessments/edit/0");
     private void StartFireRA(int areaId) { showFireDropdown = false; Nav.NavigateTo($"/admin/hs/fire-risk-assessment/new/{areaId}"); }
     
-    private void CloneForProduction(int prodId) => Nav.NavigateTo($"/admin/hs/risk-assessments/edit/0?prodId={prodId}");
-
     private void HandleNavigation(RiskAssessment ra)
     {
         if (ra.Type == RiskAssessmentType.Fire) Nav.NavigateTo($"/admin/hs/fire-risk-assessment/edit/{ra.Id}");
         else Nav.NavigateTo($"/admin/hs/risk-assessments/edit/{ra.Id}");
     }
+
+    private void ToggleSelection(int id, bool isSelected)
+    {
+        if (isSelected) { if (!selectedIds.Contains(id)) selectedIds.Add(id); }
+        else { selectedIds.Remove(id); }
+    }
+
+    private void ToggleSelectAll(ChangeEventArgs e)
+    {
+        if ((bool)e.Value!) selectedIds = allRAs.Select(r => r.Id).ToList();
+        else selectedIds.Clear();
+    }
+
+    private void SelectByArea(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out int areaId))
+        {
+            var ids = allRAs.Where(r => r.AreaId == areaId).Select(r => r.Id);
+            foreach (var id in ids) { if (!selectedIds.Contains(id)) selectedIds.Add(id); }
+        }
+    }
+
+    private void SelectByRoom(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out int roomId))
+        {
+            var ids = allRAs.Where(r =>
+                (r is FireRiskAssessment f && f.RoomAssignments.Any(a => a.RoomId == roomId))
+                || (r.Area != null && r.Area.Rooms.Any(rm => rm.Id == roomId))
+            ).Select(r => r.Id);
+            foreach (var id in ids) { if (!selectedIds.Contains(id)) selectedIds.Add(id); }
+        }
+    }
+
+    private void PrintBatch() => Nav.NavigateTo($"/admin/hs/risk-assessments/print-batch?ids={string.Join(",", selectedIds)}");
 }

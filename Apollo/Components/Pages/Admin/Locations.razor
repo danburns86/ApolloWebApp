@@ -6,6 +6,8 @@
 @attribute [Authorize(Policy = SystemPermissions.ManageFacilities)]
 @inject ILocationService LocationService
 @inject IJSRuntime JS
+@inject NavigationManager Nav
+@rendermode InteractiveServer
 
 <PageTitle>Facilities & Locations</PageTitle>
 
@@ -83,7 +85,6 @@
                                     <tr>
                                         <th>Room Name</th>
                                         <th>Safety Info</th>
-                                        <th>MRBS</th>
                                         <th class="text-end">Actions</th>
                                     </tr>
                                 </thead>
@@ -107,13 +108,17 @@
                                                     </div>
                                                 }
                                                 <div class="text-muted small">
-                                                    <strong>Call Points:</strong><br />
-                                                    @((MarkupString)(room.CallPoints?.Replace("\n", "<br />") ?? "None listed"))
+                                                    <strong>Assembly:</strong> @(room.SpecificAssemblyPoint ?? "Global Default")
                                                 </div>
                                             </td>
                                             <td class="text-end">
-                                                <button class="btn btn-sm btn-light border" @onclick="() => OpenRoomModal(room)"><i class="bi bi-gear"></i></button>
-                                                <button class="btn btn-sm btn-outline-danger ms-1" @onclick="() => DeleteRoom(room)"><i class="bi bi-trash"></i></button>
+                                                <button class="btn btn-sm btn-light border" @onclick="() => OpenRoomModal(room)" title="Settings"><i class="bi bi-gear"></i></button>
+                                                <button class="btn btn-sm btn-outline-danger ms-1" @onclick="() => DeleteRoom(room)" title="Delete"><i class="bi bi-trash"></i></button>
+                                                <button class="btn btn-sm btn-outline-primary ms-1"
+                                                        title="Print Fire Action Poster"
+                                                        @onclick='() => Nav.NavigateTo($"/admin/hs/fire-poster/{room.Id}")'>
+                                                    <i class="bi bi-printer"></i>
+                                                </button>
                                             </td>
                                         </tr>
                                     }
@@ -203,12 +208,12 @@
                                     <InputTextArea @bind-Value="editingRoom.AlternativeExit" class="form-control" rows="2" placeholder="Alternative exit route..." />
                                 </div>
                                 <div class="mb-3">
-                                    <label class="form-label small fw-bold">Call Points (List in order)</label>
-                                    <InputTextArea @bind-Value="editingRoom.CallPoints" class="form-control" rows="2" placeholder="1. By door&#10;2. In lobby" />
+                                    <label class="form-label small fw-bold">Specific Assembly Point</label>
+                                    <InputText @bind-Value="editingRoom.SpecificAssemblyPoint" class="form-control" placeholder="Leave blank for building default" />
                                 </div>
                                 <div class="mb-3">
-                                    <label class="form-label small fw-bold">Additional Safety Notes</label>
-                                    <InputTextArea @bind-Value="editingRoom.FireActionNotes" class="form-control" rows="2" />
+                                    <label class="form-label small fw-bold">Call Points</label>
+                                    <InputTextArea @bind-Value="editingRoom.CallPoints" class="form-control" rows="2" placeholder="Nearest call point locations..." />
                                 </div>
                             </div>
                         </div>
@@ -283,6 +288,7 @@
                 AreaId = room.AreaId,
                 NearestExit = room.NearestExit,
                 AlternativeExit = room.AlternativeExit,
+                SpecificAssemblyPoint = room.SpecificAssemblyPoint,
                 CallPoints = room.CallPoints,
                 FireActionNotes = room.FireActionNotes,
                 MRBSRoomId = room.MRBSRoomId,

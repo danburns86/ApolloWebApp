@@ -1,66 +1,118 @@
 ﻿@page "/admin/hs/coshh/assessment/{id:int}"
+@rendermode InteractiveServer
 @using Apollo.Models
 @using Apollo.Data
 @using Microsoft.EntityFrameworkCore
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject NavigationManager Nav
+@inject AuthenticationStateProvider AuthProvider
 
 <div class="container py-4 max-w-5xl">
-    <div class="mb-4">
-        <h2 class="fw-bold"><i class="bi bi-droplet-half text-primary me-2"></i>COSHH Assessment</h2>
-        <p class="text-muted">Assessing usage of: <strong>@substance?.Name</strong></p>
-    </div>
+    @* --- HEADER --- *@
+    <div class="card border-0 shadow-sm mb-4 @(assessment.IsApproved ? "bg-primary text-white" : "bg-warning text-dark")">
+        <div class="card-body d-flex justify-content-between align-items-center">
+            <div>
+                <h4 class="fw-bold mb-0">
+                    <i class="bi bi-droplet-half me-2"></i>
+                    @(assessment.IsApproved ? "COSHH Assessment - SEALED" : "COSHH Assessment - DRAFT")
+                </h4>
+                <p class="small mb-0 opacity-75">Product: @substance?.Name (@substance?.Manufacturer)</p>
+            </div>
+            <div class="d-flex gap-2">
+                @if (!assessment.IsApproved)
+                {
+                    <button class="btn btn-dark fw-bold shadow-sm" @onclick="SignOff">
+                        <i class="bi bi-shield-check me-2"></i>Approve & Seal
+                    </button>
+                }
+                else
+                {
 
-    <div class="card border-0 shadow-sm mb-4">
-        <div class="card-body p-4">
-            <div class="row g-3">
-                <div class="col-md-12">
-                    <label class="small fw-bold">Task Description</label>
-                    <input type="text" class="form-control" @bind="assessment.TaskDescription" placeholder="e.g. Painting floor with solvent base" />
-                </div>
-                <div class="col-md-6">
-                    <label class="small fw-bold">Specific Area/Room</label>
-                    <select class="form-select" @bind="assessment.RoomId">
-                        <option value="">-- Everywhere / All Areas --</option>
-                        @foreach (var r in allRooms)
-                        {
-                            <option value="@r.Id">@r.Name</option>
-                        }
-                    </select>
-                </div>
-                <div class="col-md-6">
-                    <label class="small fw-bold">Review Date</label>
-                    <input type="date" class="form-control" @bind="assessment.ReviewDueDate" />
-                </div>
+                    <button class="btn btn-outline-light btn-sm" @onclick="() => assessment.IsApproved = false">Unlock</button>
+                }
+                <button class="btn btn-primary fw-bold shadow-sm" @onclick="Save"><i class="bi bi-save me-2"></i>Save</button>
             </div>
         </div>
     </div>
 
-    <div class="card border-0 shadow-sm mb-4">
-        <div class="card-header bg-primary text-white py-3">
-            <h6 class="mb-0 fw-bold">HSE Control Measures</h6>
-        </div>
-        <div class="card-body p-4">
-            <div class="mb-3">
-                <label class="small fw-bold">How will the risk be controlled?</label>
-                <textarea class="form-control" rows="4" @bind="assessment.ControlMeasures" placeholder="e.g. Work in ventilated area, no smoking nearby..."></textarea>
-            </div>
-            <div class="row">
-                <div class="col-md-6">
-                    <label class="small fw-bold">PPE Required</label>
-                    <input type="text" class="form-control" @bind="assessment.PPE_Required" placeholder="Gloves, Eye protection, Mask..." />
+    <fieldset disabled="@assessment.IsApproved">
+        <div class="row g-4">
+            @* --- TASK INFO --- *@
+            <div class="col-md-8">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-header bg-dark text-white fw-bold small">TASK & LOCATION</div>
+                    <div class="card-body">
+                        <label class="small fw-bold">Describe the task / use case</label>
+                        <input type="text" class="form-control mb-3" @bind="assessment.TaskDescription" placeholder="e.g. Painting the stage floor" />
+                        
+                        <label class="small fw-bold">Primary Room/Area of Use</label>
+                        <select class="form-select" @bind="assessment.RoomId">
+                            <option value="">-- Everywhere / Building Wide --</option>
+                            @foreach (var r in allRooms)
+                            {
+                                <option value="@r.Id">@r.Name (@r.Area?.Name)</option>
+                            }
+                        </select>
+                    </div>
                 </div>
-                <div class="col-md-6">
-                    <label class="small fw-bold">Disposal Instructions</label>
-                    <input type="text" class="form-control" @bind="assessment.DisposalInstructions" />
-                </div>
             </div>
-        </div>
-    </div>
 
-    <button class="btn btn-primary fw-bold w-100 py-3 shadow" @onclick="SaveAssessment">
-        <i class="bi bi-shield-check me-2"></i>Finalise COSHH Assessment
-    </button>
+            @* --- DATES --- *@
+            <div class="col-md-4">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-header bg-dark text-white fw-bold small">COMPLIANCE DATES</div>
+                    <div class="card-body">
+                        <label class="small fw-bold">Assessment Date</label>
+                        <input type="date" class="form-control mb-3" @bind="assessment.AssessmentDate" />
+                        <label class="small fw-bold">Next Review Due</label>
+                        <input type="date" class="form-control" @bind="assessment.ReviewDueDate" />
+                    </div>
+                </div>
+            </div>
+
+            @* --- HAZARDS & FIRST AID --- *@
+            <div class="col-12">
+                <div class="card border-0 shadow-sm border-start border-4 border-danger">
+                    <div class="card-header bg-white fw-bold text-danger">HEALTH HAZARDS & FIRST AID (From MSDS)</div>
+                    <div class="card-body">
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="small fw-bold">Health Risks / Symptoms</label>
+                                <textarea class="form-control" rows="3" @bind="assessment.HealthRisks" placeholder="What does it do to a person?"></textarea>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="small fw-bold">Immediate First Aid Actions</label>
+                                <textarea class="form-control" rows="3" @bind="assessment.FirstAidMeasures" placeholder="What to do in case of exposure?"></textarea>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            @* --- CONTROLS --- *@
+            <div class="col-12">
+                <div class="card border-0 shadow-sm">
+                    <div class="card-header bg-success text-white fw-bold small">CONTROL MEASURES & PPE</div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label class="small fw-bold">How will you prevent or control exposure?</label>
+                            <textarea class="form-control" rows="3" @bind="assessment.ControlMeasures" placeholder="e.g. Ensure ventilation, keep container closed when not in use..."></textarea>
+                        </div>
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="small fw-bold">PPE Required</label>
+                                <input type="text" class="form-control" @bind="assessment.PPE_Required" />
+                            </div>
+                            <div class="col-md-6">
+                                <label class="small fw-bold">Disposal Instructions</label>
+                                <input type="text" class="form-control" @bind="assessment.DisposalInstructions" />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </fieldset>
 </div>
 
 @code {
@@ -74,7 +126,7 @@
     protected override async Task OnInitializedAsync()
     {
         using var context = await DbFactory.CreateDbContextAsync();
-        allRooms = await context.Rooms.OrderBy(r => r.Name).ToListAsync();
+        allRooms = await context.Rooms.Include(r => r.Area).OrderBy(r => r.Name).ToListAsync();
 
         if (id != 0)
         {
@@ -84,13 +136,26 @@
         else
         {
             substance = await context.CoshhSubstances.FindAsync(subId);
-            assessment = new CoshhAssessment { SubstanceId = subId, ReviewDueDate = DateTime.Today.AddYears(1) };
+            assessment = new CoshhAssessment { SubstanceId = subId, PPE_Required = "Standard Workwear" };
         }
     }
 
-    private async Task SaveAssessment()
+    private async Task SignOff()
+    {
+        var authState = await AuthProvider.GetAuthenticationStateAsync();
+        assessment.IsApproved = true;
+        assessment.ApprovedBy = authState.User.Identity?.Name ?? "Technical Manager";
+        await Save();
+    }
+
+    private async Task Save()
     {
         using var context = await DbFactory.CreateDbContextAsync();
+        
+        // Detach navigation properties to avoid Identity Insert errors
+        assessment.Substance = null;
+        assessment.Room = null;
+
         if (assessment.Id == 0) context.CoshhAssessments.Add(assessment);
         else context.CoshhAssessments.Update(assessment);
 

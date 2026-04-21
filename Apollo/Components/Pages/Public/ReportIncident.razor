@@ -1,0 +1,130 @@
+﻿@page "/report-incident"
+@layout Apollo.Components.Layout.EmptyLayout
+@rendermode InteractiveServer
+@using Apollo.Models
+@using Apollo.Data
+@using Microsoft.EntityFrameworkCore
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject NavigationManager Nav
+
+<PageTitle>Report an Incident - Apollo Theatre</PageTitle>
+
+<div class="container py-4" style="max-width: 600px;">
+    <div class="text-center mb-4">
+        <h2 class="fw-bold">Incident Reporter</h2>
+        <p class="text-muted">Report an accident, injury, or near-miss.</p>
+    </div>
+
+    @if (!isAuthenticated)
+    {
+        <div class="card border-0 shadow-sm p-4">
+            <label class="small fw-bold mb-2">Stage Door Password</label>
+            <div class="input-group">
+                <input type="password" class="form-control" @bind="passwordInput" placeholder="Enter password to access..." />
+                <button class="btn btn-dark" @onclick="CheckPassword">Unlock</button>
+            </div>
+            @if (showError)
+            {
+                <p class="text-danger small mt-2">Incorrect password. Please ask the Stage Manager.</p>
+            }
+        </div>
+    }
+    else if (isSubmitted)
+    {
+        <div class="card border-0 shadow-sm p-5 text-center">
+            <i class="bi bi-check-circle-fill text-success display-1 mb-3"></i>
+            <h3 class="fw-bold">Report Received</h3>
+            <p>Thank you for reporting this. Management has been notified.</p>
+            <button class="btn btn-outline-primary mt-3" @onclick='() => Nav.NavigateTo("/")'>Return to Home</button>
+        </div>
+    }
+    else
+    {
+        <EditForm Model="inc" OnValidSubmit="HandleSubmit">
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label class="small fw-bold">Who was involved?</label>
+                        <InputText class="form-control" @bind-Value="inc.PersonInvolvedName" placeholder="Full name of person affected" />
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="small fw-bold">Relationship to Theatre</label>
+                        <InputSelect class="form-select" @bind-Value="inc.PersonInvolvedType">
+                            <option value="Staff">Staff</option>
+                            <option value="Member">Society Member</option>
+                            <option value="Crew">Visiting Crew/Artist</option>
+                            <option value="Public">Audience Member</option>
+                        </InputSelect>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="small fw-bold">Where did it happen?</label>
+                        <select class="form-select" @bind="inc.RoomId">
+                            <option value="">-- Choose Location --</option>
+                            @foreach (var r in rooms)
+                            {
+                                <option value="@r.Id">@r.Name</option>
+                            }
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="small fw-bold">When did it happen?</label>
+                        <input type="datetime-local" class="form-control" @bind="inc.IncidentDateTime" />
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="small fw-bold">What happened?</label>
+                        <InputTextArea class="form-control" rows="4" @bind-Value="inc.DescriptionOfEvent" placeholder="Describe the event in detail..." />
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="small fw-bold">Injuries Sustained (if any)</label>
+                        <InputText class="form-control" @bind-Value="inc.InjuriesSustained" placeholder="e.g. Cut on finger, bruise" />
+                    </div>
+                    
+                    <button type="submit" class="btn btn-danger w-100 py-3 fw-bold shadow">
+                        <i class="bi bi-send me-2"></i>Submit Official Incident Report
+                    </button>
+                </div>
+            </div>
+        </EditForm>
+    }
+</div>
+
+@code {
+    private IncidentRecord inc = new() { EntryMethod = "PublicLink" };
+    private List<Room> rooms = new();
+    private string passwordInput = "";
+    private bool isAuthenticated = false;
+    private bool showError = false;
+    private bool isSubmitted = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        using var context = await DbFactory.CreateDbContextAsync();
+        rooms = await context.Rooms.OrderBy(r => r.Name).ToListAsync();
+    }
+
+    private async Task CheckPassword()
+    {
+        using var context = await DbFactory.CreateDbContextAsync();
+        var config = await context.PortalConfigurations.FirstOrDefaultAsync();
+        if (config != null && passwordInput == config.StageDoorPasscode)
+        {
+            isAuthenticated = true;
+        }
+        else { showError = true; }
+    }
+
+    private async Task HandleSubmit()
+    {
+        using var context = await DbFactory.CreateDbContextAsync();
+        inc.Room = null; // Prevent re-insertion
+        inc.ReportedBy = "Public Link Report";
+        context.IncidentRecords.Add(inc);
+        await context.SaveChangesAsync();
+        isSubmitted = true;
+    }
+}

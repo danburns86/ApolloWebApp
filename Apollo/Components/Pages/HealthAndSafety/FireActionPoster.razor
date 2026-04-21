@@ -1,0 +1,156 @@
+﻿@page "/admin/hs/fire-poster/{roomId:int}"
+@layout Apollo.Components.Layout.EmptyLayout
+@rendermode InteractiveServer
+@using Apollo.Models
+@using Apollo.Data
+@using Microsoft.EntityFrameworkCore
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject IJSRuntime JS
+@inject NavigationManager Nav
+
+<PageTitle>Fire Action Notice - @room?.Name</PageTitle>
+
+@if (room == null)
+{
+    <div class="p-5 text-center">Loading poster data...</div>
+}
+else
+{
+    <div class="fire-notice-container">
+        @* --- HEADER --- *@
+        <div class="fire-header">
+            <div class="fire-icon"><i class="bi bi-fire"></i></div>
+            <div class="fire-title text-uppercase">Fire Action</div>
+        </div>
+
+        @* --- STEP 1 --- *@
+        <div class="step-row">
+            <div class="step-num">1</div>
+            <div class="step-body">
+                <div class="step-instr">ANY PERSON DISCOVERING A FIRE</div>
+                <div class="step-action">Operate the nearest fire alarm call point.</div>
+            </div>
+        </div>
+
+        @* --- STEP 2 --- *@
+        <div class="step-row">
+            <div class="step-num">2</div>
+            <div class="step-body">
+                <div class="step-instr">CALL THE FIRE BRIGADE IMMEDIATELY BY DIALING</div>
+                <div class="step-action highlight">@config?.EmergencyPhoneNumber</div>
+            </div>
+        </div>
+
+        @* --- STEP 3 (DYNAMIC) --- *@
+        <div class="step-row">
+            <div class="step-num">3</div>
+            <div class="step-body">
+                <div class="step-instr">LEAVE THE BUILDING BY THE NEAREST EXIT</div>
+                <div class="step-action text-uppercase">
+                    Primary Route: <span class="fw-bold">@(room.NearestExit ?? "THE MAIN EXIT")</span>
+                    @if(!string.IsNullOrEmpty(room.AlternativeExit))
+                    {
+                        <br /><small class="text-dark">Alternative: @room.AlternativeExit</small>
+                    }
+                </div>
+            </div>
+        </div>
+
+        @* --- STEP 4 --- *@
+        <div class="step-row">
+            <div class="step-num">4</div>
+            <div class="step-body">
+                <div class="step-instr">REPORT TO THE ASSEMBLY POINT AT</div>
+                <div class="step-action highlight text-uppercase">
+                    @(room.SpecificAssemblyPoint ?? config?.MainAssemblyPoint ?? "THE MAIN CAR PARK")
+                </div>
+            </div>
+        </div>
+
+        @* --- WARNINGS --- *@
+        <div class="fire-footer">
+            <div class="warning-item">
+                <i class="bi bi-slash-circle me-2"></i> DO NOT stop to collect personal belongings.
+            </div>
+            <div class="warning-item">
+                <i class="bi bi-slash-circle me-2"></i> DO NOT re-enter the building until told it is safe to do so.
+            </div>
+        </div>
+
+        @* --- ROOM IDENTIFIER --- *@
+        <div class="mt-4 d-flex justify-content-between align-items-end small opacity-50 no-print">
+            <div>Apollo Generated Poster for: <strong>@room.Name (@room.Area?.Name)</strong></div>
+            <button class="btn btn-sm btn-dark" @onclick="TriggerPrint">Print Poster</button>
+        </div>
+    </div>
+}
+
+<style>
+    .fire-notice-container {
+        max-width: 800px;
+        margin: 20px auto;
+        border: 4px solid #0056b3;
+        padding: 0;
+        font-family: 'Arial Black', Gadget, sans-serif;
+        color: #0056b3;
+        background: #fff;
+    }
+    .fire-header {
+        background: #0056b3;
+        color: white;
+        padding: 15px;
+        display: flex;
+        align-items: center;
+        gap: 20px;
+    }
+    .fire-icon { font-size: 3rem; }
+    .fire-title { font-size: 3rem; font-weight: 900; }
+    
+    .step-row {
+        display: flex;
+        border-bottom: 2px solid #0056b3;
+    }
+    .step-num {
+        background: #0056b3;
+        color: white;
+        font-size: 3rem;
+        padding: 20px;
+        width: 80px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .step-body { padding: 15px 25px; flex-grow: 1; }
+    .step-instr { font-size: 1rem; color: #333; margin-bottom: 5px; }
+    .step-action { font-size: 1.5rem; font-weight: bold; }
+    .highlight { color: #d63384; font-size: 2rem; }
+
+    .fire-footer { padding: 20px; background: #eee; color: #333; font-size: 1.1rem; }
+    .warning-item { margin-bottom: 10px; font-weight: bold; }
+
+    @@media print {
+        .no-print { display: none !important; }
+        body { background: white !important; }
+        .fire-notice-container { margin: 0; border-width: 10px; }
+    }
+</style>
+
+@code {
+    [Parameter] public int roomId { get; set; }
+    private Room? room;
+    private ComplianceConfiguration? config;
+
+    protected override async Task OnInitializedAsync()
+    {
+        using var context = await DbFactory.CreateDbContextAsync();
+        room = await context.Rooms.Include(r => r.Area).FirstOrDefaultAsync(r => r.Id == roomId);
+        config = await context.ComplianceConfigurations.FirstOrDefaultAsync();
+        
+        if (config == null) 
+        {
+            config = new ComplianceConfiguration(); // Fallback defaults
+        }
+    }
+
+    private async Task TriggerPrint() => await JS.InvokeVoidAsync("window.print");
+}

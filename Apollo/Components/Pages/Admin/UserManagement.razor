@@ -6,6 +6,7 @@
 @inject UserManager<ApplicationUser> UserManager
 @inject RoleManager<IdentityRole> RoleManager
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Administrator")]
+@rendermode InteractiveServer
 
 <PageTitle>User Management</PageTitle>
 

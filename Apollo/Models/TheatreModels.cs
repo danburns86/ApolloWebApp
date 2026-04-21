@@ -45,7 +45,8 @@ namespace Apollo.Models
         public string? AlternativeExit { get; set; }
         public string? CallPoints { get; set; }
         public string? FireActionNotes { get; set; }
-
+        public string? SpecificAssemblyPoint { get; set; }
+        
         public int? MRBSRoomId { get; set; }
         public bool IsPublic { get; set; }
         public bool IsActive { get; set; } = true;
@@ -684,28 +685,28 @@ namespace Apollo.Models
         public Member? Member { get; set; }
         public string? ExternalName { get; set; }
     }
-
     #region HEALTH & SAFETY MODULE
 
     public enum RiskAssessmentType { General, Production, Fire, COSHH }
-    public enum IncidentSeverity { NearMiss, Minor, Major, RIDDOR }
+
+    // --- INCIDENT LOG ENUMS ---
+    public enum IncidentType { Accident, NearMiss, DangerousOccurrence, IllHealth }
+    public enum IncidentStatus { Open, UnderInvestigation, Closed }
+    public enum IncidentSeverity { NearMiss, Minor, FirstAid, Hospitalization, Major, RIDDOR }
 
     public class FireSystemComponent
     {
         [Key]
         public int Id { get; set; }
         [Required]
-        public string UniqueID { get; set; } = string.Empty; // e.g., CP 01, S101, S102
-
+        public string UniqueID { get; set; } = string.Empty;
         [Required]
-        public string Type { get; set; } = "Smoke Head"; // Smoke Head, Heat, Sounder, Call Point, Em Light
-        public bool IsMaintained { get; set; } // For Emergency Lights
-
+        public string Type { get; set; } = "Smoke Head";
+        public bool IsMaintained { get; set; }
         public int RoomId { get; set; }
         [ForeignKey("RoomId")]
         public Room? Room { get; set; }
-
-        public string? SpecificLocation { get; set; } // e.g. "Behind the LX rack"
+        public string? SpecificLocation { get; set; }
         public DateTime? LastTested { get; set; }
         public bool IsActive { get; set; } = true;
     }
@@ -717,10 +718,9 @@ namespace Apollo.Models
         [Required]
         public string Name { get; set; } = string.Empty;
         public string? Manufacturer { get; set; }
-        public string? MsdsFilePath { get; set; } // Storage path for the PDF
+        public string? MsdsFilePath { get; set; }
         public DateTime? MsdsExpiry { get; set; }
-
-        public string? HazardPictograms { get; set; } // Store as comma-sep string: "Flammable, Toxic"
+        public string? HazardPictograms { get; set; }
         public string? UseInstructions { get; set; }
     }
 
@@ -731,22 +731,17 @@ namespace Apollo.Models
         [Required]
         public string Title { get; set; } = string.Empty;
         public RiskAssessmentType Type { get; set; } = RiskAssessmentType.General;
-
         public int? ProductionId { get; set; }
         [ForeignKey("ProductionId")]
         public Production? Production { get; set; }
-
         public int? AreaId { get; set; }
         [ForeignKey("AreaId")]
         public Area? Area { get; set; }
-
         public string? AssessedBy { get; set; }
         public DateTime AssessmentDate { get; set; } = DateTime.Now;
         public DateTime ReviewDueDate { get; set; } = DateTime.Now.AddYears(1);
-
         public bool IsApproved { get; set; }
         public string? ApprovedBy { get; set; }
-
         public ICollection<RAHazard> Hazards { get; set; } = new List<RAHazard>();
     }
 
@@ -757,42 +752,17 @@ namespace Apollo.Models
         public int RiskAssessmentId { get; set; }
         [ForeignKey("RiskAssessmentId")]
         public RiskAssessment? RiskAssessment { get; set; }
-
         [Required]
         public string HazardName { get; set; } = string.Empty;
         public string? WhoIsAtRisk { get; set; }
-
-        public int InitialLikelihood { get; set; } // 1-5
-        public int InitialSeverity { get; set; }   // 1-5
-
+        public int InitialLikelihood { get; set; }
+        public int InitialSeverity { get; set; }
         public string? MitigationMeasures { get; set; }
-
-        public int ResidualLikelihood { get; set; } // 1-5
-        public int ResidualSeverity { get; set; }   // 1-5
+        public int ResidualLikelihood { get; set; }
+        public int ResidualSeverity { get; set; }
     }
 
-    public class IncidentRecord
-    {
-        [Key]
-        public int Id { get; set; }
-        public DateTime Timestamp { get; set; } = DateTime.Now;
-        public IncidentSeverity Severity { get; set; } = IncidentSeverity.Minor;
-
-        [Required]
-        public string Description { get; set; } = string.Empty;
-        public string? PersonsInvolved { get; set; }
-        public string? TreatmentGiven { get; set; }
-
-        public int? RoomId { get; set; }
-        [ForeignKey("RoomId")]
-        public Room? Room { get; set; }
-
-        public bool IsRiddorReportable { get; set; }
-        public DateTime? RiddorReportedDate { get; set; }
-    }
-
-    // --- Add to H&S Region ---
-
+    // RESTORED: Missing class to fix build errors
     public class RiskAssessmentReview
     {
         [Key]
@@ -800,10 +770,9 @@ namespace Apollo.Models
         public int RiskAssessmentId { get; set; }
         [ForeignKey("RiskAssessmentId")]
         public RiskAssessment? RiskAssessment { get; set; }
-
         public DateTime ReviewDate { get; set; } = DateTime.Now;
         public string ReviewedBy { get; set; } = string.Empty;
-        public string ReviewOutcome { get; set; } = "No Changes Required"; // or "Updated Hazards"
+        public string ReviewOutcome { get; set; } = "No Changes Required";
         public string? Comments { get; set; }
         public DateTime NextReviewDueDate { get; set; }
     }
@@ -815,22 +784,23 @@ namespace Apollo.Models
         public int SubstanceId { get; set; }
         [ForeignKey("SubstanceId")]
         public CoshhSubstance? Substance { get; set; }
-
-        public string TaskDescription { get; set; } = string.Empty; // e.g., "Cleaning stage floor"
+        [Required]
+        public string TaskDescription { get; set; } = string.Empty;
         public int? RoomId { get; set; }
         [ForeignKey("RoomId")]
         public Room? Room { get; set; }
-
-        // HSE Control Measures
+        public string HealthRisks { get; set; } = string.Empty;
+        public string FirstAidMeasures { get; set; } = string.Empty;
         public string ControlMeasures { get; set; } = string.Empty;
-        public string PPE_Required { get; set; } = "Standard Workwear"; // Gloves, Mask, Goggles
-        public string DisposalInstructions { get; set; } = "General Waste";
-
+        public string PPE_Required { get; set; } = "Gloves, Eye Protection";
+        public string DisposalInstructions { get; set; } = "Hazardous Waste Bin";
         public DateTime AssessmentDate { get; set; } = DateTime.Now;
         public DateTime ReviewDueDate { get; set; } = DateTime.Now.AddYears(1);
         public bool IsApproved { get; set; }
+        public string? ApprovedBy { get; set; }
     }
 
+    // RESTORED: Missing class to fix build errors
     public class FireRiskAssessmentDetails
     {
         [Key]
@@ -838,30 +808,22 @@ namespace Apollo.Models
         public int RiskAssessmentId { get; set; }
         [ForeignKey("RiskAssessmentId")]
         public RiskAssessment? BaseAssessment { get; set; }
-
-        // The 5 Steps Checklist
         public string Step1_IgnitionSources { get; set; } = string.Empty;
         public string Step1_FuelSources { get; set; } = string.Empty;
         public string Step2_PeopleAtRisk { get; set; } = string.Empty;
         public string Step3_EvaluationNotes { get; set; } = string.Empty;
         public string Step4_RecordPlanTrain { get; set; } = string.Empty;
-
-        // Theatre Specifics
         public int MaxOccupancy { get; set; }
         public bool FireCurtainTested { get; set; }
         public string ExitRoutesStatus { get; set; } = "Clear";
     }
-
-    // Update/Add these to the H&S Section of TheatreModels.cs
 
     public class FireRiskAssessment : RiskAssessment
     {
         public string ConstructionDetails { get; set; } = string.Empty;
         public int NumberOfFloors { get; set; }
         public string UseOfPremises { get; set; } = "Theatre / Entertainment Venue";
-        public int MaxOccupancy { get; set; } // ADDED THIS
-
-        // Checklist Sections
+        public int MaxOccupancy { get; set; }
         public bool Q_Elec_FixedInspected { get; set; }
         public bool Q_Elec_ApplianceTested { get; set; }
         public bool Q_Elec_NoAdapters { get; set; }
@@ -878,14 +840,10 @@ namespace Apollo.Models
         public bool Q_Warning_AlarmSuitable { get; set; }
         public bool Q_Warning_DetectorsAdequate { get; set; }
         public bool Q_Manage_Training { get; set; }
-
-        public string Narrative_HazardsFound { get; set; } = string.Empty;
-        // Update these specific fields in your FireRiskAssessment class
         public string Narrative_IgnitionSources { get; set; } = string.Empty;
         public string Narrative_FuelSources { get; set; } = string.Empty;
         public string Narrative_PeopleAtRisk { get; set; } = string.Empty;
         public string Narrative_EvaluationNotes { get; set; } = string.Empty;
-
         public List<FireActionPlanItem> ActionPlan { get; set; } = new();
         public List<RoomFireSafetyAssignment> RoomAssignments { get; set; } = new();
     }
@@ -894,27 +852,21 @@ namespace Apollo.Models
     {
         [Key]
         public int Id { get; set; }
-
         public int FireRiskAssessmentId { get; set; }
         [ForeignKey("FireRiskAssessmentId")]
         public FireRiskAssessment? FireRiskAssessment { get; set; }
-
         [Required]
-        public string ItemName { get; set; } = string.Empty; // e.g., "Fire Door - Stage Left"
-
-        public string Deficiency { get; set; } = string.Empty; // e.g., "Cold smoke seal damaged"
-        public string ProposedAction { get; set; } = string.Empty; // e.g., "Replace intumescent strip"
-        public string Timescale { get; set; } = string.Empty; // e.g., "1 Month"
+        public string ItemName { get; set; } = string.Empty;
+        public string Deficiency { get; set; } = string.Empty;
+        public string ProposedAction { get; set; } = string.Empty;
+        public string Timescale { get; set; } = string.Empty;
         public string PersonResponsible { get; set; } = string.Empty;
-
-        public bool IsCompleted { get; set; }
-
-        // --- RESOLUTION TRACKING (The "Living" part) ---
         public bool IsResolved { get; set; }
         public DateTime? ResolvedDate { get; set; }
         public string? ResolvedBy { get; set; }
-        public string? ResolutionNotes { get; set; } // e.g., "New strip fitted by Maintenance"
+        public string? ResolutionNotes { get; set; }
     }
+
     public class RoomFireSafetyAssignment
     {
         [Key]
@@ -923,11 +875,77 @@ namespace Apollo.Models
         public int RoomId { get; set; }
         [ForeignKey("RoomId")]
         public Room? Room { get; set; }
-        public bool IsCoveredByAreaAssessment { get; set; } = true; // "Inherit" vs "Exception"
-        public string? ExceptionNote { get; set; }
+        public bool IsCoveredByAreaAssessment { get; set; } = true;
     }
 
+    public class IncidentRecord
+    {
+        [Key]
+        public int Id { get; set; }
+        [Required]
+        public DateTime IncidentDateTime { get; set; } = DateTime.Now;
+        public IncidentType Type { get; set; } = IncidentType.Accident;
+        public IncidentSeverity Severity { get; set; } = IncidentSeverity.Minor;
+        public IncidentStatus Status { get; set; } = IncidentStatus.Open;
+        public int? RoomId { get; set; }
+        [ForeignKey("RoomId")]
+        public Room? Room { get; set; }
+        public string PersonInvolvedName { get; set; } = string.Empty;
+        public string PersonInvolvedType { get; set; } = "Public";
+        public string? WitnessDetails { get; set; }
+        [Required]
+        public string DescriptionOfEvent { get; set; } = string.Empty;
+        public string? InjuriesSustained { get; set; }
+        public string? ImmediateActionTaken { get; set; }
+        public string? InvestigationFindings { get; set; }
+        public string? RootCause { get; set; }
+        public int? LinkedMaintenanceIssueId { get; set; }
+        public string ReportedBy { get; set; } = string.Empty;
+        public string? InvestigatedBy { get; set; }
+        public DateTime? DateClosed { get; set; }
+        public string? EntryMethod { get; set; } = "Portal";
+        public List<IncidentEvidence> Evidence { get; set; } = new();
+    }
 
+    public class IncidentEvidence
+    {
+        [Key]
+        public int Id { get; set; }
+        public int IncidentRecordId { get; set; }
+        public string FilePath { get; set; } = string.Empty;
+        public string Caption { get; set; } = string.Empty;
+    }
+
+    public class ContractorRAMS
+    {
+        [Key]
+        public int Id { get; set; }
+        public int SupplierId { get; set; }
+        [ForeignKey("SupplierId")]
+        public Supplier? Supplier { get; set; }
+        public int? MaintenanceIssueId { get; set; }
+        [ForeignKey("MaintenanceIssueId")]
+        public MaintenanceIssue? LinkedJob { get; set; }
+        [Required]
+        public string DocumentTitle { get; set; } = "RAMS Submission";
+        public string FilePath { get; set; } = string.Empty;
+        public DateTime SubmissionDate { get; set; } = DateTime.Now;
+        public DateTime ExpiryDate { get; set; }
+        public bool IsReviewed { get; set; }
+        public string? ReviewedBy { get; set; }
+        public string? ApprovalNotes { get; set; }
+    }
+
+    public class ComplianceConfiguration
+    {
+        [Key]
+        public int Id { get; set; }
+        public string MainAssemblyPoint { get; set; } = "The Car Park";
+        public string EmergencyPhoneNumber { get; set; } = "999";
+        public string SiteAddress { get; set; } = string.Empty;
+        public int RAWarningDays { get; set; } = 30;
+        public int CoshhWarningDays { get; set; } = 30;
+    }
 
     #endregion
 
