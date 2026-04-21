@@ -894,15 +894,27 @@ namespace Apollo.Models
     {
         [Key]
         public int Id { get; set; }
-        public int FireRiskAssessmentId { get; set; }
-        public string ItemName { get; set; } = string.Empty; // e.g., "Signage"
-        public string Deficiency { get; set; } = string.Empty;
-        public string ProposedAction { get; set; } = string.Empty;
-        public string Timescale { get; set; } = string.Empty;
-        public string PersonResponsible { get; set; } = string.Empty;
-        public bool IsCompleted { get; set; }
-    }
 
+        public int FireRiskAssessmentId { get; set; }
+        [ForeignKey("FireRiskAssessmentId")]
+        public FireRiskAssessment? FireRiskAssessment { get; set; }
+
+        [Required]
+        public string ItemName { get; set; } = string.Empty; // e.g., "Fire Door - Stage Left"
+
+        public string Deficiency { get; set; } = string.Empty; // e.g., "Cold smoke seal damaged"
+        public string ProposedAction { get; set; } = string.Empty; // e.g., "Replace intumescent strip"
+        public string Timescale { get; set; } = string.Empty; // e.g., "1 Month"
+        public string PersonResponsible { get; set; } = string.Empty;
+
+        public bool IsCompleted { get; set; }
+
+        // --- RESOLUTION TRACKING (The "Living" part) ---
+        public bool IsResolved { get; set; }
+        public DateTime? ResolvedDate { get; set; }
+        public string? ResolvedBy { get; set; }
+        public string? ResolutionNotes { get; set; } // e.g., "New strip fitted by Maintenance"
+    }
     public class RoomFireSafetyAssignment
     {
         [Key]
@@ -914,6 +926,8 @@ namespace Apollo.Models
         public bool IsCoveredByAreaAssessment { get; set; } = true; // "Inherit" vs "Exception"
         public string? ExceptionNote { get; set; }
     }
+
+
 
     #endregion
 
