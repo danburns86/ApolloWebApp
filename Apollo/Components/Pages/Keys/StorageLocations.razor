@@ -4,6 +4,7 @@
 @using Microsoft.EntityFrameworkCore
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Administrator")]
+@rendermode InteractiveServer
 
 <PageTitle>Storage Locations</PageTitle>
 
@@ -80,7 +81,9 @@
 
     private async Task LoadData()
     {
-        LocationsList = await Db.StorageLocations
+        using var context = await DbFactory.CreateDbContextAsync();
+        LocationsList = await context.StorageLocations
+            .AsNoTracking()
             .Where(s => s.IsActive == true)
             .OrderBy(s => s.Name)
             .ToListAsync();
@@ -88,19 +91,21 @@
 
     private async Task ArchiveLocation(int id)
     {
-        var locToArchive = await Db.StorageLocations.FindAsync(id);
+        using var context = await DbFactory.CreateDbContextAsync();
+        var locToArchive = await context.StorageLocations.FindAsync(id);
         if (locToArchive != null)
         {
             locToArchive.IsActive = false;
-            await Db.SaveChangesAsync();
+            await context.SaveChangesAsync();
             await LoadData();
         }
     }
 
     private async Task AddLocation()
     {
-        Db.StorageLocations.Add(NewLocation);
-        await Db.SaveChangesAsync();
+        using var context = await DbFactory.CreateDbContextAsync();
+        context.StorageLocations.Add(NewLocation);
+        await context.SaveChangesAsync();
         NewLocation = new StorageLocation();
         await LoadData();
     }

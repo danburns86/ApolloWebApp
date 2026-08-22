@@ -4,6 +4,7 @@
 @using Microsoft.EntityFrameworkCore
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Administrator")]
+@rendermode InteractiveServer
 
 <PageTitle>Manage Signatories</PageTitle>
 
@@ -87,7 +88,9 @@
 
     private async Task LoadData()
     {
-        SignatoriesList = await Db.Signatories
+        using var context = await DbFactory.CreateDbContextAsync();
+        SignatoriesList = await context.Signatories
+            .AsNoTracking()
             .Where(s => s.IsActive == true)
             .OrderBy(s => s.Name)
             .ToListAsync();
@@ -95,19 +98,21 @@
 
     private async Task ArchiveSignatory(int id)
     {
-        var signatoryToArchive = await Db.Signatories.FindAsync(id);
+        using var context = await DbFactory.CreateDbContextAsync();
+        var signatoryToArchive = await context.Signatories.FindAsync(id);
         if (signatoryToArchive != null)
         {
             signatoryToArchive.IsActive = false;
-            await Db.SaveChangesAsync();
+            await context.SaveChangesAsync();
             await LoadData();
         }
     }
 
     private async Task AddSignatory()
     {
-        Db.Signatories.Add(NewSignatory);
-        await Db.SaveChangesAsync();
+        using var context = await DbFactory.CreateDbContextAsync();
+        context.Signatories.Add(NewSignatory);
+        await context.SaveChangesAsync();
         
         NewSignatory = new Signatory();
         await LoadData();

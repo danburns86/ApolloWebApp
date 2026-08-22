@@ -296,18 +296,20 @@
 
     private async Task LoadData()
     {
-        AvailableBunches = await Db.Bunches.Include(b => b.Department).Where(b => b.IsActive && !b.IsLost && string.IsNullOrEmpty(b.IssuedToName)).OrderBy(b => b.Name).ToListAsync();
-        AllActiveBunches = await Db.Bunches.Where(b => b.IsActive && !b.IsLost).OrderBy(b => b.Name).ToListAsync();
+        using var context = await DbFactory.CreateDbContextAsync();
+
+        AvailableBunches = await context.Bunches.AsNoTracking().Include(b => b.Department).Where(b => b.IsActive && !b.IsLost && string.IsNullOrEmpty(b.IssuedToName)).OrderBy(b => b.Name).ToListAsync();
+        AllActiveBunches = await context.Bunches.AsNoTracking().Where(b => b.IsActive && !b.IsLost).OrderBy(b => b.Name).ToListAsync();
         
-        var attachedKeyIds = await Db.KeyBunchAssignments.Where(ka => ka.RemovedDate == null).Select(ka => ka.KeyRecordId).ToListAsync();
-        AvailableKeys = await Db.Keys.Include(k => k.Lock).Where(k => k.Status == "In Stock" && string.IsNullOrEmpty(k.IssuedToName) && !attachedKeyIds.Contains(k.Id)).ToListAsync();
+        var attachedKeyIds = await context.KeyBunchAssignments.AsNoTracking().Where(ka => ka.RemovedDate == null).Select(ka => ka.KeyRecordId).ToListAsync();
+        AvailableKeys = await context.Keys.AsNoTracking().Include(k => k.Lock).Where(k => k.Status == "In Stock" && string.IsNullOrEmpty(k.IssuedToName) && !attachedKeyIds.Contains(k.Id)).ToListAsync();
         LocksWithAvailableKeys = AvailableKeys.Where(k => k.Lock != null).Select(k => k.Lock!).DistinctBy(l => l.Id).OrderBy(l => l.LockCode).ToList();
 
         IssuedItems.Clear();
-        var outBunches = await Db.Bunches.Where(b => b.IsActive && !string.IsNullOrEmpty(b.IssuedToName)).ToListAsync();
+        var outBunches = await context.Bunches.AsNoTracking().Where(b => b.IsActive && !string.IsNullOrEmpty(b.IssuedToName)).ToListAsync();
         foreach (var b in outBunches) IssuedItems.Add(new IssuedItemDto { IsBunch = true, Id = b.Id, ItemName = b.Name, IssuedToName = b.IssuedToName ?? "Unknown", IssueDate = b.IssueDate ?? DateTime.Now });
         
-        var outKeys = await Db.Keys.Include(k => k.Lock).Where(k => !string.IsNullOrEmpty(k.IssuedToName)).ToListAsync();
+        var outKeys = await context.Keys.AsNoTracking().Include(k => k.Lock).Where(k => !string.IsNullOrEmpty(k.IssuedToName)).ToListAsync();
         foreach (var k in outKeys) IssuedItems.Add(new IssuedItemDto { IsBunch = false, Id = k.Id, ItemName = $"{(k.Lock?.LockCode ?? "??")} {k.SequenceNumber}", IssuedToName = k.IssuedToName ?? "Unknown", IssueDate = DateTime.Now });
 
         IssuedItems = IssuedItems.OrderByDescending(i => i.IssueDate).ToList();
@@ -319,11 +321,12 @@
 
     private async Task<string> GetStaffDisplayName()
     {
+        using var context = await DbFactory.CreateDbContextAsync();
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
         var user = authState.User;
         if (user.Identity?.IsAuthenticated == true)
         {
-            var appUser = await Db.Users.FirstOrDefaultAsync(u => u.UserName == user.Identity.Name);
+            var appUser = await context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.UserName == user.Identity.Name);
             if (appUser != null && !string.IsNullOrWhiteSpace(appUser.FirstName)) return $"{appUser.FirstName} {appUser.LastName}".Trim();
         }
         return user.Identity?.Name ?? "System";
@@ -331,37 +334,41 @@
 
     private async Task IssueItem()
     {
+        using var context = await DbFactory.CreateDbContextAsync();
         string staffName = await GetStaffDisplayName();
         if (IssueType == "Bunch")
         {
-            var bunch = await Db.Bunches.Include(b => b.KeyAssignments!).ThenInclude(ka => ka.KeyRecord).FirstOrDefaultAsync(b => b.Id == IssueModel.SelectedId);
+            var bunch = await context.Bunches.Include(b => b.KeyAssignments!).ThenInclude(ka => ka.KeyRecord).FirstOrDefaultAsync(b => b.Id == IssueModel.SelectedId);
             if (bunch != null)
             {
                 bunch.IssuedToName = IssueModel.IssuedTo; bunch.IssueDate = DateTime.Now; bunch.ReturnDate = null;
-                Db.CheckoutTransactions.Add(new CheckoutTransaction { BunchId = bunch.Id, IssuedToName = IssueModel.IssuedTo, IssueDate = DateTime.Now, AuthorizedByUserName = staffName });
+                // Add new transaction strictly by IDs, avoiding navigation property insertion issues
+                context.CheckoutTransactions.Add(new CheckoutTransaction { BunchId = bunch.Id, IssuedToName = IssueModel.IssuedTo, IssueDate = DateTime.Now, AuthorizedByUserName = staffName });
                 foreach (var ka in bunch.KeyAssignments!.Where(a => a.RemovedDate == null)) { if (ka.KeyRecord != null) ka.KeyRecord.Status = "Issued"; }
             }
         }
         else
         {
-            var key = await Db.Keys.FirstOrDefaultAsync(k => k.Id == IssueModel.SelectedId);
+            var key = await context.Keys.FirstOrDefaultAsync(k => k.Id == IssueModel.SelectedId);
             if (key != null)
             {
                 key.IssuedToName = IssueModel.IssuedTo; key.Status = "Issued";
-                Db.CheckoutTransactions.Add(new CheckoutTransaction { KeyRecordId = key.Id, IssuedToName = IssueModel.IssuedTo, IssueDate = DateTime.Now, AuthorizedByUserName = staffName });
+                // Add new transaction strictly by IDs
+                context.CheckoutTransactions.Add(new CheckoutTransaction { KeyRecordId = key.Id, IssuedToName = IssueModel.IssuedTo, IssueDate = DateTime.Now, AuthorizedByUserName = staffName });
             }
         }
-        await Db.SaveChangesAsync();
+        await context.SaveChangesAsync();
         IssueModel = new(); SelectedLockId = 0; await LoadData();
     }
 
     private async Task StartReturnVerification(IssuedItemDto item)
     {
+        using var context = await DbFactory.CreateDbContextAsync();
         ItemToReturn = item;
         VerificationList.Clear();
         if (item.IsBunch)
         {
-            var bunch = await Db.Bunches.Include(b => b.KeyAssignments!).ThenInclude(ka => ka.KeyRecord).ThenInclude(k => k!.Lock).FirstOrDefaultAsync(b => b.Id == item.Id);
+            var bunch = await context.Bunches.AsNoTracking().Include(b => b.KeyAssignments!).ThenInclude(ka => ka.KeyRecord).ThenInclude(k => k!.Lock).FirstOrDefaultAsync(b => b.Id == item.Id);
             if (bunch != null)
             {
                 foreach (var ka in bunch.KeyAssignments!.Where(a => a.RemovedDate == null))
@@ -382,13 +389,16 @@
     private async Task ConfirmReturn()
     {
         if (ItemToReturn == null) return;
+        
+        using var context = await DbFactory.CreateDbContextAsync();
         string staffName = await GetStaffDisplayName();
+        
         if (ItemToReturn.IsBunch)
         {
-            var b = await Db.Bunches.Include(x => x.KeyAssignments!).ThenInclude(ka => ka.KeyRecord).FirstOrDefaultAsync(x => x.Id == ItemToReturn.Id);
+            var b = await context.Bunches.Include(x => x.KeyAssignments!).ThenInclude(ka => ka.KeyRecord).FirstOrDefaultAsync(x => x.Id == ItemToReturn.Id);
             if (b != null)
             {
-                var trans = await Db.CheckoutTransactions.FirstOrDefaultAsync(t => t.BunchId == b.Id && t.ReturnDate == null);
+                var trans = await context.CheckoutTransactions.FirstOrDefaultAsync(t => t.BunchId == b.Id && t.ReturnDate == null);
                 if (trans != null) trans.ReturnDate = DateTime.Now;
                 foreach (var verify in VerificationList)
                 {
@@ -405,7 +415,7 @@
                             if (verify.Status == "Missing")
                             {
                                 key.IssuedToName = ItemToReturn.IssuedToName;
-                                Db.CheckoutTransactions.Add(new CheckoutTransaction { KeyRecordId = key.Id, IssuedToName = ItemToReturn.IssuedToName, IssueDate = ItemToReturn.IssueDate, AuthorizedByUserName = staffName });
+                                context.CheckoutTransactions.Add(new CheckoutTransaction { KeyRecordId = key.Id, IssuedToName = ItemToReturn.IssuedToName, IssueDate = ItemToReturn.IssueDate, AuthorizedByUserName = staffName });
                             }
                             else { key.IssuedToName = null; }
                         }
@@ -416,50 +426,68 @@
         }
         else
         {
-            var k = await Db.Keys.FirstOrDefaultAsync(x => x.Id == ItemToReturn.Id);
+            var k = await context.Keys.FirstOrDefaultAsync(x => x.Id == ItemToReturn.Id);
             if (k != null)
             {
                 var verify = VerificationList.First();
                 k.Status = (verify.Status == "Returned") ? "In Stock" : (verify.Status == "Lost" ? "Lost" : "Issued");
                 if (verify.Status == "Returned") { k.IssuedToName = null; k.LastSeenDate = DateTime.Now; }
-                var trans = await Db.CheckoutTransactions.FirstOrDefaultAsync(t => t.KeyRecordId == k.Id && t.ReturnDate == null);
+                var trans = await context.CheckoutTransactions.FirstOrDefaultAsync(t => t.KeyRecordId == k.Id && t.ReturnDate == null);
                 if (trans != null) trans.ReturnDate = DateTime.Now;
             }
         }
-        await Db.SaveChangesAsync();
+        await context.SaveChangesAsync();
         CloseReturnModal(); await LoadData();
     }
 
     private void StartTransfer(IssuedItemDto item) { TransferItemId = item.Id; TransferIsBunch = item.IsBunch; TransferToName = ""; }
     private void CancelTransfer() { TransferItemId = null; TransferIsBunch = null; }
+    
     private async Task ConfirmTransfer(IssuedItemDto item)
     {
         if (string.IsNullOrWhiteSpace(TransferToName)) return;
+        
+        using var context = await DbFactory.CreateDbContextAsync();
         string staffName = await GetStaffDisplayName();
+        
         if (item.IsBunch)
         {
-            var b = await Db.Bunches.FirstOrDefaultAsync(x => x.Id == item.Id);
+            var b = await context.Bunches.FirstOrDefaultAsync(x => x.Id == item.Id);
             if (b != null) { b.IssuedToName = TransferToName; b.IssueDate = DateTime.Now; }
         }
         else
         {
-            var k = await Db.Keys.FirstOrDefaultAsync(x => x.Id == item.Id);
+            var k = await context.Keys.FirstOrDefaultAsync(x => x.Id == item.Id);
             if (k != null) k.IssuedToName = TransferToName;
         }
-        var old = await Db.CheckoutTransactions.FirstOrDefaultAsync(t => (item.IsBunch ? t.BunchId == item.Id : t.KeyRecordId == item.Id) && t.ReturnDate == null);
+        var old = await context.CheckoutTransactions.FirstOrDefaultAsync(t => (item.IsBunch ? t.BunchId == item.Id : t.KeyRecordId == item.Id) && t.ReturnDate == null);
         if (old != null) old.ReturnDate = DateTime.Now;
-        Db.CheckoutTransactions.Add(new CheckoutTransaction { BunchId = item.IsBunch ? item.Id : null, KeyRecordId = item.IsBunch ? null : item.Id, IssuedToName = TransferToName, IssueDate = DateTime.Now, AuthorizedByUserName = staffName });
-        await Db.SaveChangesAsync();
+        
+        context.CheckoutTransactions.Add(new CheckoutTransaction { BunchId = item.IsBunch ? item.Id : null, KeyRecordId = item.IsBunch ? null : item.Id, IssuedToName = TransferToName, IssueDate = DateTime.Now, AuthorizedByUserName = staffName });
+        await context.SaveChangesAsync();
+        
         CancelTransfer(); await LoadData();
     }
 
     private void OpenBunchingModal(KeyRecord k) { KeyToBunch = k; TargetBunchId = 0; ShowBunchingModal = true; }
     private void CloseBunchingModal() { ShowBunchingModal = false; KeyToBunch = null; }
+    
     private async Task ConfirmAddToBunch()
     {
         if (KeyToBunch == null || TargetBunchId == 0) return;
-        Db.KeyBunchAssignments.Add(new KeyBunchAssignment { BunchId = TargetBunchId, KeyRecordId = KeyToBunch.Id, AssignedDate = DateTime.Now });
-        KeyToBunch.Status = "Issued"; await Db.SaveChangesAsync();
+        using var context = await DbFactory.CreateDbContextAsync();
+        
+        // Navigation Bug Fix: Fetch the tracked entity fresh using the ID, instead of passing the untracked KeyToBunch object directly
+        var trackedKey = await context.Keys.FindAsync(KeyToBunch.Id);
+        
+        if (trackedKey != null)
+        {
+            trackedKey.Status = "Issued";
+            // Map strictly by ID to prevent inserting duplicate foreign key objects
+            context.KeyBunchAssignments.Add(new KeyBunchAssignment { BunchId = TargetBunchId, KeyRecordId = trackedKey.Id, AssignedDate = DateTime.Now });
+            await context.SaveChangesAsync();
+        }
+        
         CloseBunchingModal(); await LoadData();
     }
 }

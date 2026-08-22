@@ -8,6 +8,7 @@
 @inject UserManager<ApplicationUser> UserManager
 @inject RoleManager<IdentityRole> RoleManager
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Administrator")]
+@rendermode InteractiveServer
 
 <PageTitle>User Permission Overrides</PageTitle>
 
@@ -102,10 +103,8 @@
     private List<SystemPermission> AllPermissions = new();
     
     private string SelectedUserId = string.Empty;
-    
     // Tracks what they get from their base Roles so we can show the UI badges
     private HashSet<string> InheritedRoleClaims = new();
-    
     // Tracks their personal overrides. Key = ClaimValue (e.g., "Keys.Create"), Value = "Allow" or "Deny"
     private Dictionary<string, string> Overrides = new();
     
@@ -113,8 +112,18 @@
 
     protected override async Task OnInitializedAsync()
     {
-        UsersList = await UserManager.Users.OrderBy(u => u.Email).ToListAsync();
-        AllPermissions = await Db.SystemPermissions.OrderBy(p => p.Module).ThenBy(p => p.Name).ToListAsync();
+        using var context = await DbFactory.CreateDbContextAsync();
+        
+        UsersList = await context.Users
+            .AsNoTracking()
+            .OrderBy(u => u.Email)
+            .ToListAsync();
+            
+        AllPermissions = await context.SystemPermissions
+            .AsNoTracking()
+            .OrderBy(p => p.Module)
+            .ThenBy(p => p.Name)
+            .ToListAsync();
     }
 
     private async Task LoadUserData()

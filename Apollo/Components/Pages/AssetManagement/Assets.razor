@@ -266,41 +266,54 @@
                             @if (editingAsset.RequiresPAT || editingAsset.RequiresLOLER)
                             {
                                 <div class="row g-3 bg-light p-3 rounded mt-2">
-                                    <div class="col-md-4"><label class="small fw-bold">Class</label><InputSelect @bind-Value="editingAsset.ApplianceClass" class="form-select form-select-sm">@foreach (var cls in Enum.GetValues<EquipmentClass>()) {
-                                        <option value="@cls">@cls</option>
-                                    }
-                                </InputSelect></div>
-                                <div class="col-md-4"><label class="small fw-bold">Risk Override</label><InputSelect @bind-Value="editingAsset.RiskOverride" class="form-select form-select-sm"><option value="">Default</option>@foreach (var rsk in Enum.GetValues<EnvironmentRisk>()) {
+                                    <div class="col-md-4">
+                                        <label class="small fw-bold">Class</label><InputSelect @bind-Value="editingAsset.ApplianceClass" class="form-select form-select-sm">
+                                        @foreach (var cls in Enum.GetValues<EquipmentClass>())
+                                        {
+                                            <option value="@cls">@cls</option>
+                                        }
+                                    </InputSelect>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="small fw-bold">Risk Override</label><InputSelect @bind-Value="editingAsset.RiskOverride" class="form-select form-select-sm">
+                                    <option value="">Default</option>@foreach (var rsk in Enum.GetValues<EnvironmentRisk>()) {
                                     <option value="@rsk">@rsk</option>
                                 }
-                            </InputSelect></div>
-                            <div class="col-md-4 pt-4"><InputCheckbox @bind-Value="editingAsset.VisualOnly" id="vo_single" /> <label for="vo_single" class="small fw-bold">Visual Only</label></div>
+                            </InputSelect>
                         </div>
-                    }
-                </div>
-                <div class="row">
-                    <div class="col-md-6"><label class="small fw-bold">Status</label><InputSelect @bind-Value="editingAsset.Status" class="form-select">@foreach (var s in Enum.GetValues<AssetStatus>()) {
+                        <div class="col-md-4 pt-4"><InputCheckbox @bind-Value="editingAsset.VisualOnly" id="vo_single" /> <label for="vo_single" class="small fw-bold">Visual Only</label></div>
+                    </div>
+                }
+            </div>
+            <div class="row">
+                <div class="col-md-6">
+                    <label class="small fw-bold">Status</label><InputSelect @bind-Value="editingAsset.Status" class="form-select">
+                    @foreach (var s in Enum.GetValues<AssetStatus>())
+                    {
                         <option value="@s">@s</option>
                     }
-                </InputSelect></div>
-                <div class="col-md-6"><label class="small fw-bold">Location</label><InputSelect @bind-Value="editingAsset.RoomId" class="form-select"><option value="">-- Unassigned --</option>@foreach (var r in rooms) {
-                    <option value="@r.Id">@r.Name</option>
-                }
-            </InputSelect></div>
-        </div>
+                </InputSelect>
+            </div>
+            <div class="col-md-6">
+                <label class="small fw-bold">Location</label><InputSelect @bind-Value="editingAsset.RoomId" class="form-select">
+                <option value="">-- Unassigned --</option>@foreach (var r in rooms) {
+                <option value="@r.Id">@r.Name</option>
+            }
+        </InputSelect>
     </div>
-    <div class="modal-footer border-0 bg-light d-flex justify-content-between">
-        @if (editingAsset.Id != 0)
-        {
-            <a href="/admin/maintenance/new?assetId=@editingAsset.Id" class="btn btn-warning fw-bold text-dark"><i class="bi bi-tools me-2"></i>Report Fault</a>
-        }
-        else
-        {
-
-            <div></div>
-        }
-        <div><button type="button" class="btn btn-secondary me-2" @onclick="CloseForm">Cancel</button><button type="submit" class="btn btn-primary fw-bold px-4">Save Changes</button></div>
-    </div>
+</div>
+</div>
+<div class="modal-footer border-0 bg-light d-flex justify-content-between">
+    @if (editingAsset.Id != 0)
+    {
+        <a href="/admin/maintenance/new?assetId=@editingAsset.Id" class="btn btn-warning fw-bold text-dark"><i class="bi bi-tools me-2"></i>Report Fault</a>
+    }
+    else
+    {
+        <div></div>
+    }
+    <div><button type="button" class="btn btn-secondary me-2" @onclick="CloseForm">Cancel</button><button type="submit" class="btn btn-primary fw-bold px-4">Save Changes</button></div>
+</div>
 </EditForm>
 </div>
 </div>
@@ -348,9 +361,12 @@
     {
         isLoading = true;
         using var context = await DbFactory.CreateDbContextAsync();
-        allAssets = await context.Assets.Include(a => a.Category).Include(a => a.Room).OrderBy(a => a.AssetTag).ToListAsync();
-        categories = await context.AssetCategories.ToListAsync();
-        rooms = await context.Rooms.OrderBy(r => r.Name).ToListAsync();
+        
+        // Use AsNoTracking() so the main list and lookups aren't tracked unnecessarily
+        allAssets = await context.Assets.AsNoTracking().Include(a => a.Category).Include(a => a.Room).OrderBy(a => a.AssetTag).ToListAsync();
+        categories = await context.AssetCategories.AsNoTracking().ToListAsync();
+        rooms = await context.Rooms.AsNoTracking().OrderBy(r => r.Name).ToListAsync();
+        
         ApplyFilter();
         isLoading = false;
     }
@@ -392,6 +408,8 @@
     private async Task ApplyBulkUpdate()
     {
         using var context = await DbFactory.CreateDbContextAsync();
+        
+        // This is safe because targets are loaded and updated in the same short-lived context.
         var targets = await context.Assets.Where(a => selectedIds.Contains(a.Id)).ToListAsync();
 
         foreach (var t in targets)
@@ -419,8 +437,10 @@
     private async Task SaveAsset()
     {
         using var context = await DbFactory.CreateDbContextAsync();
+        
         if (editingAsset.Id == 0)
         {
+            // Fetch tracked category instance to safely update sequence number
             var cat = await context.AssetCategories.FindAsync(editingAsset.CategoryId);
             if (cat != null)
             {
@@ -450,7 +470,22 @@
                 context.AssetCategories.Update(cat);
             }
         }
-        else context.Assets.Update(editingAsset);
+        else
+        {
+            // CRITICAL FIX: The Identity Insert Bug
+            // Save the foreign keys, nullify the complex objects, then reassign foreign keys.
+            int? roomId = editingAsset.RoomId;
+            int categoryId = editingAsset.CategoryId;
+            
+            editingAsset.Room = null;
+            editingAsset.Category = null;
+            
+            editingAsset.RoomId = roomId;
+            editingAsset.CategoryId = categoryId;
+
+            context.Assets.Update(editingAsset);
+        }
+        
         await context.SaveChangesAsync();
         await LoadData();
         showForm = false;

@@ -308,17 +308,20 @@
 
     private async Task LoadLookupData()
     {
-        FormFactors = await Db.FormFactors.Where(f => f.IsActive).OrderBy(f => f.Name).ToListAsync();
-        Suppliers = await Db.Suppliers.Where(s => s.IsActive).OrderBy(s => s.Name).ToListAsync();
-        AllSignatories = await Db.Signatories.Where(s => s.IsActive).OrderBy(s => s.Name).ToListAsync();
+        using var context = await DbFactory.CreateDbContextAsync();
+        FormFactors = await context.FormFactors.AsNoTracking().Where(f => f.IsActive).OrderBy(f => f.Name).ToListAsync();
+        Suppliers = await context.Suppliers.AsNoTracking().Where(s => s.IsActive).OrderBy(s => s.Name).ToListAsync();
+        AllSignatories = await context.Signatories.AsNoTracking().Where(s => s.IsActive).OrderBy(s => s.Name).ToListAsync();
     }
 
     private async Task LoadLocks()
     {
-        LocksList = await Db.Locks
+        using var context = await DbFactory.CreateDbContextAsync();
+        LocksList = await context.Locks
+            .AsNoTracking()
             .Include(l => l.FormFactor)
             .Include(l => l.Supplier)
-            .Include(l => l.Signatories) // Include Signatories relationship!
+            .Include(l => l.Signatories)
             .Where(l => l.IsActive == true)
             .OrderBy(l => l.LockCode)
             .ToListAsync();
@@ -349,7 +352,9 @@
         CodeErrorMessage = null;
         if (NewLock.FormFactorId == 0) return;
 
-        var codeInUse = await Db.Locks.AnyAsync(l =>
+        using var context = await DbFactory.CreateDbContextAsync();
+
+        var codeInUse = await context.Locks.AnyAsync(l =>
             l.LockCode.ToUpper() == NewLock.LockCode.ToUpper() &&
             l.IsActive &&
             (l.Status == "Active" || l.Status == "Stock"));
@@ -360,11 +365,15 @@
             return;
         }
 
-        // Hydrate the many-to-many relationship before saving
-        NewLock.Signatories = await Db.Signatories.Where(s => NewLockSignatoryIds.Contains(s.Id)).ToListAsync();
+        // Safety: Ensure no UI-bound navigation properties accidentally insert new records
+        NewLock.FormFactor = null;
+        NewLock.Supplier = null;
 
-        Db.Locks.Add(NewLock);
-        await Db.SaveChangesAsync();
+        // Hydrate the many-to-many relationship using the current, active context
+        NewLock.Signatories = await context.Signatories.Where(s => NewLockSignatoryIds.Contains(s.Id)).ToListAsync();
+
+        context.Locks.Add(NewLock);
+        await context.SaveChangesAsync();
         
         NewLock = new HardwareLock();
         NewLockSignatoryIds.Clear();
@@ -388,16 +397,31 @@
     {
         if (EditingLock != null)
         {
-            // Clear old signatories and attach the newly checked ones
-            EditingLock.Signatories.Clear();
-            var newSigs = await Db.Signatories.Where(s => EditLockSignatoryIds.Contains(s.Id)).ToListAsync();
-            foreach (var sig in newSigs)
-            {
-                EditingLock.Signatories.Add(sig);
-            }
+            using var context = await DbFactory.CreateDbContextAsync();
+            
+            // To safely update a many-to-many relationship, fetch the tracked entity from the DB
+            var trackedLock = await context.Locks
+                .Include(l => l.Signatories)
+                .FirstOrDefaultAsync(l => l.Id == EditingLock.Id);
 
-            Db.Locks.Update(EditingLock);
-            await Db.SaveChangesAsync();
+            if (trackedLock != null)
+            {
+                // Map the basic properties from the UI model to the tracked model
+                trackedLock.Name = EditingLock.Name;
+                trackedLock.SupplierId = EditingLock.SupplierId;
+                trackedLock.KeyCode = EditingLock.KeyCode;
+                trackedLock.Status = EditingLock.Status;
+
+                // Clear old signatories and attach the newly checked ones from the current context
+                trackedLock.Signatories.Clear();
+                var newSigs = await context.Signatories.Where(s => EditLockSignatoryIds.Contains(s.Id)).ToListAsync();
+                foreach (var sig in newSigs)
+                {
+                    trackedLock.Signatories.Add(sig);
+                }
+
+                await context.SaveChangesAsync();
+            }
             
             CloseEditModal();
             await LoadLocks();
@@ -406,11 +430,12 @@
 
     private async Task ArchiveLock(int id)
     {
-        var lockToArchive = await Db.Locks.FindAsync(id);
+        using var context = await DbFactory.CreateDbContextAsync();
+        var lockToArchive = await context.Locks.FindAsync(id);
         if (lockToArchive != null)
         {
             lockToArchive.IsActive = false;
-            await Db.SaveChangesAsync();
+            await context.SaveChangesAsync();
             await LoadLocks();
         }
     }

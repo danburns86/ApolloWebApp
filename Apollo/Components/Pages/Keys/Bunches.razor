@@ -4,6 +4,7 @@
 @using Microsoft.EntityFrameworkCore
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Administrator")]
+@rendermode InteractiveServer
 
 <PageTitle>Manage Bunches</PageTitle>
 
@@ -48,16 +49,19 @@
 
                         <h6 class="fw-bold border-bottom pb-1 small text-uppercase text-muted">Keys on Bunch:</h6>
                         <ul class="list-unstyled mb-0">
-                            @foreach (var ka in b.KeyAssignments.Where(a => a.RemovedDate == null))
+                            @if (b.KeyAssignments != null)
                             {
-                                <li class="small mb-1">
-                                    <i class="bi bi-key-fill text-primary me-1"></i>
-                                    @ka.KeyRecord!.Lock!.LockCode @ka.KeyRecord.SequenceNumber - <span class="text-muted">@ka.KeyRecord.Lock.Name</span>
-                                </li>
-                            }
-                            @if (!b.KeyAssignments.Any(a => a.RemovedDate == null))
-                            {
-                                <li class="text-muted small fst-italic">No keys attached.</li>
+                                @foreach (var ka in b.KeyAssignments.Where(a => a.RemovedDate == null))
+                                {
+                                    <li class="small mb-1">
+                                        <i class="bi bi-key-fill text-primary me-1"></i>
+                                        @ka.KeyRecord!.Lock!.LockCode @ka.KeyRecord.SequenceNumber - <span class="text-muted">@ka.KeyRecord.Lock.Name</span>
+                                    </li>
+                                }
+                                @if (!b.KeyAssignments.Any(a => a.RemovedDate == null))
+                                {
+                                    <li class="text-muted small fst-italic">No keys attached.</li>
+                                }
                             }
                         </ul>
                     </div>
@@ -142,16 +146,19 @@
 
     private async Task LoadData()
     {
-        BunchesList = await Db.Bunches
+        using var context = await DbFactory.CreateDbContextAsync();
+
+        BunchesList = await context.Bunches
+            .AsNoTracking()
             .Include(b => b.Department)
             .Include(b => b.StorageLocation)
-            .Include(b => b.KeyAssignments).ThenInclude(ka => ka.KeyRecord).ThenInclude(k => k.Lock)
+            .Include(b => b.KeyAssignments!).ThenInclude(ka => ka.KeyRecord).ThenInclude(k => k!.Lock)
             .Where(b => b.IsActive)
             .OrderBy(b => b.Name)
             .ToListAsync();
 
-        Departments = await Db.Departments.Where(d => d.IsActive).ToListAsync();
-        Locations = await Db.StorageLocations.Where(l => l.IsActive).ToListAsync();
+        Departments = await context.Departments.AsNoTracking().Where(d => d.IsActive).ToListAsync();
+        Locations = await context.StorageLocations.AsNoTracking().Where(l => l.IsActive).ToListAsync();
     }
 
     private void OpenCreateModal()
@@ -172,10 +179,29 @@
 
     private async Task SaveBunch()
     {
-        if (IsEditMode) Db.Bunches.Update(CurrentBunch);
-        else Db.Bunches.Add(CurrentBunch);
+        using var context = await DbFactory.CreateDbContextAsync();
 
-        await Db.SaveChangesAsync();
+        // Fix the EF Core Identity Insert Bug by nullifying attached navigation properties
+        int? deptId = CurrentBunch.DepartmentId;
+        int? locId = CurrentBunch.StorageLocationId;
+
+        CurrentBunch.Department = null;
+        CurrentBunch.StorageLocation = null;
+        CurrentBunch.KeyAssignments = null; // Important: We don't want EF thinking these are new assignments to insert!
+
+        CurrentBunch.DepartmentId = deptId;
+        CurrentBunch.StorageLocationId = locId;
+
+        if (IsEditMode)
+        {
+            context.Bunches.Update(CurrentBunch);
+        }
+        else
+        {
+            context.Bunches.Add(CurrentBunch);
+        }
+
+        await context.SaveChangesAsync();
         ShowModal = false;
         await LoadData();
     }

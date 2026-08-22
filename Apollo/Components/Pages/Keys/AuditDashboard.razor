@@ -158,11 +158,14 @@ else
                 <div class="modal-body">
                     <p class="small text-muted mb-3">Please verify that the following keys are physically attached to this ring:</p>
                     <ul class="list-group list-group-flush border rounded mb-3">
-                        @foreach (var ka in TargetBunch.KeyAssignments.Where(ka => ka.RemovedDate == null))
+                        @if (TargetBunch.KeyAssignments != null)
                         {
-                            <li class="list-group-item d-flex justify-content-between align-items-center py-2">
-                                <span><i class="bi bi-key-fill text-primary me-2"></i><strong>@ka.KeyRecord!.Lock!.LockCode @ka.KeyRecord.SequenceNumber</strong> - @ka.KeyRecord.Lock.Name</span>
-                            </li>
+                            @foreach (var ka in TargetBunch.KeyAssignments.Where(ka => ka.RemovedDate == null))
+                            {
+                                <li class="list-group-item d-flex justify-content-between align-items-center py-2">
+                                    <span><i class="bi bi-key-fill text-primary me-2"></i><strong>@ka.KeyRecord!.Lock!.LockCode @ka.KeyRecord.SequenceNumber</strong> - @ka.KeyRecord.Lock.Name</span>
+                                </li>
+                            }
                         }
                     </ul>
                 </div>
@@ -221,7 +224,8 @@ else
 
     protected override async Task OnInitializedAsync()
     {
-        Campaigns = await Db.AuditCampaigns.OrderByDescending(c => c.CreatedAt).ToListAsync();
+        using var context = await DbFactory.CreateDbContextAsync();
+        Campaigns = await context.AuditCampaigns.AsNoTracking().OrderByDescending(c => c.CreatedAt).ToListAsync();
         if (Campaigns.Any()) ActiveCampaignId = Campaigns.First().Id;
         await LoadData();
     }
@@ -230,15 +234,25 @@ else
     {
         if (ActiveCampaignId == 0) return;
 
-        var attachedKeyIds = await Db.KeyBunchAssignments.Where(ka => ka.RemovedDate == null).Select(ka => ka.KeyRecordId).ToListAsync();
+        using var context = await DbFactory.CreateDbContextAsync();
+
+        var attachedKeyIds = await context.KeyBunchAssignments
+            .AsNoTracking()
+            .Where(ka => ka.RemovedDate == null)
+            .Select(ka => ka.KeyRecordId)
+            .ToListAsync();
         
-        var keysQuery = Db.Keys.Include(k => k.Lock).Where(k => k.Status != "Lost" && !attachedKeyIds.Contains(k.Id));
+        var keysQuery = context.Keys.AsNoTracking().Include(k => k.Lock).Where(k => k.Status != "Lost" && !attachedKeyIds.Contains(k.Id));
         if (ShowUnauditedOnly) keysQuery = keysQuery.Where(k => k.LastAuditCampaignId != ActiveCampaignId);
 
         var looseKeys = await keysQuery.ToListAsync();
         LooseKeysGrouped = looseKeys.GroupBy(k => k.Lock!).ToDictionary(g => g.Key, g => g.ToList());
 
-        var allBunches = await Db.Bunches.Include(b => b.KeyAssignments!).ThenInclude(ka => ka.KeyRecord).ThenInclude(k => k.Lock).Where(b => b.IsActive && !b.IsLost).ToListAsync();
+        var allBunches = await context.Bunches
+            .AsNoTracking()
+            .Include(b => b.KeyAssignments!).ThenInclude(ka => ka.KeyRecord).ThenInclude(k => k!.Lock)
+            .Where(b => b.IsActive && !b.IsLost).ToListAsync();
+        
         BunchesToAudit.Clear();
 
         foreach (var b in allBunches)
@@ -263,45 +277,69 @@ else
 
     private async Task OpenBunchAuditModal(int id)
     {
-        TargetBunch = await Db.Bunches.Include(b => b.KeyAssignments!).ThenInclude(ka => ka.KeyRecord).ThenInclude(k => k.Lock).FirstAsync(b => b.Id == id);
+        using var context = await DbFactory.CreateDbContextAsync();
+        TargetBunch = await context.Bunches
+            .AsNoTracking() // Read-only for the modal display
+            .Include(b => b.KeyAssignments!).ThenInclude(ka => ka.KeyRecord).ThenInclude(k => k!.Lock)
+            .FirstAsync(b => b.Id == id);
+            
         ShowBunchModal = true;
     }
 
     private async Task ConfirmAuditBunch()
     {
-        if (TargetBunch == null) return;
-        foreach (var ka in TargetBunch.KeyAssignments.Where(a => a.RemovedDate == null))
+        if (TargetBunch == null || TargetBunch.KeyAssignments == null) return;
+        
+        using var context = await DbFactory.CreateDbContextAsync();
+        
+        // Navigation Bug Fix: Extract the IDs of the keys we need to update,
+        // rather than trying to update the untracked TargetBunch object.
+        var keyIdsToUpdate = TargetBunch.KeyAssignments
+            .Where(a => a.RemovedDate == null)
+            .Select(a => a.KeyRecordId)
+            .ToList();
+            
+        // Fetch the fresh, tracked keys from the new context
+        var keysToUpdate = await context.Keys.Where(k => keyIdsToUpdate.Contains(k.Id)).ToListAsync();
+        
+        foreach (var key in keysToUpdate)
         {
-            ka.KeyRecord!.LastFormalAuditDate = DateTime.Now;
-            ka.KeyRecord.LastAuditCampaignId = ActiveCampaignId;
-            ka.KeyRecord.LastSeenDate = DateTime.Now;
+            key.LastFormalAuditDate = DateTime.Now;
+            key.LastAuditCampaignId = ActiveCampaignId;
+            key.LastSeenDate = DateTime.Now;
         }
-        await Db.SaveChangesAsync();
+        
+        await context.SaveChangesAsync();
         ShowBunchModal = false;
         await LoadData();
     }
 
     private async Task AuditKey(int id)
     {
-        var k = await Db.Keys.FindAsync(id);
+        using var context = await DbFactory.CreateDbContextAsync();
+        var k = await context.Keys.FindAsync(id);
         if (k != null)
         {
             k.LastFormalAuditDate = DateTime.Now;
             k.LastAuditCampaignId = ActiveCampaignId;
             k.LastSeenDate = DateTime.Now;
-            await Db.SaveChangesAsync();
-            await LoadData();
+            await context.SaveChangesAsync();
         }
+        await LoadData();
     }
 
     private void OpenCreateCampaignModal() { NewCampaignName = $"{DateTime.Now:MMMM yyyy} Audit"; ShowCreateCampaignModal = true; }
+    
     private async Task CreateCampaign()
     {
         if (string.IsNullOrWhiteSpace(NewCampaignName)) return;
+        
+        using var context = await DbFactory.CreateDbContextAsync();
         var c = new AuditCampaign { Name = NewCampaignName };
-        Db.AuditCampaigns.Add(c);
-        await Db.SaveChangesAsync();
-        Campaigns = await Db.AuditCampaigns.OrderByDescending(x => x.CreatedAt).ToListAsync();
+        context.AuditCampaigns.Add(c);
+        await context.SaveChangesAsync();
+        
+        Campaigns = await context.AuditCampaigns.AsNoTracking().OrderByDescending(x => x.CreatedAt).ToListAsync();
         ActiveCampaignId = c.Id;
         ShowCreateCampaignModal = false;
         await LoadData();

@@ -107,17 +107,27 @@
 
     private async Task LoadData()
     {
+        using var context = await DbFactory.CreateDbContextAsync();
         MissingItems.Clear();
 
         // 1. Missing Bunches
-        var lostBunches = await Db.Bunches.Where(b => b.IsActive && b.IsLost).ToListAsync();
+        var lostBunches = await context.Bunches
+            .AsNoTracking()
+            .Where(b => b.IsActive && b.IsLost)
+            .ToListAsync();
+
         foreach (var b in lostBunches)
         {
             MissingItems.Add(new MissingItemDto { Code = "BUNCH", Name = b.Name, IsBunch = true, LastHolder = b.IssuedToName ?? "In Stock" });
         }
 
         // 2. Missing Keys
-        var lostKeys = await Db.Keys.Include(k => k.Lock).Where(k => k.Status == "Lost").ToListAsync();
+        var lostKeys = await context.Keys
+            .AsNoTracking()
+            .Include(k => k.Lock)
+            .Where(k => k.Status == "Lost")
+            .ToListAsync();
+
         foreach (var k in lostKeys)
         {
             MissingItems.Add(new MissingItemDto
@@ -131,7 +141,8 @@
         }
 
         // 3. Recovery History (Fixed Join)
-        var transactions = await Db.CheckoutTransactions
+        var transactions = await context.CheckoutTransactions
+            .AsNoTracking()
             .Include(t => t.Bunch)
             .Include(t => t.KeyRecord).ThenInclude(k => k!.Lock)
             .Where(t => t.ReturnDate != null)

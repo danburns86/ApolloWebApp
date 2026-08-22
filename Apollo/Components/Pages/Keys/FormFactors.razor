@@ -4,6 +4,7 @@
 @using Microsoft.EntityFrameworkCore
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Administrator")]
+@rendermode InteractiveServer
 
 <PageTitle>Manage Form Factors</PageTitle>
 
@@ -72,15 +73,17 @@
 
     private async Task LoadData()
     {
-        // Fetches all form factors from the SQL database
-        FormFactorsList = await Db.FormFactors.ToListAsync();
+        // Fetches all form factors from the SQL database using a short-lived context
+        using var context = await DbFactory.CreateDbContextAsync();
+        FormFactorsList = await context.FormFactors.AsNoTracking().ToListAsync();
     }
 
     private async Task AddFormFactor()
     {
-        // Save to database
-        Db.FormFactors.Add(NewFormFactor);
-        await Db.SaveChangesAsync();
+        // Save to database using a short-lived context
+        using var context = await DbFactory.CreateDbContextAsync();
+        context.FormFactors.Add(NewFormFactor);
+        await context.SaveChangesAsync();
         
         // Reset the form and refresh the table instantly
         NewFormFactor = new FormFactor();

@@ -58,17 +58,14 @@
                                 }
                                 else if (log.ActionType == "Update")
                                 {
-
                                     <span class="badge bg-warning text-dark">Updated</span>
                                 }
                                 else if (log.ActionType == "Delete")
                                 {
-
                                     <span class="badge bg-danger">Deleted</span>
                                 }
                                 else
                                 {
-
                                     <span class="badge bg-secondary">@log.ActionType</span>
                                 }
                             </td>
@@ -129,8 +126,12 @@
 
     private async Task LoadLogs()
     {
-        // Load the top 100 most recent logs so we don't crash the browser with years of data
-        AllLogs = await Db.AuditLogs
+        // 1. Thread-safe execution using a short-lived context
+        using var context = await DbFactory.CreateDbContextAsync();
+        
+        // 2. Load the top 100 most recent logs using AsNoTracking for optimal performance
+        AllLogs = await context.AuditLogs
+            .AsNoTracking()
             .OrderByDescending(a => a.Timestamp)
             .Take(100)
             .ToListAsync();

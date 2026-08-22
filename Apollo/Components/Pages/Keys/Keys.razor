@@ -4,6 +4,7 @@
 @using Microsoft.EntityFrameworkCore
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Administrator")]
+@rendermode InteractiveServer
 
 <PageTitle>Manage Keys</PageTitle>
 
@@ -277,13 +278,16 @@
 
     private async Task LoadData()
     {
-        LocksList = await Db.Locks.Where(l => l.IsActive).OrderBy(l => l.LockCode).ToListAsync();
-        LocationsList = await Db.StorageLocations.Where(s => s.IsActive).OrderBy(s => s.Name).ToListAsync();
+        using var context = await DbFactory.CreateDbContextAsync();
+
+        LocksList = await context.Locks.AsNoTracking().Where(l => l.IsActive).OrderBy(l => l.LockCode).ToListAsync();
+        LocationsList = await context.StorageLocations.AsNoTracking().Where(s => s.IsActive).OrderBy(s => s.Name).ToListAsync();
         
-        var allKeys = await Db.Keys
+        var allKeys = await context.Keys
+            .AsNoTracking()
             .Include(k => k.Lock)
             .Include(k => k.StorageLocation)
-            .Include(k => k.BunchAssignments).ThenInclude(ba => ba.Bunch)
+            .Include(k => k.BunchAssignments!).ThenInclude(ba => ba.Bunch)
             .Where(k => k.Lock != null)
             .ToListAsync();
 
@@ -292,12 +296,16 @@
 
     private async Task GenerateKeys()
     {
-        var currentMaxSequence = await Db.Keys.Where(k => k.LockId == Generator.LockId).MaxAsync(k => (int?)k.SequenceNumber) ?? 0;
+        using var context = await DbFactory.CreateDbContextAsync();
+        
+        var currentMaxSequence = await context.Keys.Where(k => k.LockId == Generator.LockId).MaxAsync(k => (int?)k.SequenceNumber) ?? 0;
         for (int i = 1; i <= Generator.Quantity; i++)
         {
-            Db.Keys.Add(new KeyRecord { LockId = Generator.LockId, StorageLocationId = Generator.StorageLocationId, SequenceNumber = currentMaxSequence + i, Status = "In Stock", LastSeenDate = DateTime.Now });
+            // Adding new items purely by Foreign Key ID is immune to the navigation property bug
+            context.Keys.Add(new KeyRecord { LockId = Generator.LockId, StorageLocationId = Generator.StorageLocationId, SequenceNumber = currentMaxSequence + i, Status = "In Stock", LastSeenDate = DateTime.Now });
         }
-        await Db.SaveChangesAsync();
+        
+        await context.SaveChangesAsync();
         Generator = new KeyGenerationForm();
         await LoadData();
     }
@@ -321,8 +329,19 @@
     private async Task SaveBulkEdit()
     {
         if (!SelectedKeyIds.Any()) return;
-        var keysToUpdate = await Db.Keys.Include(k => k.Lock).Include(k => k.BunchAssignments).ThenInclude(ba => ba.Bunch).Where(k => SelectedKeyIds.Contains(k.Id)).ToListAsync();
-        BunchedKeysInConflict = keysToUpdate.Where(k => k.BunchAssignments.Any(ba => ba.RemovedDate == null)).ToList();
+        
+        using var context = await DbFactory.CreateDbContextAsync();
+        
+        // This query only checks for conflicts before moving to the next modal.
+        // We use AsNoTracking() so we don't hold tracked state across UI events.
+        var keysToUpdate = await context.Keys
+            .AsNoTracking()
+            .Include(k => k.Lock)
+            .Include(k => k.BunchAssignments!).ThenInclude(ba => ba.Bunch)
+            .Where(k => SelectedKeyIds.Contains(k.Id))
+            .ToListAsync();
+            
+        BunchedKeysInConflict = keysToUpdate.Where(k => k.BunchAssignments!.Any(ba => ba.RemovedDate == null)).ToList();
 
         if (BunchedKeysInConflict.Any() && !string.IsNullOrEmpty(EditModel.Status) && EditModel.Status != "Lost")
             ShowConflictModal = true;
@@ -332,17 +351,27 @@
 
     private async Task ProcessBulkEdit(bool skipBunched)
     {
-        var keysToUpdate = await Db.Keys.Include(k => k.BunchAssignments).Where(k => SelectedKeyIds.Contains(k.Id)).ToListAsync();
+        using var context = await DbFactory.CreateDbContextAsync();
+        
+        // Fetch fresh, tracked entities that we will actually update and save
+        var keysToUpdate = await context.Keys
+            .Include(k => k.BunchAssignments)
+            .Where(k => SelectedKeyIds.Contains(k.Id))
+            .ToListAsync();
+            
         foreach (var key in keysToUpdate)
         {
-            bool isBunched = key.BunchAssignments.Any(ba => ba.RemovedDate == null);
+            bool isBunched = key.BunchAssignments!.Any(ba => ba.RemovedDate == null);
             if (skipBunched && isBunched) continue;
+            
             if (isBunched && !string.IsNullOrEmpty(EditModel.Status) && EditModel.Status != "Lost")
             {
-                var active = key.BunchAssignments.FirstOrDefault(ba => ba.RemovedDate == null);
+                var active = key.BunchAssignments!.FirstOrDefault(ba => ba.RemovedDate == null);
                 if (active != null) active.RemovedDate = DateTime.Now;
             }
+            
             if (EditModel.StorageLocationId != 0) key.StorageLocationId = EditModel.StorageLocationId;
+            
             if (!string.IsNullOrEmpty(EditModel.Status))
             {
                 key.Status = EditModel.Status;
@@ -350,7 +379,8 @@
                 key.LastSeenDate = DateTime.Now;
             }
         }
-        await Db.SaveChangesAsync();
+        
+        await context.SaveChangesAsync();
         ShowConflictModal = false;
         CloseEditModal();
         await LoadData();

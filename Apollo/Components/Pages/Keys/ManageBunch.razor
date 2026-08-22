@@ -4,6 +4,7 @@
 @using Microsoft.EntityFrameworkCore
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject NavigationManager Nav
+@rendermode InteractiveServer
 
 <PageTitle>Manage Bunch Keys</PageTitle>
 
@@ -33,17 +34,20 @@ else
                             </tr>
                         </thead>
                         <tbody>
-                            @foreach (var ka in TargetBunch.KeyAssignments.Where(a => a.RemovedDate == null))
+                            @if (TargetBunch.KeyAssignments != null)
                             {
-                                <tr>
-                                    <td class="ps-3 fw-bold">@ka.KeyRecord!.Lock!.LockCode @ka.KeyRecord.SequenceNumber</td>
-                                    <td>@ka.KeyRecord.Lock.Name</td>
-                                    <td class="text-end pe-3">
-                                        <button class="btn btn-sm btn-outline-danger" @onclick="() => RemoveKey(ka)">
-                                            <i class="bi bi-trash"></i> Remove
-                                        </button>
-                                    </td>
-                                </tr>
+                                @foreach (var ka in TargetBunch.KeyAssignments.Where(a => a.RemovedDate == null))
+                                {
+                                    <tr>
+                                        <td class="ps-3 fw-bold">@ka.KeyRecord!.Lock!.LockCode @ka.KeyRecord.SequenceNumber</td>
+                                        <td>@ka.KeyRecord.Lock.Name</td>
+                                        <td class="text-end pe-3">
+                                            <button class="btn btn-sm btn-outline-danger" @onclick="() => RemoveKey(ka.Id)">
+                                                <i class="bi bi-trash"></i> Remove
+                                            </button>
+                                        </td>
+                                    </tr>
+                                }
                             }
                         </tbody>
                     </table>
@@ -82,17 +86,22 @@ else
 
     private async Task LoadData()
     {
-        TargetBunch = await Db.Bunches
-            .Include(b => b.KeyAssignments).ThenInclude(ka => ka.KeyRecord).ThenInclude(k => k.Lock)
+        using var context = await DbFactory.CreateDbContextAsync();
+
+        TargetBunch = await context.Bunches
+            .AsNoTracking()
+            .Include(b => b.KeyAssignments!).ThenInclude(ka => ka.KeyRecord).ThenInclude(k => k!.Lock)
             .FirstOrDefaultAsync(b => b.Id == BunchId);
 
         // Keys must be "In Stock" and NOT already on another bunch
-        var keysOnOtherBunches = await Db.KeyBunchAssignments
+        var keysOnOtherBunches = await context.KeyBunchAssignments
+            .AsNoTracking()
             .Where(ka => ka.RemovedDate == null)
             .Select(ka => ka.KeyRecordId)
             .ToListAsync();
 
-        AvailableKeys = await Db.Keys
+        AvailableKeys = await context.Keys
+            .AsNoTracking()
             .Include(k => k.Lock)
             .Where(k => k.Status == "In Stock" && !keysOnOtherBunches.Contains(k.Id))
             .OrderBy(k => k.Lock!.LockCode).ThenBy(k => k.SequenceNumber)
@@ -103,6 +112,8 @@ else
     {
         if (SelectedKeyId == 0) return;
 
+        using var context = await DbFactory.CreateDbContextAsync();
+
         var assignment = new KeyBunchAssignment
         {
             BunchId = BunchId,
@@ -110,24 +121,33 @@ else
             AssignedDate = DateTime.Now
         };
 
-        // Update Key Status to match Bunch (If bunch is in stock, key is technically 'Issued' to the bunch)
-        var key = await Db.Keys.FindAsync(SelectedKeyId);
+        // Update Key Status to match Bunch
+        var key = await context.Keys.FindAsync(SelectedKeyId);
         if (key != null) key.Status = "Issued";
 
-        Db.KeyBunchAssignments.Add(assignment);
-        await Db.SaveChangesAsync();
+        context.KeyBunchAssignments.Add(assignment);
+        await context.SaveChangesAsync();
+        
         SelectedKeyId = 0;
         await LoadData();
     }
 
-    private async Task RemoveKey(KeyBunchAssignment ka)
+    private async Task RemoveKey(int assignmentId)
     {
-        ka.RemovedDate = DateTime.Now;
-        
-        // Return key to 'In Stock' since it's no longer on the bunch
-        if (ka.KeyRecord != null) ka.KeyRecord.Status = "In Stock";
+        using var context = await DbFactory.CreateDbContextAsync();
 
-        await Db.SaveChangesAsync();
+        var ka = await context.KeyBunchAssignments
+            .Include(a => a.KeyRecord)
+            .FirstOrDefaultAsync(a => a.Id == assignmentId);
+
+        if (ka != null)
+        {
+            ka.RemovedDate = DateTime.Now;
+            if (ka.KeyRecord != null) ka.KeyRecord.Status = "In Stock";
+            
+            await context.SaveChangesAsync();
+        }
+
         await LoadData();
     }
 }

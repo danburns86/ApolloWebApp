@@ -4,6 +4,7 @@
 @using Microsoft.EntityFrameworkCore
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Administrator")]
+@rendermode InteractiveServer
 
 <PageTitle>Manage Suppliers</PageTitle>
 
@@ -98,7 +99,9 @@
 
     private async Task LoadData()
     {
-        SuppliersList = await Db.Suppliers
+        using var context = await DbFactory.CreateDbContextAsync();
+        SuppliersList = await context.Suppliers
+            .AsNoTracking()
             .Where(s => s.IsActive == true)
             .OrderBy(s => s.Name)
             .ToListAsync();
@@ -106,19 +109,21 @@
 
     private async Task ArchiveSupplier(int id)
     {
-        var supplierToArchive = await Db.Suppliers.FindAsync(id);
+        using var context = await DbFactory.CreateDbContextAsync();
+        var supplierToArchive = await context.Suppliers.FindAsync(id);
         if (supplierToArchive != null)
         {
             supplierToArchive.IsActive = false;
-            await Db.SaveChangesAsync();
+            await context.SaveChangesAsync();
             await LoadData();
         }
     }
 
     private async Task AddSupplier()
     {
-        Db.Suppliers.Add(NewSupplier);
-        await Db.SaveChangesAsync();
+        using var context = await DbFactory.CreateDbContextAsync();
+        context.Suppliers.Add(NewSupplier);
+        await context.SaveChangesAsync();
         
         NewSupplier = new Supplier();
         await LoadData();
