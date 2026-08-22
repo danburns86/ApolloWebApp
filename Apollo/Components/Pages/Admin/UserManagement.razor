@@ -3,6 +3,7 @@
 @using Apollo.Data
 @using Microsoft.AspNetCore.Identity
 @using Microsoft.EntityFrameworkCore
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject UserManager<ApplicationUser> UserManager
 @inject RoleManager<IdentityRole> RoleManager
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Administrator")]
@@ -126,17 +127,26 @@
 
     protected override async Task OnInitializedAsync()
     {
-        AllRoles = await RoleManager.Roles.Select(r => r.Name!).ToListAsync();
+        using var context = await DbFactory.CreateDbContextAsync();
+        AllRoles = await context.Roles.AsNoTracking().Select(r => r.Name!).ToListAsync();
         await LoadUsers();
     }
 
     private async Task LoadUsers()
     {
-        Users = await UserManager.Users.OrderBy(u => u.UserName).ToListAsync();
+        using var context = await DbFactory.CreateDbContextAsync();
+        
+        Users = await context.Users.AsNoTracking().OrderBy(u => u.UserName).ToListAsync();
+        
+        // Fetch mappings cleanly in memory to avoid N+1 UserManager queries
+        var allUserRoles = await context.UserRoles.AsNoTracking().ToListAsync();
+        var allRoles = await context.Roles.AsNoTracking().ToListAsync();
+
         UserRoles.Clear();
         foreach (var user in Users)
         {
-            UserRoles[user.Id] = await UserManager.GetRolesAsync(user);
+            var roleIds = allUserRoles.Where(ur => ur.UserId == user.Id).Select(ur => ur.RoleId);
+            UserRoles[user.Id] = allRoles.Where(r => roleIds.Contains(r.Id)).Select(r => r.Name!).ToList();
         }
     }
 
@@ -148,10 +158,11 @@
         ShowEditModal = true;
     }
 
-    private async Task PrepareEdit(ApplicationUser user)
+    private void PrepareEdit(ApplicationUser user)
     {
         SelectedUser = user;
-        SelectedRoles = (await UserManager.GetRolesAsync(user)).ToList();
+        // Load roles instantly from our dictionary instead of awaiting UserManager
+        SelectedRoles = UserRoles.ContainsKey(user.Id) ? UserRoles[user.Id].ToList() : new List<string>();
         IsNewUser = false;
         ShowEditModal = true;
     }
@@ -174,7 +185,20 @@
         }
         else
         {
-            result = await UserManager.UpdateAsync(SelectedUser);
+            // Because we read the users using AsNoTracking, we must fetch the tracked entity for UserManager to save it safely
+            var trackedUser = await UserManager.FindByIdAsync(SelectedUser.Id);
+            if (trackedUser != null)
+            {
+                trackedUser.UserName = SelectedUser.UserName;
+                trackedUser.FirstName = SelectedUser.FirstName;
+                trackedUser.LastName = SelectedUser.LastName;
+                result = await UserManager.UpdateAsync(trackedUser);
+                SelectedUser = trackedUser; // Re-sync reference for role updates
+            }
+            else
+            {
+                result = IdentityResult.Failed(new IdentityError { Description = "User not found." });
+            }
         }
 
         if (result.Succeeded)
@@ -192,7 +216,13 @@
     private async Task DeleteUser(ApplicationUser user)
     {
         if (user.UserName?.ToLower() == "admin@apollo.local") return; // Protect primary admin
-        await UserManager.DeleteAsync(user);
+        
+        var trackedUser = await UserManager.FindByIdAsync(user.Id);
+        if (trackedUser != null)
+        {
+            await UserManager.DeleteAsync(trackedUser);
+        }
+        
         await LoadUsers();
     }
 }

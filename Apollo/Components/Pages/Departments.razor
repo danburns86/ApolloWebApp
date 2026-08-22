@@ -2,7 +2,7 @@
 @using Apollo.Models
 @using Apollo.Data
 @using Microsoft.EntityFrameworkCore
-@inject ApplicationDbContext Db
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Administrator")]
 @rendermode InteractiveServer
 
@@ -81,7 +81,9 @@
 
     private async Task LoadData()
     {
-        DepartmentsList = await Db.Departments
+        using var context = await DbFactory.CreateDbContextAsync();
+        DepartmentsList = await context.Departments
+            .AsNoTracking()
             .Where(s => s.IsActive == true)
             .OrderBy(s => s.Name)
             .ToListAsync();
@@ -89,19 +91,21 @@
 
     private async Task ArchiveDepartment(int id)
     {
-        var deptToArchive = await Db.Departments.FindAsync(id);
+        using var context = await DbFactory.CreateDbContextAsync();
+        var deptToArchive = await context.Departments.FindAsync(id);
         if (deptToArchive != null)
         {
             deptToArchive.IsActive = false;
-            await Db.SaveChangesAsync();
+            await context.SaveChangesAsync();
             await LoadData();
         }
     }
 
     private async Task AddDepartment()
     {
-        Db.Departments.Add(NewDepartment);
-        await Db.SaveChangesAsync();
+        using var context = await DbFactory.CreateDbContextAsync();
+        context.Departments.Add(NewDepartment);
+        await context.SaveChangesAsync();
         NewDepartment = new Department();
         await LoadData();
     }

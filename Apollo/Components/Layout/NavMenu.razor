@@ -19,13 +19,13 @@
     var reportChevron = ReportsExpanded ? "bi-chevron-down" : "bi-chevron-right";
     var adminChevron = AdminExpanded ? "bi-chevron-down" : "bi-chevron-right";
     var hsChevron = HSExpanded ? "bi-chevron-down" : "bi-chevron-right";
+    var publicChevron = PublicExpanded ? "bi-chevron-down" : "bi-chevron-right";
 }
 
 <div class="nav-scrollable" onclick="var el = document.querySelector('.navbar-toggler'); if(el) el.click();">
     @* --- BRANDING SECTION --- *@
     <div class="text-center py-3 border-bottom border-secondary mb-2" style="background-color: rgba(0,0,0,0.1);">
-        <img src="@logoUrl" alt="Logo" style="max-height: 60px; max-width: 80%; object-fit: contain;"
-             onerror="this.style.display='none';" />
+        <img src="@logoUrl" alt="Logo" style="max-height: 60px; max-width: 80%; object-fit: contain;" onerror="this.style.display='none';" />
         <div class="text-white fw-bold mt-1" style="font-size: 1.1rem; letter-spacing: 1px;">@theatreName</div>
     </div>
 
@@ -177,6 +177,9 @@
                 <NavLink class="nav-link py-1" href="admin/assets/categories" Match="NavLinkMatch.All">
                     <span class="bi bi-tags me-2" aria-hidden="true"></span> Categories
                 </NavLink>
+                <NavLink class="nav-link py-1" href="admin/assets/rigging" Match="NavLinkMatch.All">
+                    <span class="bi bi-arrows-collapse me-2" aria-hidden="true"></span> Lifting & Rigging
+                </NavLink>
                 <NavLink class="nav-link py-1" href="admin/assets/import" Match="NavLinkMatch.All">
                     <span class="bi bi-upload me-2" aria-hidden="true"></span> Import Tool
                 </NavLink>
@@ -207,6 +210,9 @@
                 </NavLink>
                 <NavLink class="nav-link py-1" href="admin/hs/incidents" Match="NavLinkMatch.All">
                     <span class="bi bi-exclamation-octagon me-2"></span> Accident Book
+                </NavLink>
+                <NavLink class="nav-link py-1" href="admin/hs/contractors" Match="NavLinkMatch.All">
+                    <span class="bi bi-file-earmark-lock me-2"></span> Contractor RAMS
                 </NavLink>
             </div>
         }
@@ -271,6 +277,25 @@
             </Authorized>
         </AuthorizeView>
 
+        @* --- PUBLIC PORTALS (NEW) --- *@
+        <div class="nav-item px-3 mt-2 border-top border-secondary pt-2">
+            <button class="nav-link bg-transparent border-0 w-100 text-start shadow-none d-flex align-items-center" @onclick="TogglePublic" @onclick:stopPropagation="true">
+                <span class="bi bi-qr-code me-2" aria-hidden="true"></span> Public Portals
+                <span class="bi @publicChevron ms-auto" aria-hidden="true"></span>
+            </button>
+        </div>
+        @if (PublicExpanded)
+        {
+            <div class="nav-item px-3 ms-3">
+                <NavLink class="nav-link py-1" href="report-snag" target="_blank">
+                    <span class="bi bi-tools me-2"></span> Report Snag
+                </NavLink>
+                <NavLink class="nav-link py-1" href="report-incident" target="_blank">
+                    <span class="bi bi-heart-pulse me-2"></span> Report Incident
+                </NavLink>
+            </div>
+        }
+
         @* --- BULK TOGGLES --- *@
         <div class="nav-item px-3 mt-4 pt-2 border-top border-secondary d-flex gap-1">
             <button class="btn btn-sm btn-outline-light w-50 flex-grow-1" style="font-size: 0.7rem;" @onclick="ExpandAll">
@@ -307,6 +332,7 @@
     private bool ReportsExpanded = false;
     private bool AdminExpanded = false;
     private bool HSExpanded = false;
+    private bool PublicExpanded = false;
     
     private string UserDisplayName = "User";
     private PortalConfiguration? Config;
@@ -335,14 +361,15 @@
     private void ToggleHS() => HSExpanded = !HSExpanded;
     private void ToggleReports() => ReportsExpanded = !ReportsExpanded;
     private void ToggleAdmin() => AdminExpanded = !AdminExpanded;
+    private void TogglePublic() => PublicExpanded = !PublicExpanded;
 
     private void ExpandAll()
     {
-        KeysExpanded = MaintExpanded = AssetsExpanded = ProdExpanded = MembersExpanded = ReportsExpanded = AdminExpanded = true;
+        KeysExpanded = MaintExpanded = AssetsExpanded = ProdExpanded = MembersExpanded = ReportsExpanded = AdminExpanded = HSExpanded = PublicExpanded = true;
     }
 
     private void CollapseAll()
     {
-        KeysExpanded = MaintExpanded = AssetsExpanded = ProdExpanded = MembersExpanded = ReportsExpanded = AdminExpanded = false;
+        KeysExpanded = MaintExpanded = AssetsExpanded = ProdExpanded = MembersExpanded = ReportsExpanded = AdminExpanded = HSExpanded = PublicExpanded = false;
     }
 }

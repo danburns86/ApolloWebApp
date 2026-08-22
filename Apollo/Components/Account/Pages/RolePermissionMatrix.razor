@@ -4,7 +4,7 @@
 @using Microsoft.AspNetCore.Identity
 @using Microsoft.EntityFrameworkCore
 @using System.Security.Claims
-@inject ApplicationDbContext Db
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject RoleManager<IdentityRole> RoleManager
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Administrator")]
 
@@ -118,7 +118,12 @@ else
 
     private async Task LoadPermissions()
     {
-        AllPermissions = await Db.SystemPermissions.OrderBy(p => p.Module).ThenBy(p => p.Name).ToListAsync();
+        using var context = await DbFactory.CreateDbContextAsync();
+        AllPermissions = await context.SystemPermissions
+            .AsNoTracking()
+            .OrderBy(p => p.Module)
+            .ThenBy(p => p.Name)
+            .ToListAsync();
     }
 
     private async Task LoadRoleClaims()
@@ -168,13 +173,13 @@ else
             // 1. Get existing permission claims
             var existingClaims = await RoleManager.GetClaimsAsync(role);
             var existingPermissions = existingClaims.Where(c => c.Type == "Permission").ToList();
-
+            
             // 2. Remove all of them to give us a clean slate
             foreach (var claim in existingPermissions)
             {
                 await RoleManager.RemoveClaimAsync(role, claim);
             }
-
+            
             // 3. Add the ones that are currently checked in the UI
             foreach (var claimValue in SelectedClaims)
             {
@@ -203,6 +208,8 @@ else
     // --- SEED DEFAULT DATA ---
     private async Task SeedDefaultPermissions()
     {
+        using var context = await DbFactory.CreateDbContextAsync();
+        
         var defaults = new List<SystemPermission>
         {
             // Existing
@@ -215,11 +222,11 @@ else
             new() { Module = "User Management", Name = "Assign Roles", ClaimValue = "Users.ManageRoles" },
             new() { Module = "Admin Functions", Name = "Manage Core Settings", ClaimValue = "Admin.ManageSettings" },
             new() { Module = "Admin Functions", Name = "Full System Access", ClaimValue = "Admin.FullAccess" },
-
+            
             // NEW: Facilities
             new() { Module = "Facilities", Name = "View Facilities", ClaimValue = "Facilities.View" },
             new() { Module = "Facilities", Name = "Manage Areas & Rooms", ClaimValue = "Facilities.Manage" },
-
+            
             // NEW: Maintenance
             new() { Module = "Maintenance", Name = "View Maintenance Book", ClaimValue = "Maintenance.View" },
             new() { Module = "Maintenance", Name = "Manage/Approve Snags", ClaimValue = "Maintenance.Manage" },
@@ -229,13 +236,13 @@ else
         // Only add ones that don't exist yet
         foreach (var d in defaults)
         {
-            if (!Db.SystemPermissions.Any(p => p.ClaimValue == d.ClaimValue))
+            if (!context.SystemPermissions.Any(p => p.ClaimValue == d.ClaimValue))
             {
-                Db.SystemPermissions.Add(d);
+                context.SystemPermissions.Add(d);
             }
         }
 
-        await Db.SaveChangesAsync();
+        await context.SaveChangesAsync();
         await LoadPermissions();
     }
 }

@@ -2,7 +2,7 @@
 @using Apollo.Models
 @using Apollo.Data
 @using Microsoft.EntityFrameworkCore
-@inject ApplicationDbContext Db
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject IJSRuntime JS
 
 <PageTitle>Lost & Found Report</PageTitle>

@@ -3,7 +3,7 @@
 @using Apollo.Models
 @using Microsoft.EntityFrameworkCore
 @using System.Text.Json
-@inject ApplicationDbContext Db
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Administrator")]
 
 <PageTitle>System Audit Logs</PageTitle>

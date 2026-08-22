@@ -2,7 +2,7 @@
 @using Apollo.Models
 @using Apollo.Data
 @using Microsoft.EntityFrameworkCore
-@inject ApplicationDbContext Db
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Administrator")]
 
 <PageTitle>Compliance Audit</PageTitle>
