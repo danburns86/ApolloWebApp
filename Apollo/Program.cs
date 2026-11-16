@@ -109,36 +109,30 @@ using (var scope = app.Services.CreateScope())
         }
     }
 
-    // B. Seed Admin User (AGGRESSIVE OVERRIDE)
-    string adminEmail = "admin@apollo.local";
-    string adminPassword = "ApolloAdmin99!";
+    // B. Seed a BRAND NEW Admin User
+    string myEmail = "dan@apollo.local";
+    string myPassword = "TheatreMaster2026!";
 
-    var adminUser = await userManager.FindByEmailAsync(adminEmail);
-    if (adminUser == null)
+    var myUser = await userManager.FindByEmailAsync(myEmail);
+    if (myUser == null)
     {
         var newAdmin = new ApplicationUser
         {
-            UserName = adminEmail,
-            Email = adminEmail,
-            EmailConfirmed = true
+            UserName = myEmail,
+            Email = myEmail,
+            EmailConfirmed = true,
+            LockoutEnabled = false // <-- Guarantees you never get locked out
         };
 
-        var createPowerUser = await userManager.CreateAsync(newAdmin, adminPassword);
-        if (createPowerUser.Succeeded)
+        var result = await userManager.CreateAsync(newAdmin, myPassword);
+        if (result.Succeeded)
         {
             await userManager.AddToRoleAsync(newAdmin, "Administrator");
+            Console.WriteLine(">>>> BRAND NEW ADMIN CREATED: " + myEmail);
         }
-    }
-    else
-    {
-        // User exists but password is lost. Force a reset.
-        var token = await userManager.GeneratePasswordResetTokenAsync(adminUser);
-        var resetResult = await userManager.ResetPasswordAsync(adminUser, token, adminPassword);
-
-        // Guarantee they have the Admin role
-        if (!await userManager.IsInRoleAsync(adminUser, "Administrator"))
+        else
         {
-            await userManager.AddToRoleAsync(adminUser, "Administrator");
+            Console.WriteLine(">>>> FAILED: " + string.Join(", ", result.Errors.Select(e => e.Description)));
         }
     }
 
