@@ -22,8 +22,9 @@
             <thead class="table-light small text-uppercase">
                 <tr>
                     <th class="ps-3" style="width: 25%;">Bunch Name / Dept</th>
-                    <th style="width: 15%; text-align: center;">Status</th>
-                    <th style="width: 45%;">Keys Attached</th>
+                    <th style="width: 15%; text-align: center;">Home Location</th>
+                    <th style="width: 10%; text-align: center;">Status</th>
+                    <th style="width: 35%;">Keys Attached</th>
                     <th style="width: 15%;">Issue Details</th>
                 </tr>
             </thead>
@@ -34,6 +35,9 @@
                         <td class="ps-3">
                             <div class="fw-bold fs-6">@bunch.Name</div>
                             <div class="small text-muted"><i class="bi bi-building"></i> @(bunch.Department?.Name ?? "General")</div>
+                        </td>
+                        <td class="text-center small fw-bold">
+                            @(bunch.StorageLocation?.Name ?? "Unassigned")
                         </td>
                         <td class="text-center">
                             @if (!string.IsNullOrEmpty(bunch.IssuedToName))
@@ -46,7 +50,7 @@
                             }
                             else
                             {
-                                <span class="badge bg-success">Unissued (In Stock)</span>
+                                <span class="badge bg-success">In Stock</span>
                             }
                         </td>
                         <td class="small">
@@ -89,10 +93,13 @@
     {
         using var context = await DbFactory.CreateDbContextAsync();
         Bunches = await context.Bunches
+            .AsNoTracking()
             .Include(b => b.Department)
+            .Include(b => b.StorageLocation)
             .Include(b => b.KeyAssignments!).ThenInclude(ka => ka.KeyRecord).ThenInclude(k => k!.Lock)
             .Where(b => b.IsActive)
-            .OrderBy(b => b.Name)
+            .OrderBy(b => b.StorageLocationId) // Groups them by their home cabinet
+            .ThenBy(b => b.Name)
             .ToListAsync();
     }
 }

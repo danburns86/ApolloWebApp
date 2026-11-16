@@ -1,0 +1,201 @@
+﻿<h3>WarningManager</h3>
+
+@code {
+
+}
+@page "/admin/settings/warnings"
+@using Apollo.Models
+@using Apollo.Data
+@using Microsoft.EntityFrameworkCore
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@rendermode InteractiveServer
+
+<PageTitle>Content Warning Settings</PageTitle>
+
+<div class="container-fluid px-4 py-4 max-w-5xl">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="fw-bold mb-0 text-primary">Content Warning Settings</h2>
+            <p class="text-muted mb-0">Configure master warnings and specify which items appear on FOH Briefing Sheets.</p>
+        </div>
+        <button class="btn btn-primary fw-bold" @onclick="OpenAddModal">
+            <i class="bi bi-plus-lg me-2"></i>Add Warning Type
+        </button>
+    </div>
+
+    @if (isLoading)
+    {
+        <div class="text-center py-5"><div class="spinner-border text-primary"></div></div>
+    }
+    else
+    {
+        <div class="card border-0 shadow-sm">
+            <div class="card-body p-0">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="bg-light small text-uppercase">
+                        <tr>
+                            <th class="ps-4">Icon & Warning Name</th>
+                            <th class="text-center">Show on FOH Grid</th>
+                            <th class="text-center">Enabled</th>
+                            <th class="text-end pe-4">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var w in warningTypes.OrderBy(w => w.SortOrder).ThenBy(w => w.Name))
+                        {
+                            <tr>
+                                <td class="ps-4 fw-bold">
+                                    <i class="bi @w.IconClass me-2 text-primary fs-5"></i>@w.Name
+                                </td>
+                                <td class="text-center">
+                                    <input class="form-check-input" type="checkbox" checked="@w.ShowOnFoHReport" @onchange="() => ToggleFoH(w)" />
+                                </td>
+                                <td class="text-center">
+                                    <input class="form-check-input" type="checkbox" checked="@w.IsEnabled" @onchange="() => ToggleEnabled(w)" />
+                                </td>
+                                <td class="text-end pe-4">
+                                    <button class="btn btn-sm text-primary" @onclick="() => OpenEditModal(w)"><i class="bi bi-pencil me-1"></i>Edit</button>
+                                    <button class="btn btn-sm text-danger" @onclick="() => DeleteWarning(w)"><i class="bi bi-trash"></i></button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+</div>
+
+@if (showModal)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow-lg">
+                <div class="modal-header bg-light">
+                    <h5 class="modal-title fw-bold">@(editingItem.Id == 0 ? "Add Warning Type" : "Edit Warning Type")</h5>
+                    <button type="button" class="btn-close" @onclick="() => showModal = false"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">Warning Name</label>
+                        <input type="text" class="form-control" @bind="editingItem.Name" placeholder="e.g. Strobe / Flashing Lights" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">Bootstrap Icon Class</label>
+                        <input type="text" class="form-control" @bind="editingItem.IconClass" placeholder="bi-lightning-charge" />
+                        <div class="form-text">e.g. <code>bi-cloud-fog</code>, <code>bi-lightning-charge</code>, <code>bi-volume-up</code></div>
+                    </div>
+                    <div class="form-check form-switch mb-2">
+                        <input class="form-check-input" type="checkbox" @bind="editingItem.ShowOnFoHReport" id="fohCheck" />
+                        <label class="form-check-label fw-bold" for="fohCheck">Include on FOH Briefing Sheet Grid</label>
+                    </div>
+                    <div class="form-check form-switch mb-3">
+                        <input class="form-check-input" type="checkbox" @bind="editingItem.IsEnabled" id="enabledCheck" />
+                        <label class="form-check-label fw-bold" for="enabledCheck">System Active</label>
+                    </div>
+                </div>
+                <div class="modal-footer border-0">
+                    <button class="btn btn-secondary" @onclick="() => showModal = false">Cancel</button>
+                    <button class="btn btn-primary px-4 fw-bold" @onclick="SaveWarning">Save Warning</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<ContentWarningType> warningTypes = new();
+    private bool isLoading = true;
+    private bool showModal = false;
+    private ContentWarningType editingItem = new();
+
+    protected override async Task OnInitializedAsync() => await LoadData();
+
+    private async Task LoadData()
+    {
+        isLoading = true;
+        using var context = await DbFactory.CreateDbContextAsync();
+        warningTypes = await context.Set<ContentWarningType>().ToListAsync();
+        
+        // Seed standard warning types if empty
+        if (!warningTypes.Any())
+        {
+            var seeds = new List<ContentWarningType>
+            {
+                new() { Name = "Smoke / Haze Effects", IconClass = "bi-cloud-fog", ShowOnFoHReport = true, SortOrder = 1 },
+                new() { Name = "Flashing Lights / Strobe", IconClass = "bi-lightning-charge", ShowOnFoHReport = true, SortOrder = 2 },
+                new() { Name = "Gunshots / Replica Firearms", IconClass = "bi-exclamation-octagon", ShowOnFoHReport = true, SortOrder = 3 },
+                new() { Name = "Sudden Loud Noises", IconClass = "bi-volume-up-fill", ShowOnFoHReport = true, SortOrder = 4 },
+                new() { Name = "Sexual Content / Nudity", IconClass = "bi-eye-slash-fill", ShowOnFoHReport = true, SortOrder = 5 },
+                new() { Name = "Depictions of Violence / Gore", IconClass = "bi-shield-exclamation", ShowOnFoHReport = true, SortOrder = 6 },
+                new() { Name = "Distressing Themes", IconClass = "bi-heart-break-fill", ShowOnFoHReport = true, SortOrder = 7 },
+                new() { Name = "Stage Smoking", IconClass = "bi-fire", ShowOnFoHReport = true, SortOrder = 8 },
+                new() { Name = "Audience Interaction", IconClass = "bi-people-fill", ShowOnFoHReport = true, SortOrder = 9 }
+            };
+            context.Set<ContentWarningType>().AddRange(seeds);
+            await context.SaveChangesAsync();
+            warningTypes = await context.Set<ContentWarningType>().ToListAsync();
+        }
+        isLoading = false;
+    }
+
+    private void OpenAddModal()
+    {
+        editingItem = new ContentWarningType { ShowOnFoHReport = true, IsEnabled = true };
+        showModal = true;
+    }
+
+    private void OpenEditModal(ContentWarningType item)
+    {
+        editingItem = new ContentWarningType
+        {
+            Id = item.Id,
+            Name = item.Name,
+            IconClass = item.IconClass,
+            ShowOnFoHReport = item.ShowOnFoHReport,
+            IsEnabled = item.IsEnabled,
+            SortOrder = item.SortOrder
+        };
+        showModal = true;
+    }
+
+    private async Task SaveWarning()
+    {
+        if (string.IsNullOrWhiteSpace(editingItem.Name)) return;
+        using var context = await DbFactory.CreateDbContextAsync();
+
+        if (editingItem.Id == 0)
+            context.Set<ContentWarningType>().Add(editingItem);
+        else
+            context.Set<ContentWarningType>().Update(editingItem);
+
+        await context.SaveChangesAsync();
+        showModal = false;
+        await LoadData();
+    }
+
+    private async Task ToggleFoH(ContentWarningType w)
+    {
+        w.ShowOnFoHReport = !w.ShowOnFoHReport;
+        using var context = await DbFactory.CreateDbContextAsync();
+        context.Set<ContentWarningType>().Update(w);
+        await context.SaveChangesAsync();
+    }
+
+    private async Task ToggleEnabled(ContentWarningType w)
+    {
+        w.IsEnabled = !w.IsEnabled;
+        using var context = await DbFactory.CreateDbContextAsync();
+        context.Set<ContentWarningType>().Update(w);
+        await context.SaveChangesAsync();
+    }
+
+    private async Task DeleteWarning(ContentWarningType w)
+    {
+        using var context = await DbFactory.CreateDbContextAsync();
+        context.Set<ContentWarningType>().Remove(w);
+        await context.SaveChangesAsync();
+        await LoadData();
+    }
+}

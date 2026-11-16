@@ -3,7 +3,7 @@
 @using Apollo.Data
 @using Microsoft.EntityFrameworkCore
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
-@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Administrator")]
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
 @rendermode InteractiveServer
 
 <PageTitle>Manage Keys</PageTitle>
@@ -28,152 +28,160 @@
 <hr />
 
 <div class="row">
+    <!-- LEFT SIDEBAR: ACTIONS -->
     <div class="col-xl-3 col-lg-4 mb-4">
-        <div class="card shadow-sm border-primary mb-3">
-            <div class="card-header bg-primary text-white fw-bold">Cut New Keys</div>
-            <div class="card-body">
-                <EditForm Model="Generator" OnValidSubmit="GenerateKeys" FormName="GenerateKeysForm">
-                    <DataAnnotationsValidator />
-                    
-                    <div class="mb-3">
-                        <label class="form-label fw-bold">Hardware Lock <span class="text-danger">*</span></label>
-                        <InputSelect @bind-Value="Generator.LockId" class="form-select">
-                            <option value="0">-- Choose a Lock --</option>
-                            @foreach (var lck in LocksList)
-                            {
-                                <option value="@lck.Id">@lck.LockCode - @lck.Name</option>
-                            }
-                        </InputSelect>
-                        <ValidationMessage For="() => Generator.LockId" class="text-danger" />
-                    </div>
+        <AuthorizeView Roles="Administrator" Context="authContext">
+            <Authorized>
+                <div class="card shadow-sm border-primary mb-3">
+                    <div class="card-header bg-primary text-white fw-bold">Cut New Keys</div>
+                    <div class="card-body">
+                        <EditForm Model="Generator" OnValidSubmit="GenerateKeys" FormName="GenerateKeysForm">
+                            <DataAnnotationsValidator />
+                            
+                            <div class="mb-3">
+                                <label class="form-label fw-bold">Hardware Lock <span class="text-danger">*</span></label>
+                                <InputSelect @bind-Value="Generator.LockId" class="form-select">
+                                    <option value="0">-- Choose a Lock --</option>
+                                    @foreach (var lck in LocksList)
+                                    {
+                                        <option value="@lck.Id">@lck.LockCode - @lck.Name</option>
+                                    }
+                                </InputSelect>
+                                <ValidationMessage For="() => Generator.LockId" class="text-danger" />
+                            </div>
 
-                    <div class="mb-3">
-                        <label class="form-label fw-bold">Initial Storage <span class="text-danger">*</span></label>
-                        <InputSelect @bind-Value="Generator.StorageLocationId" class="form-select">
-                            <option value="0">-- Select Cabinet/Safe --</option>
-                            @foreach (var loc in LocationsList)
-                            {
-                                <option value="@loc.Id">@loc.Name</option>
-                            }
-                        </InputSelect>
-                        <ValidationMessage For="() => Generator.StorageLocationId" class="text-danger" />
-                    </div>
+                            <div class="mb-3">
+                                <label class="form-label fw-bold">Initial Storage <span class="text-danger">*</span></label>
+                                <InputSelect @bind-Value="Generator.StorageLocationId" class="form-select">
+                                    <option value="0">-- Select Cabinet/Safe --</option>
+                                    @foreach (var loc in LocationsList)
+                                    {
+                                        <option value="@loc.Id">@loc.Name</option>
+                                    }
+                                </InputSelect>
+                                <ValidationMessage For="() => Generator.StorageLocationId" class="text-danger" />
+                            </div>
 
-                    <div class="mb-4">
-                        <label class="form-label fw-bold">Quantity <span class="text-danger">*</span></label>
-                        <InputNumber @bind-Value="Generator.Quantity" class="form-control" min="1" max="50" />
-                        <ValidationMessage For="() => Generator.Quantity" class="text-danger" />
+                            <div class="mb-4">
+                                <label class="form-label fw-bold">Quantity <span class="text-danger">*</span></label>
+                                <InputNumber @bind-Value="Generator.Quantity" class="form-control" min="1" max="50" />
+                                <ValidationMessage For="() => Generator.Quantity" class="text-danger" />
+                            </div>
+                            
+                            <button type="submit" class="btn btn-primary w-100">
+                                <i class="bi bi-key-fill"></i> Generate Keys
+                            </button>
+                        </EditForm>
                     </div>
-                    
-                    <button type="submit" class="btn btn-primary w-100">
-                        <i class="bi bi-key-fill"></i> Generate Keys
-                    </button>
-                </EditForm>
-            </div>
-        </div>
-
-        @if (SelectedKeyIds.Any())
-        {
-            <div class="card shadow border-warning">
-                <div class="card-body bg-warning bg-opacity-10 text-center">
-                    <h5 class="fw-bold text-dark mb-2">@SelectedKeyIds.Count Keys Selected</h5>
-                    <button class="btn btn-dark w-100 shadow-sm" @onclick="OpenBulkEditModal">
-                        <i class="bi bi-pencil-square"></i> Bulk Edit Selected
-                    </button>
                 </div>
-            </div>
-        }
-    </div>
 
-    <div class="col-xl-9 col-lg-8">
-        @if (!GroupedKeys.Any())
-        {
-            <div class="alert alert-secondary text-center shadow-sm py-4">
-                No keys found matching the current filter.
-            </div>
-        }
-        else
-        {
-            @foreach (var lockGroup in GroupedKeys.OrderBy(g => g.Key.LockCode))
-            {
-                var filteredKeys = lockGroup.Value.Where(k => FilterStatus == "All" || k.Status == FilterStatus).ToList();
-                
-                if (!filteredKeys.Any()) continue;
-
-                <div class="card mb-4 shadow-sm border-0">
-                    <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
-                        <span class="fw-bold"><i class="bi bi-lock-fill me-2"></i> Lock: @lockGroup.Key.LockCode - @lockGroup.Key.Name</span>
-                        <div>
-                            <button class="btn btn-sm btn-outline-light me-2" @onclick="() => SelectAllInLock(filteredKeys)">Select All</button>
-                            <span class="badge bg-secondary">@filteredKeys.Count Keys</span>
+                @if (SelectedKeyIds.Any())
+                {
+                    <div class="card shadow border-warning">
+                        <div class="card-body bg-warning bg-opacity-10 text-center">
+                            <h5 class="fw-bold text-dark mb-2">@SelectedKeyIds.Count Keys Selected</h5>
+                            <button class="btn btn-dark w-100 shadow-sm" @onclick="OpenBulkEditModal">
+                                <i class="bi bi-pencil-square"></i> Bulk Edit Selected
+                            </button>
                         </div>
                     </div>
-                    <div class="card-body p-0 table-responsive">
-                        <table class="table table-sm table-striped table-hover align-middle mb-0">
-                            <thead class="table-light text-muted small text-uppercase">
-                                <tr>
-                                    <th class="ps-3" style="width: 40px;"></th>
-                                    <th>Key Number</th>
-                                    <th>Location</th>
-                                    <th>Status</th>
-                                    <th>Last Seen</th>
-                                    <th class="text-end pe-3">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @foreach (var key in filteredKeys.OrderBy(k => k.SequenceNumber))
-                                {
-                                    <tr>
-                                        <td class="ps-3">
-                                            <input class="form-check-input" type="checkbox"
-                                                   checked="@SelectedKeyIds.Contains(key.Id)"
-                                                   @onchange="(e) => ToggleKeySelection(key.Id, e.Value)" />
-                                        </td>
-                                        <td class="fw-bold fs-6">@lockGroup.Key.LockCode @key.SequenceNumber</td>
-                                        <td><i class="bi bi-box-seam me-1 text-muted"></i> @(key.StorageLocation?.Name ?? "-")</td>
-                                        <td>
-                                            @if (key.Status == "In Stock")
-                                            {
-                                                <span class="badge bg-success">In Stock</span>
-                                            }
-                                            else if (key.Status == "Issued")
-                                            {
-
-                                                <span class="badge bg-info text-dark">Issued</span>
-                                            }
-                                            else if (key.Status == "Damaged")
-                                            {
-
-                                                <span class="badge bg-warning text-dark">Damaged</span>
-                                            }
-                                            else if (key.Status == "Lost")
-                                            {
-
-                                                <span class="badge bg-danger">Lost</span>
-                                            }
-                                            else
-                                            {
-
-                                                <span class="badge bg-secondary">@key.Status</span>
-                                            }
-                                        </td>
-                                        <td class="small">@(key.LastSeenDate?.ToString("dd/MM/yyyy") ?? "Never")</td>
-                                        <td class="text-end pe-3">
-                                            <button class="btn btn-sm btn-outline-primary" @onclick="() => EditSingleKey(key)">
-                                                <i class="bi bi-pencil"></i> Edit
-                                            </button>
-                                        </td>
-                                    </tr>
-                                }
-                            </tbody>
-                        </table>
-                    </div>
+                }
+            </Authorized>
+            <NotAuthorized>
+                <div class="alert alert-secondary shadow-sm text-center">
+                    <i class="bi bi-shield-lock-fill d-block fs-3 mb-2"></i>
+                    <strong>View-Only Mode</strong><br />
+                    You do not have permission to cut or edit physical keys.
                 </div>
-            }
-        }
+            </NotAuthorized>
+        </AuthorizeView>
+    </div>
+
+    <!-- RIGHT SIDEBAR: INVENTORY TABLE -->
+    <div class="col-xl-9 col-lg-8">
+        <div class="card shadow-sm border-0 mb-4">
+            <div class="card-body p-0 table-responsive">
+                <table class="table table-sm table-striped table-hover align-middle mb-0">
+                    <thead class="table-light text-muted small text-uppercase">
+                        <tr>
+                            <th class="ps-3" style="width: 40px;"></th>
+                            <th>Key / Lock</th>
+                            <th>Current Holder / Location</th>
+                            <th>Status & Bunch</th>
+                            <th class="text-end pe-3">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var lockGroup in GroupedKeys.OrderBy(g => g.Key.LockCode))
+                        {
+                            var filteredKeys = lockGroup.Value.Where(k => FilterStatus == "All" || k.Status == FilterStatus).ToList();
+                            if (!filteredKeys.Any()) continue;
+
+                            <!-- LOCK HEADER ROW -->
+                            <tr class="table-dark text-white">
+                                <td colspan="5" class="ps-3 fw-bold small py-2">
+                                    <i class="bi bi-door-closed-fill me-2 text-info"></i> @lockGroup.Key.LockCode - @lockGroup.Key.Name
+                                    <AuthorizeView Roles="Administrator">
+                                        <button class="btn btn-sm btn-outline-light float-end py-0 px-2" @onclick="() => SelectAllInLock(filteredKeys)">Select All @filteredKeys.Count</button>
+                                    </AuthorizeView>
+                                </td>
+                            </tr>
+
+                            <!-- KEYS UNDER THIS LOCK -->
+                            @foreach (var key in filteredKeys.OrderBy(k => k.SequenceNumber))
+                            {
+                                var bunchName = key.BunchAssignments?.FirstOrDefault(ba => ba.RemovedDate == null)?.Bunch?.Name;
+                                <tr>
+                                    <td class="ps-3">
+                                        <AuthorizeView Roles="Administrator">
+                                            <input class="form-check-input" type="checkbox" checked="@SelectedKeyIds.Contains(key.Id)" @onchange="(e) => ToggleKeySelection(key.Id, e.Value)" />
+                                        </AuthorizeView>
+                                    </td>
+                                    <td class="fw-bold fs-6">@lockGroup.Key.LockCode @key.SequenceNumber</td>
+                                    <td>
+                                        @if (!string.IsNullOrEmpty(key.IssuedToName))
+                                        {
+                                            <span class="fw-bold text-primary"><i class="bi bi-person-badge me-1"></i>@key.IssuedToName</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-muted"><i class="bi bi-box-seam me-1"></i>@(key.StorageLocation?.Name ?? "In Stock")</span>
+                                        }
+                                    </td>
+                                    <td>
+                                        <span class="badge @(key.Status == "In Stock" ? "bg-success" : (key.Status == "Lost" ? "bg-danger" : "bg-warning text-dark"))">
+                                            @key.Status
+                                        </span>
+                                        @if (bunchName != null)
+                                        {
+                                            <span class="badge bg-dark ms-1"><i class="bi bi-paperclip"></i> @bunchName</span>
+                                        }
+                                    </td>
+                                    <td class="text-end pe-3">
+                                        <AuthorizeView Roles="Administrator">
+                                            <Authorized>
+                                                <button class="btn btn-sm btn-outline-primary" @onclick="() => EditSingleKey(key)">
+                                                    <i class="bi bi-pencil"></i> Edit
+                                                </button>
+                                            </Authorized>
+                                        </AuthorizeView>
+                                    </td>
+                                </tr>
+                            }
+                        }
+                        
+                        @if (!GroupedKeys.Any() || !GroupedKeys.Any(g => g.Value.Any(k => FilterStatus == "All" || k.Status == FilterStatus)))
+                        {
+                            <tr><td colspan="5" class="text-center py-5 text-muted fst-italic">No keys found matching the current filter.</td></tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
     </div>
 </div>
 
+<!-- EDIT MODAL -->
 @if (ShowEditModal)
 {
     <div class="modal fade show d-block" style="background-color: rgba(0,0,0,0.5);" tabindex="-1">
@@ -218,29 +226,39 @@
     </div>
 }
 
+<!-- CONFLICT MODAL -->
 @if (ShowConflictModal)
 {
     <div class="modal fade show d-block" style="background-color: rgba(0,0,0,0.7); z-index: 1060;" tabindex="-1">
         <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content border-danger shadow-lg">
-                <div class="modal-header bg-danger text-white">
-                    <h5 class="modal-title"><i class="bi bi-exclamation-octagon me-2"></i>Bunch Conflict Detected</h5>
+            <div class="modal-content border-warning shadow-lg">
+                <div class="modal-header bg-warning text-dark">
+                    <h5 class="modal-title fw-bold"><i class="bi bi-exclamation-octagon me-2"></i>Bunch Conflict Detected</h5>
                 </div>
                 <div class="modal-body">
-                    <p>You are trying to change the status/location of <strong>@BunchedKeysInConflict.Count</strong> keys that are currently assigned to bunches.</p>
-                    <p class="text-muted small">Keys on bunches cannot be moved to "In Stock" or "Damaged" without being removed from their bunch first.</p>
+                    <p>You are trying to change the status or location of <strong>@BunchedKeysInConflict.Count</strong> key(s) that are currently attached to physical bunches.</p>
+                    <p class="text-muted small">Normally, keys must be removed from their bunch before they can be sent to stock or marked damaged. How do you want to handle this?</p>
                     
                     <div class="list-group list-group-flush mb-3 border rounded" style="max-height: 150px; overflow-y: auto;">
                         @foreach (var k in BunchedKeysInConflict)
                         {
-                            <div class="list-group-item small">@k.Lock?.LockCode @k.SequenceNumber (on @k.BunchAssignments.FirstOrDefault(ba => ba.RemovedDate == null)?.Bunch?.Name)</div>
+                            <div class="list-group-item small">
+                                <strong>@k.Lock?.LockCode @k.SequenceNumber</strong>
+                                <span class="text-muted">(on @k.BunchAssignments.FirstOrDefault(ba => ba.RemovedDate == null)?.Bunch?.Name)</span>
+                            </div>
                         }
                     </div>
                 </div>
-                <div class="modal-footer justify-content-center">
-                    <button type="button" class="btn btn-outline-secondary" @onclick="() => ShowConflictModal = false">Cancel</button>
-                    <button type="button" class="btn btn-warning" @onclick="() => ProcessBulkEdit(true)">Skip Bunched Keys</button>
-                    <button type="button" class="btn btn-danger" @onclick="() => ProcessBulkEdit(false)">Remove from Bunches & Save</button>
+                <div class="modal-footer bg-light flex-column align-items-stretch gap-2">
+                    <button type="button" class="btn btn-success fw-bold w-100" @onclick="() => ProcessBulkEdit(false, true)">
+                        Update Status & Keep on Bunch (Recommended)
+                    </button>
+                    <button type="button" class="btn btn-danger fw-bold w-100" @onclick="() => ProcessBulkEdit(false, false)">
+                        Remove from Bunches & Update Status
+                    </button>
+                    <button type="button" class="btn btn-outline-secondary w-100" @onclick="() => ShowConflictModal = false">
+                        Cancel Update
+                    </button>
                 </div>
             </div>
         </div>
@@ -301,7 +319,6 @@
         var currentMaxSequence = await context.Keys.Where(k => k.LockId == Generator.LockId).MaxAsync(k => (int?)k.SequenceNumber) ?? 0;
         for (int i = 1; i <= Generator.Quantity; i++)
         {
-            // Adding new items purely by Foreign Key ID is immune to the navigation property bug
             context.Keys.Add(new KeyRecord { LockId = Generator.LockId, StorageLocationId = Generator.StorageLocationId, SequenceNumber = currentMaxSequence + i, Status = "In Stock", LastSeenDate = DateTime.Now });
         }
         
@@ -332,8 +349,6 @@
         
         using var context = await DbFactory.CreateDbContextAsync();
         
-        // This query only checks for conflicts before moving to the next modal.
-        // We use AsNoTracking() so we don't hold tracked state across UI events.
         var keysToUpdate = await context.Keys
             .AsNoTracking()
             .Include(k => k.Lock)
@@ -346,14 +361,13 @@
         if (BunchedKeysInConflict.Any() && !string.IsNullOrEmpty(EditModel.Status) && EditModel.Status != "Lost")
             ShowConflictModal = true;
         else
-            await ProcessBulkEdit(false);
+            await ProcessBulkEdit(false, false);
     }
 
-    private async Task ProcessBulkEdit(bool skipBunched)
+    private async Task ProcessBulkEdit(bool skipBunched, bool keepOnBunch = false)
     {
         using var context = await DbFactory.CreateDbContextAsync();
         
-        // Fetch fresh, tracked entities that we will actually update and save
         var keysToUpdate = await context.Keys
             .Include(k => k.BunchAssignments)
             .Where(k => SelectedKeyIds.Contains(k.Id))
@@ -362,9 +376,10 @@
         foreach (var key in keysToUpdate)
         {
             bool isBunched = key.BunchAssignments!.Any(ba => ba.RemovedDate == null);
-            if (skipBunched && isBunched) continue;
+            if (skipBunched && isBunched && !keepOnBunch) continue;
             
-            if (isBunched && !string.IsNullOrEmpty(EditModel.Status) && EditModel.Status != "Lost")
+            // Only detach from bunch if they explicitely didn't choose "keepOnBunch"
+            if (isBunched && !keepOnBunch && !string.IsNullOrEmpty(EditModel.Status) && EditModel.Status != "Lost")
             {
                 var active = key.BunchAssignments!.FirstOrDefault(ba => ba.RemovedDate == null);
                 if (active != null) active.RemovedDate = DateTime.Now;

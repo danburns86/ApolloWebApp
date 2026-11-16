@@ -5,224 +5,277 @@
 @attribute [Microsoft.AspNetCore.Authorization.Authorize]
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject IJSRuntime JS
+@rendermode InteractiveServer
 
-<PageTitle>Seasonal Overview & Crewing</PageTitle>
+<PageTitle>Season Overview</PageTitle>
 
-<div class="container py-4 max-w-7xl no-print">
-    <div class="d-flex justify-content-between align-items-center mb-4">
+<div class="container py-4 max-w-7xl d-print-none">
+    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-3">
         <div>
-            <h2 class="fw-bold mb-0">Seasonal Overview</h2>
-            <p class="text-muted">Master schedule and crewing status report.</p>
+            <h2 class="fw-bold mb-0 text-primary"><i class="bi bi-calendar2-range me-2"></i>Season Overview</h2>
+            <p class="text-muted mb-0">High-level filtered view of all active productions and operational statuses.</p>
         </div>
-        <div class="d-flex gap-2">
-            <div class="btn-group me-2">
-                <button class="btn @(viewMode == "headline" ? "btn-dark" : "btn-outline-dark")" @onclick='() => viewMode = "headline"'>Headline View</button>
-                <button class="btn @(viewMode == "crewing" ? "btn-dark" : "btn-outline-dark")" @onclick='() => viewMode = "crewing"'>Crewing Detail</button>
-            </div>
-            <button class="btn btn-outline-dark" @onclick='() => JS.InvokeVoidAsync("window.print")'><i class="bi bi-printer me-2"></i>Print</button>
-            <button class="btn btn-outline-primary" @onclick="ExportToWord"><i class="bi bi-file-earmark-word me-2"></i>Word</button>
+        
+        <!-- EXPORT & PRINT BUTTONS -->
+        <div class="d-flex gap-2 flex-wrap">
+            <button class="btn btn-outline-success fw-bold" @onclick="ExportToExcel"><i class="bi bi-file-earmark-excel me-1"></i>Excel</button>
+            <button class="btn btn-outline-primary fw-bold" @onclick="ExportToWord"><i class="bi bi-file-earmark-word me-1"></i>Word</button>
+            <button class="btn btn-outline-danger fw-bold" @onclick="Print"><i class="bi bi-file-earmark-pdf me-1"></i>PDF</button>
+            <button class="btn btn-dark fw-bold" @onclick="Print"><i class="bi bi-printer me-1"></i>Print</button>
         </div>
     </div>
 
-    @* --- MASTER FILTERS --- *@
-    <div class="card border-0 shadow-sm bg-light mb-4">
-        <div class="card-body">
-            <div class="row g-3 align-items-end">
-                <div class="col-md-3">
-                    <label class="small fw-bold">Date From</label>
-                    <input type="date" class="form-control" @bind="dateFrom" />
+    <!-- CONTROLS CONTAINER (Hidden on Print) -->
+    <div class="card border-0 shadow-sm mb-4 bg-light p-3 d-print-none">
+        <div class="row g-3 align-items-center">
+            <!-- VIEW MODES -->
+            <div class="col-md-5">
+                <label class="small fw-bold text-muted text-uppercase d-block mb-1">Report View Mode</label>
+                <div class="btn-group shadow-sm w-100">
+                    <button class="btn @(currentView == "headlines" ? "btn-dark" : "btn-outline-dark") fw-bold" @onclick='() => currentView = "headlines"'>Headlines</button>
+                    <button class="btn @(currentView == "crewing" ? "btn-dark" : "btn-outline-dark") fw-bold" @onclick='() => currentView = "crewing"'>Crewing</button>
+                    <button class="btn @(currentView == "logistics" ? "btn-dark" : "btn-outline-dark") fw-bold" @onclick='() => currentView = "logistics"'>Logistics</button>
                 </div>
-                <div class="col-md-3">
-                    <label class="small fw-bold">Date To</label>
-                    <input type="date" class="form-control" @bind="dateTo" />
-                </div>
-                <div class="col-md-4">
-                    <label class="small fw-bold">Categories</label>
-                    <div class="dropdown">
-                        <button class="btn btn-white border w-100 text-start dropdown-toggle" type="button" data-bs-toggle="dropdown">
-                            @(selectedCategoryIds.Any() ? $"{selectedCategoryIds.Count} Selected" : "All Categories")
-                        </button>
-                        <div class="dropdown-menu p-3 w-100">
-                            @foreach (var cat in categories)
-                            {
-                                <div class="form-check">
-                                    <input class="form-check-input" type="checkbox" id="sv_@cat.Id" 
-                                           checked="@selectedCategoryIds.Contains(cat.Id)"
-                                           @onchange="(e) => ToggleCategory(cat.Id, e)" />
-                                    <label class="form-check-label" for="sv_@cat.Id">@cat.Name</label>
-                                </div>
-                            }
-                        </div>
+            </div>
+
+            <!-- CATEGORY FILTER CHECKBOXES -->
+            <div class="col-md-7">
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                    <label class="small fw-bold text-muted text-uppercase">Filter Categories</label>
+                    <div>
+                        <button class="btn btn-link btn-sm p-0 me-2 text-decoration-none fw-bold" @onclick="SelectAllCategories">Select All</button>
+                        <button class="btn btn-link btn-sm p-0 text-decoration-none text-muted fw-bold" @onclick="ClearAllCategories">Clear</button>
                     </div>
                 </div>
-                <div class="col-md-2">
-                    <button class="btn btn-primary w-100 fw-bold" @onclick="LoadReport">Filter View</button>
+                <div class="d-flex flex-wrap gap-3 bg-white p-2 rounded border">
+                    @foreach (var cat in allCategories)
+                    {
+                        var isChecked = selectedCategoryIds.Contains(cat.Id);
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" checked="@isChecked" @onchange="(e) => ToggleCategory(cat.Id, e.Value)" id="@($"cat_{cat.Id}")" />
+                            <label class="form-check-label small fw-bold" for="@($"cat_{cat.Id}")">@cat.Name</label>
+                        </div>
+                    }
                 </div>
             </div>
         </div>
     </div>
-</div>
 
-@* --- REPORT CONTENT --- *@
-<div id="reportContent" class="report-paper shadow-lg p-5 mx-auto bg-white mb-5">
-    <div class="text-center border-bottom pb-4 mb-4">
-        <h1 class="fw-bold text-uppercase">Season Production Report</h1>
-        <p class="mb-0 text-muted">@dateFrom.ToString("dd MMM yyyy") — @dateTo.ToString("dd MMM yyyy")</p>
-        <span class="badge bg-dark">View: @(viewMode == "headline" ? "Headline Overview" : "Detailed Crewing")</span>
-    </div>
-
-    @if (productions == null)
+    @if (isLoading)
     {
-        <div class="text-center py-5 no-print"><div class="spinner-border text-primary"></div></div>
-    }
-    else if (!productions.Any())
-    {
-        <div class="alert alert-info text-center py-5">No productions found for the selected filters.</div>
+        <div class="text-center py-5"><div class="spinner-border text-primary"></div></div>
     }
     else
     {
-        @if (viewMode == "headline")
-        {
-            <table class="table table-bordered align-middle">
-                <thead class="table-dark">
-                    <tr>
-                        <th>Dates</th>
-                        <th>Show Title</th>
-                        <th>Category</th>
-                        <th class="text-center">Crew Status</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach (var p in productions)
-                    {
-                        var gapCount = p.CrewAssignments.Count(c => c.IsRequired && c.MemberId == null && string.IsNullOrEmpty(c.ExternalName));
+        <div id="seasonReportContent" class="card border-0 shadow-sm print-area bg-white">
+            <div class="d-none d-print-block p-4 border-bottom mb-3">
+                <h2 class="fw-bold mb-0">Season Overview Report</h2>
+                <p class="text-muted small mb-0">Generated on @DateTime.Now.ToString("dd MMM yyyy")</p>
+            </div>
+            
+            <div class="card-body p-0">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="bg-light small text-uppercase">
                         <tr>
-                            <td class="small">@p.StartDate.ToString("dd MMM") - @p.EndDate.ToString("dd MMM")</td>
-                            <td>
-                                @* CLICKABLE TITLE *@
-                                <a href="/admin/production/hub/@p.Id" class="fw-bold text-decoration-none">
-                                    @p.Title <i class="bi bi-box-arrow-in-right small opacity-50 no-print"></i>
-                                </a>
-                            </td>
-                            <td>@p.Category?.Name</td>
-                            <td class="text-center">
-                                @if (gapCount > 0) { <span class="text-danger fw-bold">@gapCount Gaps</span> }
-                                else { <span class="text-success"><i class="bi bi-check-circle-fill me-1"></i>Full</span> }
-                            </td>
+                            <th class="ps-4" style="width: 25%;">Production</th>
+                            <th style="width: 20%;">Run Dates</th>
+                            
+                            @if (currentView == "headlines")
+                            {
+                                <th>Category</th>
+                                <th>Show Count</th>
+                                <th>Status</th>
+                            }
+                            else if (currentView == "crewing")
+                            {
+                                <th>Required Roles Filled</th>
+                                <th>Total Crew Assigned</th>
+                                <th class="text-center">Action Required?</th>
+                            }
+                            else if (currentView == "logistics")
+                            {
+                                <th>Hirer / Co.</th>
+                                <th>Running Time</th>
+                                <th>Locking Keyholder</th>
+                            }
                         </tr>
-                    }
-                </tbody>
-            </table>
-        }
-        else
-        {
-            @foreach (var p in productions)
-            {
-                <div class="mb-5 border rounded p-4 @(HasGaps(p) ? "border-danger bg-danger-subtle" : "border-success bg-success-subtle")" style="page-break-inside: avoid;">
-                    <div class="d-flex justify-content-between align-items-start mb-3 border-bottom border-dark pb-2">
-                        <div>
-                            @* CLICKABLE TITLE *@
-                            <h4 class="fw-bold mb-0">
-                                <a href="/admin/production/hub/@p.Id" class="text-dark text-decoration-none">@p.Title</a>
-                            </h4>
-                            <span class="text-muted small">@p.Category?.Name | @p.StartDate.ToShortDateString() - @p.EndDate.ToShortDateString()</span>
-                        </div>
-                        <div class="text-end">
-                            @if (HasGaps(p)) { <span class="badge bg-danger">CREW GAPS FOUND</span> }
-                            else { <span class="badge bg-success">CREW COMPLETE</span> }
-                        </div>
-                    </div>
-                    
-                    <div class="row row-cols-2 row-cols-md-3 g-2">
-                        @foreach (var crew in p.CrewAssignments.OrderBy(c => c.Role?.Name))
+                    </thead>
+                    <tbody>
+                        @foreach (var prod in GetFilteredProductions())
                         {
-                            <div class="col small">
-                                <div class="p-2 bg-white rounded border shadow-sm h-100">
-                                    <div class="fw-bold border-bottom mb-1">@(crew.Role?.Name ?? crew.CustomRoleName)</div>
-                                    @if (crew.MemberId != null)
-                                    {
-                                        <div class="text-success">@crew.Member?.FullName</div>
-                                    }
-                                    else if (!string.IsNullOrEmpty(crew.ExternalName))
-                                    {
-                                        <div class="text-primary">@crew.ExternalName</div>
-                                    }
-                                    else if (crew.IsRequired)
-                                    {
-                                        <div class="text-danger fw-bold italic"><i class="bi bi-exclamation-triangle me-1"></i>MISSING</div>
-                                    }
-                                    else
-                                    {
-                                        <div class="text-muted small">Optional</div>
-                                    }
-                                </div>
-                            </div>
+                            <tr>
+                                <td class="ps-4 fw-bold text-dark fs-6">@prod.Title</td>
+                                <td>@prod.StartDate.ToString("dd MMM yyyy") <i class="bi bi-arrow-right mx-1 text-muted"></i> @prod.EndDate.ToString("dd MMM")</td>
+                                
+                                @if (currentView == "headlines")
+                                {
+                                    <td><span class="badge bg-secondary">@prod.Category?.Name</span></td>
+                                    <td class="fw-bold">@prod.Performances.Count Shows</td>
+                                    <td>
+                                        @if (prod.EndDate < DateTime.Today)
+                                        {
+                                            <span class="badge bg-dark">Completed</span>
+                                        }
+                                        else if (prod.StartDate <= DateTime.Today && prod.EndDate >= DateTime.Today)
+                                        {
+
+                                            <span class="badge bg-success">Live Now</span>
+                                        }
+                                        else
+                                        {
+
+                                            <span class="badge bg-primary">Upcoming</span>
+                                        }
+                                    </td>
+                                }
+                                else if (currentView == "crewing")
+                                {
+                                    var requiredRoles = prod.CrewAssignments.Count(c => c.IsRequired);
+                                    var filledRequired = prod.CrewAssignments.Count(c => c.IsRequired && (c.MemberId != null || !string.IsNullOrEmpty(c.ExternalName)));
+                                    var isGaps = requiredRoles > filledRequired;
+
+                                    <td>
+                                        <div class="d-flex align-items-center gap-2">
+                                            <div class="progress flex-grow-1" style="height: 8px;">
+                                                <div class="progress-bar @(isGaps ? "bg-danger" : "bg-success")" role="progressbar" style="width: @(requiredRoles == 0 ? 100 : (filledRequired * 100 / requiredRoles))%"></div>
+                                            </div>
+                                            <span class="small fw-bold @(isGaps ? "text-danger" : "text-success")">@filledRequired / @requiredRoles</span>
+                                        </div>
+                                    </td>
+                                    <td class="fw-bold">@prod.CrewAssignments.Count(c => c.MemberId != null || !string.IsNullOrEmpty(c.ExternalName)) Crew</td>
+                                    <td class="text-center">
+                                        @if (isGaps)
+                                        {
+                                            <span class="badge bg-danger"><i class="bi bi-exclamation-circle-fill me-1"></i>Crew Needed</span>
+                                        }
+                                        else
+                                        {
+
+                                            <span class="badge bg-success"><i class="bi bi-check-circle-fill"></i> Fully Staffed</span>
+                                        }
+                                    </td>
+                                }
+                                else if (currentView == "logistics")
+                                {
+                                    <td>@(string.IsNullOrEmpty(prod.HirerName) ? "In-House" : prod.HirerName)</td>
+                                    <td class="fw-bold">@(prod.RunningTimeMinutes > 0 ? $"{prod.RunningTimeMinutes} mins" : "TBC")</td>
+                                    <td>
+                                        @if (prod.LockingMember != null)
+                                        {
+                                            <span class="badge bg-dark">@prod.LockingMember.FullName</span>
+                                        }
+                                        else
+                                        {
+
+                                            <span class="text-danger small fw-bold"><i class="bi bi-x-circle me-1"></i>Unassigned</span>
+                                        }
+                                    </td>
+                                }
+                            </tr>
                         }
-                    </div>
-                </div>
-            }
-        }
+                        @if (!GetFilteredProductions().Any())
+                        {
+                            <tr><td colspan="6" class="text-center py-4 text-muted fst-italic">No productions match the selected category filters.</td></tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
     }
 </div>
 
 <style>
-    .report-paper { max-width: 210mm; min-height: 297mm; font-size: 14px; }
-    .btn-white { background: white; border-color: #dee2e6; }
-    @@media print { .no-print { display: none !important; } .shadow-lg { box-shadow: none !important; } a { color: black !important; text-decoration: none !important; } }
+    @@media print {
+        /* Override Blazor/Bootstrap layout wrappers that clip absolute positioning */
+        html, body, main, .page, .content {
+            height: auto !important;
+            overflow: visible !important;
+            position: static !important;
+        }
+            /* Hide everything by default */
+            body * {
+                visibility: hidden;
+            }
+        /* Make only the print area and its contents visible */
+        .print-area, .print-area * {
+            visibility: visible;
+        }
+        /* Anchor the print area to the top-left of the page */
+        .print-area {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+            margin: 0 !important;
+            padding: 0 !important;
+            border: none !important;
+            box-shadow: none !important;
+        }
+        
+        .d-print-none {
+            display: none !important;
+        }
+    }
 </style>
 
 @code {
-    private DateTime dateFrom = DateTime.Today;
-    private DateTime dateTo = DateTime.Today.AddMonths(3);
-    private List<int> selectedCategoryIds = new();
-    private List<ProductionCategory> categories = new();
-    private List<Production>? productions;
-    private string viewMode = "headline";
+    private List<Production> activeProductions = new();
+    private List<ProductionCategory> allCategories = new();
+    private HashSet<int> selectedCategoryIds = new();
+    private bool isLoading = true;
+    private string currentView = "headlines";
 
     protected override async Task OnInitializedAsync()
     {
+        isLoading = true;
         using var context = await DbFactory.CreateDbContextAsync();
-        categories = await context.ProductionCategories.OrderBy(c => c.Name).ToListAsync();
-        await LoadReport();
-    }
+        
+        allCategories = await context.Set<ProductionCategory>().OrderBy(c => c.SortOrder).ToListAsync();
+        selectedCategoryIds = allCategories.Select(c => c.Id).ToHashSet();
 
-    private void ToggleCategory(int id, ChangeEventArgs e)
-    {
-        if ((bool)e.Value!) selectedCategoryIds.Add(id);
-        else selectedCategoryIds.Remove(id);
-    }
-
-    private async Task LoadReport()
-    {
-        productions = null;
-        using var context = await DbFactory.CreateDbContextAsync();
-
-        var query = context.Productions
+        activeProductions = await context.Productions
+            .AsNoTracking()
             .Include(p => p.Category)
-            .Include(p => p.CrewAssignments).ThenInclude(c => c.Role)
-            .Include(p => p.CrewAssignments).ThenInclude(c => c.Member)
-            .Where(p => p.StartDate >= dateFrom && p.StartDate <= dateTo);
+            .Include(p => p.Performances)
+            .Include(p => p.CrewAssignments)
+            .Include(p => p.LockingMember)
+            .Where(p => !p.IsArchived)
+            .OrderBy(p => p.StartDate)
+            .ToListAsync();
 
-        if (selectedCategoryIds.Any())
-            query = query.Where(p => selectedCategoryIds.Contains(p.CategoryId));
-
-        productions = await query.OrderBy(p => p.StartDate).ToListAsync();
+        isLoading = false;
     }
 
-    private bool HasGaps(Production p) => p.CrewAssignments.Any(c => c.IsRequired && c.MemberId == null && string.IsNullOrEmpty(c.ExternalName));
+    private IEnumerable<Production> GetFilteredProductions()
+    {
+        return activeProductions.Where(p => selectedCategoryIds.Contains(p.CategoryId));
+    }
+
+    private void ToggleCategory(int catId, object? val)
+    {
+        bool isChecked = (bool)(val ?? false);
+        if (isChecked) selectedCategoryIds.Add(catId);
+        else selectedCategoryIds.Remove(catId);
+    }
+
+    private void SelectAllCategories() => selectedCategoryIds = allCategories.Select(c => c.Id).ToHashSet();
+    private void ClearAllCategories() => selectedCategoryIds.Clear();
+
+    /* Both Print and PDF use the browser's native print engine for perfect rendering */
+    private async Task Print() => await JS.InvokeVoidAsync("window.print");
+
+    private async Task ExportToExcel()
+    {
+        var html = await JS.InvokeAsync<string>("eval", "document.getElementById('seasonReportContent').outerHTML");
+        var uri = "data:application/vnd.ms-excel;charset=utf-8," + Uri.EscapeDataString(html);
+        await JS.InvokeVoidAsync("eval", $"var l = document.createElement('a'); l.href = '{uri}'; l.download = 'Season_Overview.xls'; l.click();");
+    }
 
     private async Task ExportToWord()
     {
-        var filename = $"Season_Report_{DateTime.Now:yyyyMMdd}.doc";
-        await JS.InvokeVoidAsync("eval", $@"
-            var header = '<html xmlns:o=""urn:schemas-microsoft-com:office:office"" xmlns:w=""urn:schemas-microsoft-com:office:word"" xmlns=""http://www.w3.org/TR/REC-html40""><head><meta charset=""utf-8""></head><body>';
-            var footer = '</body></html>';
-            var sourceHTML = header + document.getElementById('reportContent').innerHTML + footer;
-            var source = 'data:application/vnd.ms-word;charset=utf-8,' + encodeURIComponent(sourceHTML);
-            var fileLink = document.createElement('a');
-            fileLink.href = source;
-            fileLink.download = '{filename}';
-            fileLink.click();
-        ");
+        var html = await JS.InvokeAsync<string>("eval", "document.getElementById('seasonReportContent').outerHTML");
+        var header = "<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'><head><meta charset='utf-8'></head><body>";
+        var source = "data:application/vnd.ms-word;charset=utf-8," + Uri.EscapeDataString(header + html + "</body></html>");
+        await JS.InvokeVoidAsync("eval", $"var l = document.createElement('a'); l.href = '{source}'; l.download = 'Season_Overview.doc'; l.click();");
     }
 }

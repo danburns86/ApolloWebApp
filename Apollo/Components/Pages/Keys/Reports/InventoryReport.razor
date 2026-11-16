@@ -81,9 +81,7 @@
                         <tr>
                             <td class="ps-3 fw-bold">@group.Key.LockCode @key.SequenceNumber</td>
                             <td>
-                                <span class="badge @(key.Status == "In Stock" ? "bg-success" : (key.Status == "Lost" ? "bg-danger" : "bg-primary"))">
-                                    @key.Status
-                                </span>
+                                <span class="badge @(key.Status == "In Stock" ? "bg-success" : (key.Status == "Lost" ? "bg-danger" : (key.Status == "Damaged" ? "bg-warning text-dark" : "bg-primary")))">@key.Status</span>
                             </td>
                             <td>
                                 @if (!string.IsNullOrEmpty(key.IssuedToName))

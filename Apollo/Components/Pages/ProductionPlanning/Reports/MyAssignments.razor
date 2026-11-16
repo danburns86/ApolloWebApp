@@ -1,0 +1,273 @@
+﻿@page "/reports/Production/MyAssignments"
+@using Apollo.Models
+@using Apollo.Data
+@using Microsoft.EntityFrameworkCore
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject IJSRuntime JS
+@rendermode InteractiveServer
+
+<PageTitle>My Personal Assignments</PageTitle>
+
+<div class="container py-4 max-w-5xl d-print-none">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="fw-bold mb-0 text-primary"><i class="bi bi-person-badge me-2"></i>Personal Assignment & Schedule Sheet</h2>
+            <p class="text-muted mb-0">Select a team member to view their production roles, unlocking duties, and schedules.</p>
+        </div>
+        <button class="btn btn-outline-dark fw-bold" @onclick="Print" disabled="@(selectedMemberId == 0)"><i class="bi bi-printer me-2"></i>Print Schedule</button>
+    </div>
+
+    <div class="card border-0 shadow-sm mb-4 bg-light">
+        <div class="card-body row g-3 align-items-center">
+            <div class="col-md-7">
+                <label class="small fw-bold">Select Cast / Crew Member</label>
+                <select class="form-select form-select-lg" @onchange="OnMemberSelected">
+                    <option value="0">-- Select Person --</option>
+                    @foreach (var m in members)
+                    {
+                        <option value="@m.Id">@m.FullName (@m.Email)</option>
+                    }
+                </select>
+            </div>
+            <div class="col-md-5 text-md-end pt-3">
+                <label class="small fw-bold d-block mb-1">Report View Mode</label>
+                <div class="btn-group">
+                    <button class="btn btn-sm @(!isHeadlineOnly ? "btn-primary" : "btn-outline-primary") fw-bold" @onclick="() => isHeadlineOnly = false">Full Schedule</button>
+                    <button class="btn btn-sm @(isHeadlineOnly ? "btn-primary" : "btn-outline-primary") fw-bold" @onclick="() => isHeadlineOnly = true">Headlines Only</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@if (selectedMember != null)
+{
+    <div id="personalReportContent" class="report-paper shadow-lg p-5 mx-auto bg-white mb-5 print-area">
+        <div class="border-bottom pb-3 mb-4 d-flex justify-content-between align-items-center">
+            <div>
+                <h1 class="fw-bold mb-0">@selectedMember.FullName</h1>
+                <p class="text-primary fs-5 mb-0">Personal Production & Show Summary</p>
+            </div>
+            <div class="text-end">
+                <div class="small text-muted">Generated: @DateTime.Now.ToString("dd MMM yyyy HH:mm")</div>
+                <div class="small text-muted">Contact: @(selectedMember.MobileNumber ?? selectedMember.Email ?? "—")</div>
+            </div>
+        </div>
+
+        @if (!assignments.Any())
+        {
+            <div class="alert alert-info py-4 text-center">No active production assignments or unlocking duties found for @selectedMember.FullName.</div>
+        }
+        else
+        {
+            @foreach (var ass in assignments)
+            {
+                <div class="card border-0 shadow-sm mb-4 border-start border-4 border-primary bg-light print-card">
+                    <div class="card-body">
+                        <!-- UNLOCKING KEYHOLDER BANNER -->
+                        @if (ass.IsUnlockingKeyholder)
+                        {
+                            <div class="alert alert-warning border-warning d-flex align-items-center p-2 mb-3">
+                                <i class="bi bi-key-fill fs-3 me-3 text-dark"></i>
+                                <div>
+                                    <strong class="d-block text-dark text-uppercase">Unlocking Keyholder Duty</strong>
+                                    <span class="small text-dark">You are responsible for unlocking the venue on <strong>@(ass.AccessTime?.ToString("dddd, dd MMMM yyyy 'at' HH:mm") ?? "TBC")</strong></span>
+                                </div>
+                            </div>
+                        }
+
+                        <div class="d-flex justify-content-between align-items-start mb-2 border-bottom pb-2">
+                            <div>
+                                <h4 class="fw-bold mb-0">@ass.ProductionTitle</h4>
+                                <span class="badge bg-dark">@ass.CategoryName</span>
+                            </div>
+                            <div class="text-end">
+                                <!-- MULTIPLE ROLES COMMA SEPARATED -->
+                                <div class="fw-bold text-primary">Roles: @string.Join(", ", ass.Roles)</div>
+                                @if (ass.Scripts.Any())
+                                {
+                                    <span class="badge bg-warning text-dark fs-6 mt-1">Scripts: #@string.Join(", #", ass.Scripts)</span>
+                                }
+                            </div>
+                        </div>
+
+                        <!-- SHOW DATES -->
+                        <div class="mb-3">
+                            <h6 class="fw-bold text-uppercase small text-muted mb-2"><i class="bi bi-ticket-perforated me-1"></i>Performance Dates</h6>
+                            <div class="row g-2">
+                                @foreach (var perf in ass.Performances)
+                                {
+                                    <div class="col-md-6">
+                                        <div class="p-2 bg-white rounded border small d-flex justify-content-between">
+                                            <span><strong class="text-dark">@perf.CurtainUp.ToString("ddd dd MMM yyyy")</strong></span>
+                                            <span class="badge bg-danger">Curtain Up: @perf.CurtainUp.ToString("HH:mm")</span>
+                                        </div>
+                                    </div>
+                                }
+                                @if (!ass.Performances.Any())
+                                {
+                                    <div class="small text-muted fst-italic ms-2">Performance dates to be confirmed.</div>
+                                }
+                            </div>
+                        </div>
+
+                        @if (!isHeadlineOnly)
+                        {
+                            <!-- FULL DETAILED REHEARSALS TABLE -->
+                            <div>
+                                <h6 class="fw-bold text-uppercase small text-muted mb-2"><i class="bi bi-calendar-event me-1"></i>Key Dates & Rehearsal Schedule</h6>
+                                <table class="table table-sm small align-middle mb-0 bg-white border rounded">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>Date & Time</th>
+                                            <th>Event Type</th>
+                                            <th>Location</th>
+                                            <th>Notes</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var ev in ass.Events)
+                                        {
+                                            <tr>
+                                                <td class="fw-bold">@ev.StartTime.ToString("ddd dd MMM HH:mm") - @ev.EndTime.ToString("HH:mm")</td>
+                                                <td><span class="badge @(ev.IsTechnicalDate ? "bg-info text-dark" : "bg-dark")">@(ev.EventType?.Name ?? "Event")</span></td>
+                                                <td>@ev.Location</td>
+                                                <td class="text-muted">@ev.Notes @(string.IsNullOrEmpty(ev.SectionCovered) ? "" : $"({ev.SectionCovered})")</td>
+                                            </tr>
+                                        }
+                                        @if (!ass.Events.Any())
+                                        {
+                                            <tr><td colspan="4" class="text-center text-muted fst-italic py-2">No key dates logged.</td></tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+        }
+    </div>
+}
+
+<style>
+    .report-paper { max-width: 210mm; min-height: 297mm; }
+    @@media print { 
+        body * { visibility: hidden; }
+        .print-area, .print-area * { visibility: visible; }
+        .print-area { position: absolute; left: 0; top: 0; width: 100%; border: none !important; box-shadow: none !important; }
+        .d-print-none { display: none !important; } 
+        .print-card { border: 1px solid #ddd !important; box-shadow: none !important; page-break-inside: avoid; }
+        .bg-warning { background-color: #ffc107 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    }
+</style>
+
+@code {
+    private List<Member> members = new();
+    private int selectedMemberId = 0;
+    private Member? selectedMember;
+    private bool isHeadlineOnly = false;
+    private List<PersonalAssignmentRecord> assignments = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        using var context = await DbFactory.CreateDbContextAsync();
+        members = await context.Members.AsNoTracking().Where(m => !m.IsTemporaryPlaceholder).OrderBy(m => m.LastName).ToListAsync();
+    }
+
+    private async Task OnMemberSelected(ChangeEventArgs e)
+    {
+        selectedMemberId = int.Parse(e.Value?.ToString() ?? "0");
+        if (selectedMemberId == 0) { selectedMember = null; assignments.Clear(); return; }
+
+        using var context = await DbFactory.CreateDbContextAsync();
+        selectedMember = await context.Members.FindAsync(selectedMemberId);
+        assignments.Clear();
+
+        if (selectedMember != null)
+        {
+            var groupedAssignments = new Dictionary<int, PersonalAssignmentRecord>();
+
+            // 1. Get Crew Assignments
+            var crewAssigns = await context.ProductionCrews
+                .Include(c => c.Role)
+                .Include(c => c.Production).ThenInclude(p => p!.Category)
+                .Include(c => c.Production).ThenInclude(p => p!.Performances)
+                .Include(c => c.Production).ThenInclude(p => p!.Events).ThenInclude(ev => ev.EventType)
+                .Where(c => c.MemberId == selectedMemberId && c.Production != null && !c.Production.IsArchived)
+                .ToListAsync();
+
+            foreach (var c in crewAssigns)
+            {
+                if (!groupedAssignments.ContainsKey(c.ProductionId))
+                    groupedAssignments[c.ProductionId] = InitializeRecordFromProd(c.Production!);
+                
+                groupedAssignments[c.ProductionId].Roles.Add(c.Role?.Name ?? c.CustomRoleName ?? "Crew");
+                if (!string.IsNullOrEmpty(c.ScriptNumber)) groupedAssignments[c.ProductionId].Scripts.Add(c.ScriptNumber);
+            }
+
+            // 2. Get Cast Assignments
+            var castAssigns = await context.ProductionCasts
+                .Include(c => c.Production).ThenInclude(p => p!.Category)
+                .Include(c => c.Production).ThenInclude(p => p!.Performances)
+                .Include(c => c.Production).ThenInclude(p => p!.Events).ThenInclude(ev => ev.EventType)
+                .Where(c => c.MemberId == selectedMemberId && c.Production != null && !c.Production.IsArchived)
+                .ToListAsync();
+
+            foreach (var c in castAssigns)
+            {
+                if (!groupedAssignments.ContainsKey(c.ProductionId))
+                    groupedAssignments[c.ProductionId] = InitializeRecordFromProd(c.Production!);
+                
+                groupedAssignments[c.ProductionId].Roles.Add($"Cast: {c.CharacterName}");
+                if (!string.IsNullOrEmpty(c.ScriptNumber)) groupedAssignments[c.ProductionId].Scripts.Add(c.ScriptNumber);
+            }
+
+            // 3. Get Unlocking Duties (Even if not cast/crew)
+            var unlockingProds = await context.Productions
+                .Include(p => p.Category).Include(p => p.Performances).Include(p => p.Events).ThenInclude(e => e.EventType)
+                .Where(p => p.UnlockingMemberId == selectedMemberId && !p.IsArchived)
+                .ToListAsync();
+
+            foreach (var p in unlockingProds)
+            {
+                if (!groupedAssignments.ContainsKey(p.Id))
+                {
+                    groupedAssignments[p.Id] = InitializeRecordFromProd(p);
+                    groupedAssignments[p.Id].Roles.Add("Unlocking Keyholder (Duty Only)");
+                }
+                groupedAssignments[p.Id].IsUnlockingKeyholder = true;
+                groupedAssignments[p.Id].AccessTime = p.AccessTime;
+            }
+
+            // Sort by earliest show date
+            assignments = groupedAssignments.Values.OrderBy(a => a.Performances.FirstOrDefault()?.CurtainUp ?? DateTime.MaxValue).ToList();
+        }
+    }
+
+    private PersonalAssignmentRecord InitializeRecordFromProd(Production p)
+    {
+        return new PersonalAssignmentRecord
+        {
+            ProductionTitle = p.Title,
+            CategoryName = p.Category?.Name ?? "",
+            Performances = p.Performances.OrderBy(perf => perf.CurtainUp).ToList(),
+            Events = p.Events.OrderBy(e => e.StartTime).ToList()
+        };
+    }
+
+    private async Task Print() => await JS.InvokeVoidAsync("window.print");
+
+    public class PersonalAssignmentRecord
+    {
+        public string ProductionTitle { get; set; } = string.Empty;
+        public string CategoryName { get; set; } = string.Empty;
+        public List<string> Roles { get; set; } = new();
+        public List<string> Scripts { get; set; } = new();
+        public bool IsUnlockingKeyholder { get; set; }
+        public DateTime? AccessTime { get; set; }
+        public List<Performance> Performances { get; set; } = new();
+        public List<ProductionEvent> Events { get; set; } = new();
+    }
+}

@@ -35,7 +35,6 @@
                 <div class="card shadow-sm border-0 border-start border-4 border-danger h-100">
                     <div class="card-body py-3">
                         <div class="text-uppercase small fw-bold text-muted mb-1">New / Triage</div>
-                        @* Pending is the starting status in your service *@
                         <div class="h2 fw-bold mb-0">@issues.Count(i => i.Status == SnagStatus.Pending)</div>
                     </div>
                 </div>
@@ -233,8 +232,8 @@
     }
 
     private MaintenanceIssue? selectedIssue;
+    private int selectedIssueId = 0;
     private SnagStatus newStatus;
-    // Initialized to string.Empty to prevent Null Reference warnings
     private string adminNotes = string.Empty;
     private string assignedTo = string.Empty;
     private string contractorName = string.Empty;
@@ -245,7 +244,6 @@
     private async Task LoadSnags()
     {
         isLoading = true;
-        // MaintenanceService.GetPendingSnags() filters for Pending, PartsRequired, InProgress [cite: 13]
         issues = await MaintenanceService.GetPendingSnags();
         isLoading = false;
     }
@@ -253,6 +251,7 @@
     private void OpenTriageModal(MaintenanceIssue issue)
     {
         selectedIssue = issue;
+        selectedIssueId = issue.Id;
         newStatus = issue.Status;
         adminNotes = issue.AdminNotes ?? string.Empty;
         assignedTo = issue.AssignedTo ?? string.Empty;
@@ -260,14 +259,18 @@
         quoteRef = issue.QuoteReference ?? string.Empty;
     }
 
-    private void CloseModal() => selectedIssue = null;
+    private void CloseModal()
+    {
+        selectedIssue = null;
+        selectedIssueId = 0;
+    }
 
     private async Task SaveTriage()
     {
-        if (selectedIssue != null)
+        if (selectedIssueId > 0)
         {
-            // Passes exact variables required by your IMaintenanceService
-            await MaintenanceService.UpdateSnagStatus(selectedIssue.Id, newStatus, adminNotes, assignedTo, contractorName, quoteRef);
+            // Pass the primitive ID to MaintenanceService to ensure atomic, safe updates
+            await MaintenanceService.UpdateSnagStatus(selectedIssueId, newStatus, adminNotes, assignedTo, contractorName, quoteRef);
             await LoadSnags();
             CloseModal();
         }

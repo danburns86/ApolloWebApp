@@ -7,13 +7,21 @@
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject AuthenticationStateProvider AuthStateProvider
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Administrator")]
+@rendermode InteractiveServer
 
 <PageTitle>Issue & Return Keys</PageTitle>
+
+<datalist id="allMembersList">
+    @foreach (var m in AllMembers)
+    {
+        <option value="@m.FullName">@(m.IsTemporaryPlaceholder ? "Non-Member / Temp" : m.Email)</option>
+    }
+</datalist>
 
 <div class="d-flex justify-content-between align-items-center mb-3">
     <div>
         <h2>Key Desk: Issue & Return</h2>
-        <p class="text-muted mb-0">Manage check-outs, returns, and track authorized personnel.</p>
+        <p class="text-muted mb-0">Manage check-outs, returns, and track authorized personnel handovers.</p>
     </div>
 </div>
 <hr />
@@ -27,10 +35,10 @@
             <div class="card-body">
                 <div class="mb-3 btn-group w-100" role="group">
                     <input type="radio" class="btn-check" name="issueType" id="typeBunch" checked="@(IssueType == "Bunch")" @onchange="@(() => { IssueType = "Bunch"; IssueModel.SelectedId = 0; })">
-                        <label class="btn btn-outline-primary" for="typeBunch">Issue a Bunch</label>
+                        <label class="btn btn-outline-primary fw-bold" for="typeBunch">Issue a Bunch</label>
 
                         <input type="radio" class="btn-check" name="issueType" id="typeKey" checked="@(IssueType == "Key")" @onchange="@(() => { IssueType = "Key"; IssueModel.SelectedId = 0; })">
-                            <label class="btn btn-outline-primary" for="typeKey">Issue Single Key</label>
+                            <label class="btn btn-outline-primary fw-bold" for="typeKey">Issue Single Key</label>
                         </div>
 
                         <EditForm Model="IssueModel" OnValidSubmit="IssueItem">
@@ -40,7 +48,7 @@
                             {
                                 <div class="mb-3">
                                     <label class="form-label fw-bold small">Available Bunches</label>
-                                    <InputSelect @bind-Value="IssueModel.SelectedId" class="form-select">
+                                    <InputSelect @bind-Value="IssueModel.SelectedId" class="form-select shadow-sm">
                                         <option value="0">-- Select Bunch --</option>
                                         @foreach (var b in AvailableBunches)
                                         {
@@ -54,7 +62,7 @@
                                 <div class="row">
                                     <div class="col-md-7 mb-3">
                                         <label class="form-label fw-bold small">1. Select Door / Lock</label>
-                                        <select class="form-select" @onchange="OnLockSelected">
+                                        <select class="form-select shadow-sm" value="@SelectedLockId" @onchange="OnLockSelected">
                                             <option value="0">-- Choose Lock --</option>
                                             @foreach (var l in LocksWithAvailableKeys)
                                             {
@@ -64,7 +72,7 @@
                                     </div>
                                     <div class="col-md-5 mb-3">
                                         <label class="form-label fw-bold small">2. Key Seq #</label>
-                                        <InputSelect @bind-Value="IssueModel.SelectedId" class="form-select" disabled="@(SelectedLockId == 0)">
+                                        <InputSelect @bind-Value="IssueModel.SelectedId" class="form-select shadow-sm" disabled="@(SelectedLockId == 0)">
                                             <option value="0">-- # --</option>
                                             @foreach (var k in FilteredAvailableKeys)
                                             {
@@ -77,11 +85,24 @@
 
                             <div class="mb-3">
                                 <label class="form-label fw-bold small">Issued To (Recipient Name)</label>
-                                <InputText @bind-Value="IssueModel.IssuedTo" class="form-control" placeholder="Enter name..." />
+                                <InputText @bind-Value="IssueModel.IssuedTo" class="form-control shadow-sm" list="allMembersList" placeholder="Search member..." @bind-Value:after="CheckExistingKeys" />
                                 <ValidationMessage For="() => IssueModel.IssuedTo" class="text-danger" />
+                        
+                                @if (recipientHasKeys)
+                                {
+                                    <div class="alert alert-warning py-2 small mt-2 mb-0 border-warning">
+                                        <i class="bi bi-exclamation-triangle-fill me-1"></i> <strong>Heads up:</strong> This person already has keys checked out to them.
+                                    </div>
+                                }
                             </div>
 
-                            <button type="submit" class="btn btn-primary w-100 fw-bold" disabled="@(IssueModel.SelectedId == 0)">
+                            <div class="mb-3">
+                                <label class="form-label fw-bold small text-primary">Issued By (Dept Head / Handed over by)</label>
+                                <InputText @bind-Value="IssueModel.AuthorizedBy" class="form-control shadow-sm" list="allMembersList" placeholder="Search issuer..." />
+                                <ValidationMessage For="() => IssueModel.AuthorizedBy" class="text-danger" />
+                            </div>
+
+                            <button type="submit" class="btn btn-primary w-100 fw-bold shadow-sm" disabled="@(IssueModel.SelectedId == 0 || string.IsNullOrWhiteSpace(IssueModel.IssuedTo))">
                                 Confirm Checkout
                             </button>
                         </EditForm>
@@ -102,8 +123,11 @@
                                             <td class="ps-3 fw-bold">@(k.Lock?.LockCode ?? "??") @k.SequenceNumber</td>
                                             <td class="small text-muted">@k.Lock?.Name</td>
                                             <td class="text-end pe-3">
+                                                <button class="btn btn-sm btn-link text-decoration-none text-success fw-bold" @onclick="() => SetIssueFormToKey(k.Id)">
+                                                    <i class="bi bi-box-arrow-right"></i> Issue
+                                                </button>
                                                 <button class="btn btn-sm btn-link text-decoration-none" @onclick="() => OpenBunchingModal(k)">
-                                                    <i class="bi bi-paperclip"></i> Add to Bunch
+                                                    <i class="bi bi-paperclip"></i> To Bunch
                                                 </button>
                                             </td>
                                         </tr>
@@ -115,6 +139,7 @@
                 </div>
             </div>
 
+            <!-- CURRENTLY ISSUED COLUMN CODE IDENTICAL TO YOURS (Hidden for brevity, but leave it intact) -->
             <div class="col-xl-7">
                 <div class="card shadow-sm border-success">
                     <div class="card-header bg-success text-white fw-bold">
@@ -132,9 +157,7 @@
                             <tbody>
                                 @if (!IssuedItems.Any())
                                 {
-                                    <tr>
-                                        <td colspan="3" class="text-center py-5 text-muted fst-italic">No items are currently issued.</td>
-                                    </tr>
+                                    <tr><td colspan="3" class="text-center py-5 text-muted fst-italic">No items are currently issued.</td></tr>
                                 }
                                 @foreach (var item in IssuedItems)
                                 {
@@ -145,13 +168,13 @@
                                         </td>
                                         <td>
                                             <div class="fw-bold text-primary">@item.IssuedToName</div>
-                                            <small class="text-muted">Since: @item.IssueDate.ToString("dd/MM HH:mm")</small>
+                                            <small class="text-muted">Issued By: @(item.AuthorizedByName ?? "Unknown") | @item.IssueDate.ToString("dd/MM HH:mm")</small>
                                         </td>
                                         <td class="text-end pe-3">
                                             @if (TransferItemId == item.Id && TransferIsBunch == item.IsBunch)
                                             {
                                                 <div class="input-group input-group-sm">
-                                                    <input type="text" class="form-control" placeholder="New holder..." @bind="TransferToName" />
+                                                    <input type="text" class="form-control" list="allMembersList" placeholder="New holder..." @bind="TransferToName" />
                                                     <button class="btn btn-success" @onclick="() => ConfirmTransfer(item)">Save</button>
                                                     <button class="btn btn-secondary" @onclick="CancelTransfer"><i class="bi bi-x"></i></button>
                                                 </div>
@@ -175,6 +198,7 @@
             </div>
         </div>
 
+        <!-- RETURN MODAL -->
         @if (ShowReturnModal && ItemToReturn != null)
         {
             <div class="modal fade show d-block" style="background-color: rgba(0,0,0,0.6); z-index: 1050;" tabindex="-1">
@@ -217,6 +241,7 @@
             </div>
         }
 
+        <!-- ADD TO BUNCH MODAL -->
         @if (ShowBunchingModal && KeyToBunch != null)
         {
             <div class="modal fade show d-block" style="background-color: rgba(0,0,0,0.5); z-index: 1050;" tabindex="-1">
@@ -248,11 +273,13 @@
 @code {
     private string IssueType = "Bunch";
     private int SelectedLockId = 0;
+    private bool recipientHasKeys = false;
 
     public class IssueForm
     {
         [Range(1, int.MaxValue)] public int SelectedId { get; set; }
         [Required] public string IssuedTo { get; set; } = string.Empty;
+        [Required] public string AuthorizedBy { get; set; } = string.Empty;
     }
 
     public class IssuedItemDto
@@ -261,6 +288,7 @@
         public int Id { get; set; }
         public string ItemName { get; set; } = "";
         public string IssuedToName { get; set; } = "";
+        public string AuthorizedByName { get; set; } = "";
         public DateTime IssueDate { get; set; }
     }
 
@@ -273,6 +301,7 @@
     }
 
     private IssueForm IssueModel = new();
+    private List<Member> AllMembers = new();
     private List<Bunch> AvailableBunches = new();
     private List<Bunch> AllActiveBunches = new();
     private List<KeyRecord> AvailableKeys = new();
@@ -292,11 +321,16 @@
     private IssuedItemDto? ItemToReturn;
     private List<KeyVerifyItem> VerificationList = new();
 
-    protected override async Task OnInitializedAsync() => await LoadData();
+    protected override async Task OnInitializedAsync()
+    {
+        IssueModel.AuthorizedBy = await GetStaffDisplayName();
+        await LoadData();
+    }
 
     private async Task LoadData()
     {
         using var context = await DbFactory.CreateDbContextAsync();
+        AllMembers = await context.Members.AsNoTracking().OrderBy(m => m.LastName).ToListAsync();
 
         AvailableBunches = await context.Bunches.AsNoTracking().Include(b => b.Department).Where(b => b.IsActive && !b.IsLost && string.IsNullOrEmpty(b.IssuedToName)).OrderBy(b => b.Name).ToListAsync();
         AllActiveBunches = await context.Bunches.AsNoTracking().Where(b => b.IsActive && !b.IsLost).OrderBy(b => b.Name).ToListAsync();
@@ -306,14 +340,55 @@
         LocksWithAvailableKeys = AvailableKeys.Where(k => k.Lock != null).Select(k => k.Lock!).DistinctBy(l => l.Id).OrderBy(l => l.LockCode).ToList();
 
         IssuedItems.Clear();
-        var outBunches = await context.Bunches.AsNoTracking().Where(b => b.IsActive && !string.IsNullOrEmpty(b.IssuedToName)).ToListAsync();
-        foreach (var b in outBunches) IssuedItems.Add(new IssuedItemDto { IsBunch = true, Id = b.Id, ItemName = b.Name, IssuedToName = b.IssuedToName ?? "Unknown", IssueDate = b.IssueDate ?? DateTime.Now });
+        var outBunches = await context.Bunches.AsNoTracking().Include(b => b.IssuedToMember).Where(b => b.IsActive && !string.IsNullOrEmpty(b.IssuedToName)).ToListAsync();
+        foreach (var b in outBunches)
+        {
+            var tx = await context.CheckoutTransactions.Include(t => t.AuthorizedByMember).OrderByDescending(t => t.IssueDate).FirstOrDefaultAsync(t => t.BunchId == b.Id && t.ReturnDate == null);
+            IssuedItems.Add(new IssuedItemDto
+            {
+                IsBunch = true,
+                Id = b.Id,
+                ItemName = b.Name,
+                IssuedToName = b.IssuedToMember?.FullName ?? b.IssuedToName ?? "Unknown",
+                IssueDate = b.IssueDate ?? DateTime.Now,
+                AuthorizedByName = tx?.AuthorizedByMember?.FullName ?? tx?.AuthorizedByUserName ?? "Unknown"
+            });
+        }
         
-        var outKeys = await context.Keys.AsNoTracking().Include(k => k.Lock).Where(k => !string.IsNullOrEmpty(k.IssuedToName)).ToListAsync();
-        foreach (var k in outKeys) IssuedItems.Add(new IssuedItemDto { IsBunch = false, Id = k.Id, ItemName = $"{(k.Lock?.LockCode ?? "??")} {k.SequenceNumber}", IssuedToName = k.IssuedToName ?? "Unknown", IssueDate = DateTime.Now });
+        var outKeys = await context.Keys.AsNoTracking().Include(k => k.Lock).Include(k => k.IssuedToMember).Where(k => !string.IsNullOrEmpty(k.IssuedToName)).ToListAsync();
+        foreach (var k in outKeys)
+        {
+            var tx = await context.CheckoutTransactions.Include(t => t.AuthorizedByMember).OrderByDescending(t => t.IssueDate).FirstOrDefaultAsync(t => t.KeyRecordId == k.Id && t.ReturnDate == null);
+            IssuedItems.Add(new IssuedItemDto
+            {
+                IsBunch = false,
+                Id = k.Id,
+                ItemName = $"{(k.Lock?.LockCode ?? "??")} {k.SequenceNumber}",
+                IssuedToName = k.IssuedToMember?.FullName ?? k.IssuedToName ?? "Unknown",
+                IssueDate = tx?.IssueDate ?? DateTime.Now,
+                AuthorizedByName = tx?.AuthorizedByMember?.FullName ?? tx?.AuthorizedByUserName ?? "Unknown"
+            });
+        }
 
         IssuedItems = IssuedItems.OrderByDescending(i => i.IssueDate).ToList();
         if (SelectedLockId != 0) FilterKeys();
+        CheckExistingKeys();
+    }
+
+    private void SetIssueFormToKey(int keyId)
+    {
+        IssueType = "Key";
+        var key = AvailableKeys.First(k => k.Id == keyId);
+        SelectedLockId = key.LockId;
+        FilterKeys();
+        IssueModel.SelectedId = keyId;
+        StateHasChanged();
+    }
+
+    private void CheckExistingKeys()
+    {
+        if (string.IsNullOrWhiteSpace(IssueModel.IssuedTo)) recipientHasKeys = false;
+        else recipientHasKeys = IssuedItems.Any(i => i.IssuedToName.Equals(IssueModel.IssuedTo.Trim(), StringComparison.OrdinalIgnoreCase));
     }
 
     private void OnLockSelected(ChangeEventArgs e) { if (int.TryParse(e.Value?.ToString(), out int id)) { SelectedLockId = id; FilterKeys(); } }
@@ -332,19 +407,44 @@
         return user.Identity?.Name ?? "System";
     }
 
+    private (int? memberId, bool isReal) GetOrCreateMember(string input, ApplicationDbContext ctx)
+    {
+        if (string.IsNullOrWhiteSpace(input)) return (null, false);
+        var val = input.Trim();
+        var match = AllMembers.FirstOrDefault(m => m.FullName.Equals(val, StringComparison.OrdinalIgnoreCase));
+        if (match != null) return (match.Id, true);
+
+        var name = val.StartsWith("*") ? val.Substring(1).Trim() : val;
+        var parts = name.Split(' ', 2);
+        var m = new Member { FirstName = "*" + (parts.Length > 0 ? parts[0] : "Temp"), LastName = parts.Length > 1 ? parts[1] : "Member", IsTemporaryPlaceholder = true };
+        ctx.Members.Add(m); ctx.SaveChanges(); AllMembers.Add(m);
+        return (m.Id, true);
+    }
+
     private async Task IssueItem()
     {
         using var context = await DbFactory.CreateDbContextAsync();
-        string staffName = await GetStaffDisplayName();
+        var recipient = GetOrCreateMember(IssueModel.IssuedTo, context);
+        var authorizer = GetOrCreateMember(IssueModel.AuthorizedBy, context);
+
         if (IssueType == "Bunch")
         {
             var bunch = await context.Bunches.Include(b => b.KeyAssignments!).ThenInclude(ka => ka.KeyRecord).FirstOrDefaultAsync(b => b.Id == IssueModel.SelectedId);
             if (bunch != null)
             {
-                bunch.IssuedToName = IssueModel.IssuedTo; bunch.IssueDate = DateTime.Now; bunch.ReturnDate = null;
-                // Add new transaction strictly by IDs, avoiding navigation property insertion issues
-                context.CheckoutTransactions.Add(new CheckoutTransaction { BunchId = bunch.Id, IssuedToName = IssueModel.IssuedTo, IssueDate = DateTime.Now, AuthorizedByUserName = staffName });
-                foreach (var ka in bunch.KeyAssignments!.Where(a => a.RemovedDate == null)) { if (ka.KeyRecord != null) ka.KeyRecord.Status = "Issued"; }
+                bunch.IssuedToName = IssueModel.IssuedTo; bunch.IssuedToMemberId = recipient.memberId;
+                bunch.IssueDate = DateTime.Now; bunch.ReturnDate = null;
+
+                context.CheckoutTransactions.Add(new CheckoutTransaction
+                {
+                    BunchId = bunch.Id,
+                    IssuedToName = IssueModel.IssuedTo,
+                    IssuedToMemberId = recipient.memberId,
+                    AuthorizedByUserName = IssueModel.AuthorizedBy,
+                    AuthorizedByMemberId = authorizer.memberId,
+                    IssueDate = DateTime.Now
+                });
+                foreach (var ka in bunch.KeyAssignments!.Where(a => a.RemovedDate == null)) { if (ka.KeyRecord != null) { ka.KeyRecord.Status = "Issued"; ka.KeyRecord.IssuedToName = IssueModel.IssuedTo; ka.KeyRecord.IssuedToMemberId = recipient.memberId; } }
             }
         }
         else
@@ -352,35 +452,32 @@
             var key = await context.Keys.FirstOrDefaultAsync(k => k.Id == IssueModel.SelectedId);
             if (key != null)
             {
-                key.IssuedToName = IssueModel.IssuedTo; key.Status = "Issued";
-                // Add new transaction strictly by IDs
-                context.CheckoutTransactions.Add(new CheckoutTransaction { KeyRecordId = key.Id, IssuedToName = IssueModel.IssuedTo, IssueDate = DateTime.Now, AuthorizedByUserName = staffName });
+                key.IssuedToName = IssueModel.IssuedTo; key.IssuedToMemberId = recipient.memberId; key.Status = "Issued";
+                context.CheckoutTransactions.Add(new CheckoutTransaction
+                {
+                    KeyRecordId = key.Id,
+                    IssuedToName = IssueModel.IssuedTo,
+                    IssuedToMemberId = recipient.memberId,
+                    AuthorizedByUserName = IssueModel.AuthorizedBy,
+                    AuthorizedByMemberId = authorizer.memberId,
+                    IssueDate = DateTime.Now
+                });
             }
         }
         await context.SaveChangesAsync();
-        IssueModel = new(); SelectedLockId = 0; await LoadData();
+        IssueModel = new IssueForm { AuthorizedBy = await GetStaffDisplayName() }; SelectedLockId = 0; recipientHasKeys = false; await LoadData();
     }
 
     private async Task StartReturnVerification(IssuedItemDto item)
     {
         using var context = await DbFactory.CreateDbContextAsync();
-        ItemToReturn = item;
-        VerificationList.Clear();
+        ItemToReturn = item; VerificationList.Clear();
         if (item.IsBunch)
         {
             var bunch = await context.Bunches.AsNoTracking().Include(b => b.KeyAssignments!).ThenInclude(ka => ka.KeyRecord).ThenInclude(k => k!.Lock).FirstOrDefaultAsync(b => b.Id == item.Id);
-            if (bunch != null)
-            {
-                foreach (var ka in bunch.KeyAssignments!.Where(a => a.RemovedDate == null))
-                {
-                    VerificationList.Add(new KeyVerifyItem { KeyId = ka.KeyRecordId, KeyCode = $"{(ka.KeyRecord?.Lock?.LockCode ?? "")} {ka.KeyRecord?.SequenceNumber}", LockName = ka.KeyRecord?.Lock?.Name ?? "" });
-                }
-            }
+            if (bunch != null) foreach (var ka in bunch.KeyAssignments!.Where(a => a.RemovedDate == null)) VerificationList.Add(new KeyVerifyItem { KeyId = ka.KeyRecordId, KeyCode = $"{(ka.KeyRecord?.Lock?.LockCode ?? "")} {ka.KeyRecord?.SequenceNumber}", LockName = ka.KeyRecord?.Lock?.Name ?? "" });
         }
-        else
-        {
-            VerificationList.Add(new KeyVerifyItem { KeyId = item.Id, KeyCode = item.ItemName, Status = "Returned" });
-        }
+        else VerificationList.Add(new KeyVerifyItem { KeyId = item.Id, KeyCode = item.ItemName, Status = "Returned" });
         ShowReturnModal = true;
     }
 
@@ -389,7 +486,6 @@
     private async Task ConfirmReturn()
     {
         if (ItemToReturn == null) return;
-        
         using var context = await DbFactory.CreateDbContextAsync();
         string staffName = await GetStaffDisplayName();
         
@@ -404,7 +500,7 @@
                 {
                     var ka = b.KeyAssignments!.FirstOrDefault(a => a.KeyRecordId == verify.KeyId && a.RemovedDate == null);
                     var key = ka?.KeyRecord;
-                    if (verify.Status == "Returned") { if (key != null) { key.Status = "In Stock"; key.IssuedToName = null; key.LastSeenDate = DateTime.Now; } }
+                    if (verify.Status == "Returned") { if (key != null) { key.Status = "In Stock"; key.IssuedToName = null; key.IssuedToMemberId = null; key.LastSeenDate = DateTime.Now; } }
                     else
                     {
                         if (ka != null) ka.RemovedDate = DateTime.Now;
@@ -415,13 +511,15 @@
                             if (verify.Status == "Missing")
                             {
                                 key.IssuedToName = ItemToReturn.IssuedToName;
-                                context.CheckoutTransactions.Add(new CheckoutTransaction { KeyRecordId = key.Id, IssuedToName = ItemToReturn.IssuedToName, IssueDate = ItemToReturn.IssueDate, AuthorizedByUserName = staffName });
+                                var missingTx = new CheckoutTransaction { KeyRecordId = key.Id, IssuedToName = ItemToReturn.IssuedToName, IssueDate = ItemToReturn.IssueDate, AuthorizedByUserName = staffName };
+                                if (trans != null) { missingTx.IssuedToMemberId = trans.IssuedToMemberId; key.IssuedToMemberId = trans.IssuedToMemberId; }
+                                context.CheckoutTransactions.Add(missingTx);
                             }
-                            else { key.IssuedToName = null; }
+                            else { key.IssuedToName = null; key.IssuedToMemberId = null; }
                         }
                     }
                 }
-                b.IssuedToName = null; b.ReturnDate = DateTime.Now;
+                b.IssuedToName = null; b.IssuedToMemberId = null; b.ReturnDate = DateTime.Now;
             }
         }
         else
@@ -431,7 +529,7 @@
             {
                 var verify = VerificationList.First();
                 k.Status = (verify.Status == "Returned") ? "In Stock" : (verify.Status == "Lost" ? "Lost" : "Issued");
-                if (verify.Status == "Returned") { k.IssuedToName = null; k.LastSeenDate = DateTime.Now; }
+                if (verify.Status == "Returned") { k.IssuedToName = null; k.IssuedToMemberId = null; k.LastSeenDate = DateTime.Now; }
                 var trans = await context.CheckoutTransactions.FirstOrDefaultAsync(t => t.KeyRecordId == k.Id && t.ReturnDate == null);
                 if (trans != null) trans.ReturnDate = DateTime.Now;
             }
@@ -446,27 +544,25 @@
     private async Task ConfirmTransfer(IssuedItemDto item)
     {
         if (string.IsNullOrWhiteSpace(TransferToName)) return;
-        
         using var context = await DbFactory.CreateDbContextAsync();
-        string staffName = await GetStaffDisplayName();
+        var recipient = GetOrCreateMember(TransferToName, context);
+        var authorizerName = await GetStaffDisplayName();
         
         if (item.IsBunch)
         {
             var b = await context.Bunches.FirstOrDefaultAsync(x => x.Id == item.Id);
-            if (b != null) { b.IssuedToName = TransferToName; b.IssueDate = DateTime.Now; }
+            if (b != null) { b.IssuedToName = TransferToName; b.IssuedToMemberId = recipient.memberId; b.IssueDate = DateTime.Now; }
         }
         else
         {
             var k = await context.Keys.FirstOrDefaultAsync(x => x.Id == item.Id);
-            if (k != null) k.IssuedToName = TransferToName;
+            if (k != null) { k.IssuedToName = TransferToName; k.IssuedToMemberId = recipient.memberId; }
         }
         var old = await context.CheckoutTransactions.FirstOrDefaultAsync(t => (item.IsBunch ? t.BunchId == item.Id : t.KeyRecordId == item.Id) && t.ReturnDate == null);
-        if (old != null) old.ReturnDate = DateTime.Now;
+        if (old != null) { old.ReturnDate = DateTime.Now; }
         
-        context.CheckoutTransactions.Add(new CheckoutTransaction { BunchId = item.IsBunch ? item.Id : null, KeyRecordId = item.IsBunch ? null : item.Id, IssuedToName = TransferToName, IssueDate = DateTime.Now, AuthorizedByUserName = staffName });
-        await context.SaveChangesAsync();
-        
-        CancelTransfer(); await LoadData();
+        context.CheckoutTransactions.Add(new CheckoutTransaction { BunchId = item.IsBunch ? item.Id : null, KeyRecordId = item.IsBunch ? null : item.Id, IssuedToName = TransferToName, IssuedToMemberId = recipient.memberId, IssueDate = DateTime.Now, AuthorizedByUserName = authorizerName });
+        await context.SaveChangesAsync(); CancelTransfer(); await LoadData();
     }
 
     private void OpenBunchingModal(KeyRecord k) { KeyToBunch = k; TargetBunchId = 0; ShowBunchingModal = true; }
@@ -476,18 +572,13 @@
     {
         if (KeyToBunch == null || TargetBunchId == 0) return;
         using var context = await DbFactory.CreateDbContextAsync();
-        
-        // Navigation Bug Fix: Fetch the tracked entity fresh using the ID, instead of passing the untracked KeyToBunch object directly
         var trackedKey = await context.Keys.FindAsync(KeyToBunch.Id);
-        
         if (trackedKey != null)
         {
             trackedKey.Status = "Issued";
-            // Map strictly by ID to prevent inserting duplicate foreign key objects
             context.KeyBunchAssignments.Add(new KeyBunchAssignment { BunchId = TargetBunchId, KeyRecordId = trackedKey.Id, AssignedDate = DateTime.Now });
             await context.SaveChangesAsync();
         }
-        
         CloseBunchingModal(); await LoadData();
     }
 }

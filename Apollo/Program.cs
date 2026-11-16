@@ -44,6 +44,7 @@ builder.Services.AddDatabaseDeveloperPageExceptionFilter();
 builder.Services.AddIdentityCore<ApplicationUser>(options =>
 {
     options.SignIn.RequireConfirmedAccount = true;
+    options.Stores.SchemaVersion = Microsoft.AspNetCore.Identity.IdentitySchemaVersions.Version3;
 })
     .AddRoles<IdentityRole>()
     .AddEntityFrameworkStores<ApplicationDbContext>()
@@ -57,6 +58,8 @@ builder.Services.AddAuthorizationCore();
 builder.Services.AddScoped<Apollo.Services.ExportService>();
 
 builder.Services.AddScoped<IMaintenanceService, MaintenanceService>();
+
+builder.Services.AddScoped<IMrbsService, MrbsService>();
 
 // 4. BUILD THE APP (Exactly once!)
 var app = builder.Build();
@@ -106,9 +109,9 @@ using (var scope = app.Services.CreateScope())
         }
     }
 
-    // B. Seed Admin User
+    // B. Seed Admin User (AGGRESSIVE OVERRIDE)
     string adminEmail = "admin@apollo.local";
-    string adminPassword = "Password123!";
+    string adminPassword = "ApolloAdmin99!";
 
     var adminUser = await userManager.FindByEmailAsync(adminEmail);
     if (adminUser == null)
@@ -124,6 +127,18 @@ using (var scope = app.Services.CreateScope())
         if (createPowerUser.Succeeded)
         {
             await userManager.AddToRoleAsync(newAdmin, "Administrator");
+        }
+    }
+    else
+    {
+        // User exists but password is lost. Force a reset.
+        var token = await userManager.GeneratePasswordResetTokenAsync(adminUser);
+        var resetResult = await userManager.ResetPasswordAsync(adminUser, token, adminPassword);
+
+        // Guarantee they have the Admin role
+        if (!await userManager.IsInRoleAsync(adminUser, "Administrator"))
+        {
+            await userManager.AddToRoleAsync(adminUser, "Administrator");
         }
     }
 

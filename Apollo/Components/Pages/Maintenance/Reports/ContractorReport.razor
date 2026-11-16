@@ -5,6 +5,9 @@
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Policy = SystemPermissions.ManageMaintenance)]
 @inject IMaintenanceService MaintenanceService
 @inject IJSRuntime JS
+@rendermode InteractiveServer
+
+<PageTitle>Contractor Referrals</PageTitle>
 
 <div class="container-fluid px-4 py-4 d-print-none">
     <div class="d-flex justify-content-between align-items-center mb-4">
@@ -17,7 +20,10 @@
 </div>
 
 <div class="container-fluid px-4 print-area">
-    @if (isLoading) { <div class="text-center py-5 d-print-none"><div class="spinner-border text-warning"></div></div> }
+    @if (isLoading)
+    {
+        <div class="text-center py-5 d-print-none"><div class="spinner-border text-warning"></div></div>
+    }
     else
     {
         <div class="print-header d-none d-print-block mb-4">
@@ -48,14 +54,17 @@
                         <tr>
                             <td class="fw-bold">#@issue.Id</td>
                             <td>@(string.IsNullOrEmpty(issue.QuoteReference) ? "N/A" : issue.QuoteReference)</td>
-                            <td><strong>@issue.Room?.Name</strong></td>
+                            <td><strong>@(issue.Room?.Name ?? "Unassigned Location")</strong></td>
                             <td>@issue.Description</td>
                         </tr>
                     }
                 </tbody>
             </table>
         }
-        @if(!contractors.Any()) { <p class="text-center text-muted py-4 fst-italic">No jobs currently requiring contractors.</p> }
+        @if (!contractors.Any())
+        {
+            <p class="text-center text-muted py-4 fst-italic">No jobs currently requiring contractors.</p>
+        }
     }
 </div>
 

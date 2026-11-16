@@ -1,0 +1,289 @@
+﻿@page "/admin/scheduler"
+@using Apollo.Models
+@using Apollo.Data
+@using Microsoft.EntityFrameworkCore
+@using Microsoft.AspNetCore.Authorization
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject IMrbsService MrbsService
+@inject IJSRuntime JS
+@rendermode InteractiveServer
+@attribute [Authorize]
+
+<PageTitle>Master Scheduler & Calendar</PageTitle>
+
+<div class="container-fluid px-4 py-4">
+    <!-- Header & Controls -->
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-3">
+        <div>
+            <h2 class="fw-bold mb-0">Master Scheduler</h2>
+            <p class="text-muted mb-0">Unified calendar for shows, rehearsals, compliance reviews, and MRBS room bookings.</p>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+            <button class="btn btn-outline-secondary shadow-sm" @onclick="PreviousMonth"><i class="bi bi-chevron-left"></i></button>
+            <button class="btn btn-outline-dark fw-bold px-3 shadow-sm" @onclick="GoToToday">Today</button>
+            <button class="btn btn-outline-secondary shadow-sm" @onclick="NextMonth"><i class="bi bi-chevron-right"></i></button>
+            <span class="fs-4 fw-bold ms-3 min-w-200">@currentDate.ToString("MMMM yyyy")</span>
+        </div>
+    </div>
+
+    <!-- Category Filters -->
+    <div class="card shadow-sm border-0 mb-4">
+        <div class="card-body py-2 px-3 d-flex flex-wrap align-items-center gap-2">
+            <span class="small fw-bold text-muted me-2">Filter Views:</span>
+            <button class="btn btn-sm @(!selectedCategory.HasValue ? "btn-dark" : "btn-outline-dark")" @onclick="() => FilterCategory(null)">All Events</button>
+            <button class="btn btn-sm @(selectedCategory == CalendarEventCategory.Show ? "btn-purple text-white" : "btn-outline-purple")" @onclick="() => FilterCategory(CalendarEventCategory.Show)">
+                <i class="bi bi-ticket-perrupted me-1"></i>Shows
+            </button>
+            <button class="btn btn-sm @(selectedCategory == CalendarEventCategory.RehearsalMeeting ? "btn-primary" : "btn-outline-primary")" @onclick="() => FilterCategory(CalendarEventCategory.RehearsalMeeting)">
+                <i class="bi bi-people me-1"></i>Rehearsals & Meetings
+            </button>
+            <button class="btn btn-sm @(selectedCategory == CalendarEventCategory.SafetyReview ? "btn-warning text-dark" : "btn-outline-warning")" @onclick="() => FilterCategory(CalendarEventCategory.SafetyReview)">
+                <i class="bi bi-shield-check me-1"></i>Safety Reviews
+            </button>
+            <button class="btn btn-sm @(selectedCategory == CalendarEventCategory.Maintenance ? "btn-danger" : "btn-outline-danger")" @onclick="() => FilterCategory(CalendarEventCategory.Maintenance)">
+                <i class="bi bi-tools me-1"></i>Snags & Repairs
+            </button>
+            <button class="btn btn-sm @(selectedCategory == CalendarEventCategory.MrbsBooking ? "btn-success" : "btn-outline-success")" @onclick="() => FilterCategory(CalendarEventCategory.MrbsBooking)">
+                <i class="bi bi-door-open me-1"></i>MRBS Bookings
+            </button>
+        </div>
+    </div>
+
+    @if (isLoading)
+    {
+        <div class="text-center py-5">
+            <div class="spinner-border text-primary" role="status"></div>
+            <p class="text-muted mt-2">Syncing system events and MRBS bookings...</p>
+        </div>
+    }
+    else
+    {
+        <!-- Month Calendar Grid -->
+        <div class="card shadow-sm border-0 overflow-hidden">
+            <div class="card-body p-0">
+                <!-- Day Headers -->
+                <div class="row g-0 bg-light border-bottom text-center fw-bold py-2 text-muted small">
+                    <div class="col">Mon</div>
+                    <div class="col">Tue</div>
+                    <div class="col">Wed</div>
+                    <div class="col">Thu</div>
+                    <div class="col">Fri</div>
+                    <div class="col">Sat</div>
+                    <div class="col">Sun</div>
+                </div>
+
+                <!-- Calendar Days -->
+                @for (int week = 0; week < totalWeeks; week++)
+                {
+                    <div class="row g-0 border-bottom calendar-week">
+                        @for (int dayOfWeek = 0; dayOfWeek < 7; dayOfWeek++)
+                        {
+                            int dayIndex = (week * 7) + dayOfWeek;
+                            DateTime cellDate = startDateGrid.AddDays(dayIndex);
+                            bool isCurrentMonth = cellDate.Month == currentDate.Month;
+                            bool isToday = cellDate.Date == DateTime.Today;
+                            var dayEvents = GetEventsForDate(cellDate);
+
+                            <div class="col calendar-day p-1 @(isCurrentMonth ? "bg-white" : "bg-light opacity-50") @(isToday ? "border border-2 border-primary" : "")"
+                                 @onclick="() => OpenDayModal(cellDate, dayEvents)">
+                                <div class="d-flex justify-content-between align-items-center mb-1 px-1">
+                                    <span class="small fw-bold @(isToday ? "badge bg-primary text-white rounded-circle" : "text-dark")">
+                                        @cellDate.Day
+                                    </span>
+                                    @if (dayEvents.Any(e => e.Category == CalendarEventCategory.SafetyReview || e.Category == CalendarEventCategory.Maintenance))
+                                    {
+                                        <i class="bi bi-exclamation-circle-fill text-danger small" title="Contains Safety or Maintenance Items"></i>
+                                    }
+                                </div>
+
+                                <div class="event-list overflow-hidden">
+                                    @foreach (var ev in dayEvents.Take(3))
+                                    {
+                                        <div class="event-pill text-truncate mb-1 px-1 py-1 rounded small @ev.BadgeClass" title="@ev.Title (@ev.Location)">
+                                            <i class="@ev.IconClass me-1"></i>@ev.Title
+                                        </div>
+                                    }
+                                    @if (dayEvents.Count > 3)
+                                    {
+                                        <div class="text-muted extra-events-count text-center fw-bold">
+                                            +@(dayEvents.Count - 3) more
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+    }
+</div>
+
+<!-- Day Detail Modal -->
+@if (selectedDate.HasValue)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.6); z-index: 1050;">
+        <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-content shadow-lg border-0">
+                <div class="modal-header bg-dark text-white border-0">
+                    <h5 class="modal-title fw-bold">
+                        <i class="bi bi-calendar-event me-2"></i>Schedule for @selectedDate.Value.ToString("dddd, dd MMMM yyyy")
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" @onclick="CloseModal"></button>
+                </div>
+                <div class="modal-body p-4">
+                    @if (!selectedDayEvents.Any())
+                    {
+                        <p class="text-center text-muted py-4 fst-italic">No events or review dates logged for this date.</p>
+                    }
+                    else
+                    {
+                        <div class="list-group list-group-flush">
+                            @foreach (var ev in selectedDayEvents.OrderBy(e => e.TimeDisplay))
+                            {
+                                <div class="list-group-item p-3 mb-2 rounded border shadow-sm border-start border-4 @ev.BorderClass">
+                                    <div class="d-flex justify-content-between align-items-center mb-1">
+                                        <span class="badge @ev.BadgeClass">@ev.CategoryDisplay</span>
+                                        <span class="small fw-bold text-muted"><i class="bi bi-clock me-1"></i>@ev.TimeDisplay</span>
+                                    </div>
+                                    <h6 class="fw-bold mb-1">@ev.Title</h6>
+                                    @if (!string.IsNullOrEmpty(ev.Location))
+                                    {
+                                        <div class="small text-muted mb-1"><i class="bi bi-geo-alt me-1"></i>@ev.Location</div>
+                                    }
+                                    @if (!string.IsNullOrEmpty(ev.Description))
+                                    {
+                                        <div class="small text-dark mt-2 p-2 bg-light rounded border">@ev.Description</div>
+                                    }
+                                    @if (!string.IsNullOrEmpty(ev.TargetUrl))
+                                    {
+                                        <div class="mt-2 text-end">
+                                            <a href="@ev.TargetUrl" class="btn btn-sm btn-outline-primary">View Details <i class="bi bi-arrow-right"></i></a>
+                                        </div>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+                <div class="modal-footer bg-light border-0">
+                    <button type="button" class="btn btn-secondary" @onclick="CloseModal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<style>
+    .min-w-200 { min-width: 200px; text-align: center; }
+    .calendar-week { min-height: 110px; }
+    .calendar-day { min-height: 110px; cursor: pointer; transition: background-color 0.2s; }
+    .calendar-day:hover { background-color: #f8f9fa !important; }
+    .event-pill { font-size: 0.72rem; line-height: 1.2; font-weight: 600; }
+    .extra-events-count { font-size: 0.7rem; }
+    .btn-purple { background-color: #6f42c1; border-color: #6f42c1; }
+    .btn-outline-purple { color: #6f42c1; border-color: #6f42c1; }
+    .btn-outline-purple:hover { background-color: #6f42c1; color: white; }
+    .bg-purple { background-color: #6f42c1 !important; color: white; }
+    .border-purple { border-color: #6f42c1 !important; }
+</style>
+
+@code {
+    private DateTime currentDate = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
+    private DateTime startDateGrid;
+    private int totalWeeks = 5;
+    private bool isLoading = true;
+
+    private List<CalendarEventItem> allEvents = new();
+    private CalendarEventCategory? selectedCategory = null;
+
+    private DateTime? selectedDate;
+    private List<CalendarEventItem> selectedDayEvents = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        currentDate = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
+        await LoadCalendarData();
+    }
+
+    private async Task LoadCalendarData()
+    {
+        isLoading = true;
+        allEvents.Clear();
+
+        var monthStart = new DateTime(currentDate.Year, currentDate.Month, 1);
+        int dayOffset = ((int)monthStart.DayOfWeek - 1 + 7) % 7;
+        startDateGrid = monthStart.AddDays(-dayOffset);
+        var endDateGrid = startDateGrid.AddDays(42);
+
+        using var context = await DbFactory.CreateDbContextAsync();
+
+        // 1. Fetch Maintenance Issues / Snags
+        var snags = await context.Set<MaintenanceIssue>()
+            .AsNoTracking()
+            .Include(m => m.Room)
+            .Where(m => m.ReportedAt >= startDateGrid && m.ReportedAt <= endDateGrid)
+            .ToListAsync();
+
+        foreach (var snag in snags)
+        {
+            allEvents.Add(new CalendarEventItem
+            {
+                Id = $"snag-{snag.Id}",
+                Title = $"Snag #{snag.Id}: {snag.Description}",
+                Date = snag.ReportedAt.Date,
+                TimeDisplay = snag.ReportedAt.ToString("HH:mm"),
+                Category = CalendarEventCategory.Maintenance,
+                CategoryDisplay = "Snag / Repair",
+                Location = snag.Room?.Name ?? "General Facility",
+                BadgeClass = snag.Severity == SnagSeverity.Emergency ? "bg-danger text-white" : "bg-warning text-dark",
+                BorderClass = "border-danger",
+                IconClass = "bi bi-tools",
+                Description = snag.Description,
+                TargetUrl = "/admin/maintenance/log"
+            });
+        }
+
+        // 2. Fetch MRBS Bookings
+        var mrbsBookings = await MrbsService.GetBookingsAsync(startDateGrid, endDateGrid);
+        allEvents.AddRange(mrbsBookings);
+
+        isLoading = false;
+    }
+
+    private List<CalendarEventItem> GetEventsForDate(DateTime date)
+    {
+        return allEvents
+            .Where(e => e.Date.Date == date.Date)
+            .Where(e => !selectedCategory.HasValue || e.Category == selectedCategory.Value)
+            .ToList();
+    }
+
+    private async Task PreviousMonth()
+    {
+        currentDate = currentDate.AddMonths(-1);
+        await LoadCalendarData();
+    }
+
+    private async Task NextMonth()
+    {
+        currentDate = currentDate.AddMonths(1);
+        await LoadCalendarData();
+    }
+
+    private async Task GoToToday()
+    {
+        currentDate = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
+        await LoadCalendarData();
+    }
+
+    private void FilterCategory(CalendarEventCategory? category) => selectedCategory = category;
+
+    private void OpenDayModal(DateTime date, List<CalendarEventItem> events)
+    {
+        selectedDate = date;
+        selectedDayEvents = events;
+    }
+
+    private void CloseModal() => selectedDate = null;
+}

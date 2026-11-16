@@ -1,120 +1,236 @@
-﻿@page "/reports/Production/FOHBriefing"
+﻿@page "/reports/Production/FoHBriefing"
 @using Apollo.Models
 @using Apollo.Data
 @using Microsoft.EntityFrameworkCore
 @attribute [Microsoft.AspNetCore.Authorization.Authorize]
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject IJSRuntime JS
+@rendermode InteractiveServer
 
-<div class="container py-4 max-w-5xl no-print">
+<div class="container py-4 max-w-5xl d-print-none">
     <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2 class="fw-bold mb-0 text-info">FOH Briefing Sheet</h2>
-        <div class="d-flex gap-2">
-            <button class="btn btn-outline-dark" @onclick='() => JS.InvokeVoidAsync("window.print")'><i class="bi bi-printer me-2"></i>Print</button>
-            <a href="/reports/ProductionDashboard" class="btn btn-secondary">Back</a>
+        <div>
+            <h2 class="fw-bold mb-0">Front of House Briefing Sheet</h2>
+            <p class="text-muted mb-0">Master run briefing with dynamic performance timings, warning grid, and active cast covers.</p>
         </div>
+        <button class="btn btn-primary fw-bold" @onclick="Print" disabled="@(selectedProd == null)"><i class="bi bi-printer me-2"></i>Print Briefing</button>
     </div>
 
-    <div class="card border-0 shadow-sm bg-light mb-4">
+    <div class="card border-0 shadow-sm mb-4 bg-light">
         <div class="card-body">
-            <label class="small fw-bold">Select Performance</label>
-            <select class="form-select form-select-lg" @onchange="OnPerformanceSelected">
-                <option value="0">-- Select a Specific Performance --</option>
-                @foreach (var p in allPerformances)
+            <label class="small fw-bold">Select Production</label>
+            <select class="form-select form-select-lg" @onchange="OnProductionSelected">
+                <option value="0">-- Select Production --</option>
+                @foreach (var p in allProductions)
                 {
-                    <option value="@p.Id">@p.CurtainUp.ToString("ddd dd MMM HH:mm") - @p.Production?.Title</option>
+                    <option value="@p.Id">@p.Title (@p.StartDate.ToString("MMM yyyy"))</option>
                 }
             </select>
         </div>
     </div>
 </div>
 
-@if (selectedPerf != null)
+@if (selectedProd != null)
 {
-    <div id="reportContent" class="report-paper p-5 mx-auto bg-white shadow-lg mb-5" style="max-width: 210mm; border: 2px solid #000;">
-        <div class="text-center border-bottom border-3 border-dark pb-3 mb-4">
-            <h1 class="display-4 fw-bold text-uppercase mb-0">FOH BRIEFING</h1>
-            <h2 class="fw-bold">@selectedPerf.Production?.Title</h2>
-            <div class="fs-4">@selectedPerf.CurtainUp.ToString("dddd dd MMMM yyyy")</div>
-        </div>
-
-        <div class="row g-4 mb-4">
-            <div class="col-6">
-                <div class="p-3 border border-2 border-dark text-center">
-                    <h6 class="fw-bold text-uppercase small mb-1">Curtain Up</h6>
-                    <div class="display-6 fw-bold">@selectedPerf.CurtainUp.ToString("HH:mm")</div>
-                </div>
+    <div class="report-paper shadow-lg p-5 mx-auto bg-white mb-5">
+        <div class="border-bottom pb-3 mb-4 d-flex justify-content-between align-items-center">
+            <div>
+                <h1 class="fw-bold mb-0">@selectedProd.Title</h1>
+                <p class="text-primary fs-5 mb-0">Front of House Master Briefing Sheet</p>
             </div>
-            <div class="col-6">
-                <div class="p-3 border border-2 border-dark text-center">
-                    <h6 class="fw-bold text-uppercase small mb-1">Expected End</h6>
-                    <div class="display-6 fw-bold">
-                        @selectedPerf.CurtainUp.AddMinutes(selectedPerf.Production?.RunningTimeMinutes ?? 0 + selectedPerf.Production?.IntervalMinutes ?? 0).ToString("HH:mm")
-                    </div>
-                </div>
+            <div class="text-end">
+                <div class="fw-bold fs-6">Run Dates:</div>
+                <div>@selectedProd.StartDate.ToString("dd MMM yyyy") - @selectedProd.EndDate.ToString("dd MMM yyyy")</div>
             </div>
         </div>
 
-        <div class="row g-4 mb-4">
-            <div class="col-12">
-                <table class="table table-bordered border-dark align-middle">
-                    <tr>
-                        <th class="bg-light w-25">RUNNING TIME</th>
-                        <td class="fs-5 fw-bold">@(selectedPerf.Production?.RunningTimeMinutes) Minutes</td>
-                    </tr>
-                    <tr>
-                        <th class="bg-light">INTERVAL</th>
-                        <td class="fs-5 fw-bold">@(selectedPerf.Production?.IntervalMinutes) Minutes</td>
-                    </tr>
-                    <tr>
-                        <th class="bg-light text-danger">CONTENT WARNINGS</th>
-                        <td class="fs-5 fw-bold text-danger text-uppercase">
-                            @(string.IsNullOrEmpty(selectedPerf.Production?.ContentWarnings) ? "NONE RECORDED" : selectedPerf.Production.ContentWarnings)
-                        </td>
-                    </tr>
+        <!-- PER-PERFORMANCE DYNAMIC TIMINGS GRID -->
+        <div class="card border-primary mb-4">
+            <div class="card-header bg-primary text-white fw-bold d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-clock-history me-2"></i>Performance Run Timings</span>
+                <span class="small badge bg-light text-dark">Run: @selectedProd.RunningTimeMinutes mins | Interval: @selectedProd.IntervalMinutes mins</span>
+            </div>
+            <div class="card-body p-0">
+                <table class="table table-sm table-striped align-middle mb-0 text-center">
+                    <thead class="bg-light small">
+                        <tr>
+                            <th class="text-start ps-3">Show Date & Type</th>
+                            <th>Curtain Up (Start)</th>
+                            <th>Approx. Interval</th>
+                            <th>Estimated Show End</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var perf in selectedProd.Performances.OrderBy(p => p.CurtainUp))
+                        {
+                            var halfRun = selectedProd.RunningTimeMinutes > 0 ? selectedProd.RunningTimeMinutes / 2 : 60;
+                            var intervalTime = perf.CurtainUp.AddMinutes(halfRun);
+                            var endTime = perf.CurtainUp.AddMinutes(selectedProd.RunningTimeMinutes + selectedProd.IntervalMinutes);
+
+                            <tr>
+                                <td class="text-start ps-3 fw-bold">
+                                    @perf.CurtainUp.ToString("ddd dd MMM yyyy")
+                                    @if (!string.IsNullOrEmpty(perf.PerformanceTitle))
+                                    {
+                                        <span class="badge bg-secondary ms-1">@perf.PerformanceTitle</span>
+                                    }
+                                </td>
+                                <td class="fw-bold fs-6 text-dark">@perf.CurtainUp.ToString("HH:mm")</td>
+                                <td class="fw-bold text-primary">@intervalTime.ToString("HH:mm")</td>
+                                <td class="fw-bold text-success">@endTime.ToString("HH:mm")</td>
+                            </tr>
+                        }
+                        @if (!selectedProd.Performances.Any())
+                        {
+                            <tr><td colspan="4" class="text-center text-muted py-3 fst-italic">No performance dates scheduled for this show.</td></tr>
+                        }
+                    </tbody>
                 </table>
             </div>
         </div>
 
+        <!-- DYNAMIC CONTENT WARNINGS GRID -->
         <div class="mb-4">
-            <h6 class="fw-bold text-uppercase border-bottom border-2 border-dark pb-1">Performance Notes / Gala Details</h6>
-            <div class="p-3 bg-light border border-dark mt-2" style="min-height: 100px;">
-                @if (!string.IsNullOrEmpty(selectedPerf.ScheduleNotes)) { <p class="fw-bold">@selectedPerf.ScheduleNotes</p> }
-                <p>@selectedPerf.Production?.FOHNotes</p>
+            <h6 class="fw-bold border-bottom pb-2 text-uppercase"><i class="bi bi-shield-exclamation me-2"></i>Content Warnings Grid</h6>
+            <div class="row g-2">
+                @foreach (var warning in fohWarningTypes)
+                {
+                    var isChecked = IsWarningActive(warning);
+                    <div class="col-md-4 col-6">
+                        <div class="p-2 border rounded d-flex align-items-center justify-content-between @(isChecked ? "bg-warning-subtle border-warning fw-bold" : "bg-light opacity-75")">
+                            <span><i class="bi @warning.IconClass me-2"></i>@warning.Name</span>
+                            @if (isChecked)
+                            {
+                                <span class="badge bg-danger fs-6"><i class="bi bi-check-lg"></i> YES</span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-secondary opacity-50"><i class="bi bi-x-lg"></i> NO</span>
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+            @if (selectedProd.WarnAdultLanguageLevel > 0)
+            {
+                <div class="mt-2 p-2 bg-warning-subtle rounded border border-warning small">
+                    <strong>Adult Language:</strong> @(selectedProd.WarnAdultLanguageLevel == 1 ? "Infrequent Strong Language" : "Frequent Strong Language")
+                </div>
+            }
+            @if (!string.IsNullOrWhiteSpace(selectedProd.CustomContentWarnings))
+            {
+                <div class="mt-2 p-3 bg-light rounded border border-warning small">
+                    <strong>Additional Warning Notes:</strong> @selectedProd.CustomContentWarnings
+                </div>
+            }
+        </div>
+
+        <!-- FOH NOTES -->
+        <div class="mb-4">
+            <h6 class="fw-bold border-bottom pb-1 text-uppercase">FOH Instructions & Audience Notes</h6>
+            <div class="p-3 bg-light rounded" style="white-space: pre-wrap;">
+                @(string.IsNullOrWhiteSpace(selectedProd.FOHNotes) ? "No specific FOH instructions provided." : selectedProd.FOHNotes)
             </div>
         </div>
 
-        <div class="mt-5 text-center">
-            <p class="small text-muted">Please ensure all Bar and Ushering staff are briefed on content warnings before doors open.</p>
+        <!-- ACTIVE UNDERSTUDIES ASSIGNED TO SPECIFIC DATES -->
+        <div class="mt-4 border-top pt-3">
+            <h6 class="fw-bold text-uppercase text-warning"><i class="bi bi-person-exclamation me-2"></i>Scheduled Cast Cover Exceptions</h6>
+            <p class="small text-muted mb-2">Only displaying understudies actively scheduled to perform on specific dates:</p>
+            <table class="table table-sm table-bordered small">
+                <thead class="table-light">
+                    <tr>
+                        <th>Performance Date</th>
+                        <th>Role / Character</th>
+                        <th>Scheduled Cover / Understudy</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var item in activeScheduledUnderstudies)
+                    {
+                        <tr>
+                            <td class="fw-bold">@item.PerformanceDate.ToString("ddd dd MMM HH:mm")</td>
+                            <td>@item.RoleOrCharacter</td>
+                            <td><span class="badge bg-warning text-dark fs-6">@item.CoverName</span></td>
+                        </tr>
+                    }
+                    @if (!activeScheduledUnderstudies.Any())
+                    {
+                        <tr><td colspan="3" class="text-center text-muted fst-italic py-2">No understudy date overrides assigned for this run.</td></tr>
+                    }
+                </tbody>
+            </table>
         </div>
     </div>
 }
 
 <style>
-    @@media print { .no-print { display: none !important; } }
-    .report-paper { min-height: 280mm; color: #000; }
+    .report-paper { max-width: 210mm; min-height: 297mm; }
+    @@media print { .d-print-none { display: none !important; } }
 </style>
 
 @code {
-    private List<Performance> allPerformances = new();
-    private Performance? selectedPerf;
+    private List<Production> allProductions = new();
+    private Production? selectedProd;
+    private List<ContentWarningType> fohWarningTypes = new();
+    private List<ActiveUnderstudyRecord> activeScheduledUnderstudies = new();
 
     protected override async Task OnInitializedAsync()
     {
         using var context = await DbFactory.CreateDbContextAsync();
-        allPerformances = await context.Performances
-            .Include(p => p.Production)
-            .Where(p => p.CurtainUp >= DateTime.Today.AddDays(-1))
-            .OrderBy(p => p.CurtainUp)
-            .ToListAsync();
+        allProductions = await context.Productions.AsNoTracking().Where(p => !p.IsArchived).OrderByDescending(p => p.StartDate).ToListAsync();
+        fohWarningTypes = await context.Set<ContentWarningType>().Where(w => w.ShowOnFoHReport && w.IsEnabled).OrderBy(w => w.SortOrder).ToListAsync();
     }
 
-    private async Task OnPerformanceSelected(ChangeEventArgs e)
+    private async Task OnProductionSelected(ChangeEventArgs e)
     {
         int id = int.Parse(e.Value?.ToString() ?? "0");
+        if (id == 0) { selectedProd = null; return; }
+
         using var context = await DbFactory.CreateDbContextAsync();
-        selectedPerf = await context.Performances
-            .Include(p => p.Production).ThenInclude(pr => pr!.Category)
+        selectedProd = await context.Productions
+            .AsNoTracking()
+            .Include(p => p.Performances).ThenInclude(perf => perf.Overrides).ThenInclude(o => o.Member)
             .FirstOrDefaultAsync(p => p.Id == id);
+
+        if (selectedProd != null)
+        {
+            activeScheduledUnderstudies.Clear();
+            foreach (var perf in selectedProd.Performances)
+            {
+                foreach (var over in perf.Overrides.Where(o => o.MemberId != null || !string.IsNullOrEmpty(o.ExternalName)))
+                {
+                    activeScheduledUnderstudies.Add(new ActiveUnderstudyRecord
+                    {
+                        PerformanceDate = perf.CurtainUp,
+                        RoleOrCharacter = over.CustomRoleName ?? over.Role?.Name ?? "Cast Role",
+                        CoverName = over.Member?.FullName ?? over.ExternalName ?? "TBC"
+                    });
+                }
+            }
+        }
+    }
+
+    private bool IsWarningActive(ContentWarningType warning) => warning.Name.ToLower() switch
+    {
+        var n when n.Contains("smoke") || n.Contains("haze") => selectedProd?.WarnSmokeHaze ?? false,
+        var n when n.Contains("flash") || n.Contains("strobe") => selectedProd?.WarnFlashingLights ?? false,
+        var n when n.Contains("gun") || n.Contains("pyro") => selectedProd?.WarnGunshotsPyros ?? false,
+        var n when n.Contains("loud") || n.Contains("noise") => selectedProd?.WarnLoudNoises ?? false,
+        var n when n.Contains("sex") || n.Contains("nudity") => selectedProd?.WarnSexualContent ?? false,
+        var n when n.Contains("violenc") || n.Contains("gore") => selectedProd?.WarnViolenceGore ?? false,
+        var n when n.Contains("distress") || n.Contains("theme") => selectedProd?.WarnDistressingThemes ?? false,
+        var n when n.Contains("smok") => selectedProd?.WarnStageSmoking ?? false,
+        var n when n.Contains("audience") || n.Contains("interact") => selectedProd?.WarnAudienceInteraction ?? false,
+        _ => false
+    };
+
+    private async Task Print() => await JS.InvokeVoidAsync("window.print");
+
+    public class ActiveUnderstudyRecord
+    {
+        public DateTime PerformanceDate { get; set; }
+        public string RoleOrCharacter { get; set; } = string.Empty;
+        public string CoverName { get; set; } = string.Empty;
     }
 }

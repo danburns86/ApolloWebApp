@@ -2,62 +2,173 @@
 @using Apollo.Data
 @using Apollo.Models
 @using Microsoft.EntityFrameworkCore
+@using Microsoft.AspNetCore.Components.Authorization
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject AuthenticationStateProvider AuthStateProvider
+@rendermode InteractiveServer
 
 <PageTitle>Key Inventory Dashboard</PageTitle>
 
-<div class="container-fluid px-4">
+<div class="container-fluid px-4 py-4 max-w-7xl">
     <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2 class="fw-bold">Key Inventory Overview</h2>
+        <h2 class="fw-bold mb-0">Key Inventory Overview</h2>
         <div class="text-muted small">Live Data from Apollo System</div>
     </div>
 
+    <!-- CLICKABLE TILES -->
     <div class="row g-3 mb-4">
         <div class="col-md-3">
-            <div class="card border-0 shadow-sm bg-dark text-white h-100">
-                <div class="card-body">
-                    <h6 class="text-uppercase small opacity-75">Total Keys</h6>
-                    <h2 class="display-6 fw-bold">@TotalKeys</h2>
-                    <div class="small"><i class="bi bi-key"></i> Registered Hardware</div>
+            <a href="/keys" class="text-decoration-none">
+                <div class="card border-0 shadow-sm bg-dark text-white h-100 hover-card">
+                    <div class="card-body">
+                        <h6 class="text-uppercase small opacity-75">Total Keys</h6>
+                        <h2 class="display-6 fw-bold mb-0">@TotalKeys</h2>
+                    </div>
+                </div>
+            </a>
+        </div>
+        <div class="col-md-3">
+            <a href="/keys?filter=Stock" class="text-decoration-none">
+                <div class="card border-0 shadow-sm bg-info text-white h-100 hover-card">
+                    <div class="card-body">
+                        <h6 class="text-uppercase small opacity-75">Available (Loose)</h6>
+                        <h2 class="display-6 fw-bold mb-0">@AvailableKeys</h2>
+                    </div>
+                </div>
+            </a>
+        </div>
+        <div class="col-md-3">
+            <a href="/bunches" class="text-decoration-none">
+                <div class="card border-0 shadow-sm bg-secondary text-white h-100 hover-card">
+                    <div class="card-body">
+                        <h6 class="text-uppercase small opacity-75">Bound in Bunches</h6>
+                        <h2 class="display-6 fw-bold mb-0">@KeysInBunches</h2>
+                    </div>
+                </div>
+            </a>
+        </div>
+        <div class="col-md-3">
+            <a href="/locks" class="text-decoration-none">
+                <div class="card border-0 shadow-sm bg-primary text-white h-100 hover-card">
+                    <div class="card-body">
+                        <h6 class="text-uppercase small opacity-75">Unique Locks</h6>
+                        <h2 class="display-6 fw-bold mb-0">@TotalLocks</h2>
+                    </div>
+                </div>
+            </a>
+        </div>
+    </div>
+
+    <!-- ROW 1: NEW SMART WIDGETS -->
+    <div class="row g-4 mb-4">
+        <div class="col-lg-4">
+            <div class="card border-0 shadow-sm h-100 border-top border-success border-4">
+                <div class="card-header bg-white py-3">
+                    <h5 class="mb-0 fw-bold text-success"><i class="bi bi-lightning-charge me-2"></i>Quick Issue (Bunch)</h5>
+                </div>
+                <div class="card-body bg-light">
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">Select Bunch</label>
+                        <select class="form-select shadow-sm" @bind="quickBunchId">
+                            <option value="0">-- Available Bunches --</option>
+                            @foreach (var b in AvailableBunchesList) { <option value="@b.Id">@b.Name</option> }
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">Issue To</label>
+                        <input type="text" class="form-control shadow-sm" placeholder="Search name..." list="memberDatalist" @bind="quickIssueTo" />
+                        <datalist id="memberDatalist">
+                            @foreach(var m in AllMembers) { <option value="@m.FullName"></option> }
+                        </datalist>
+                    </div>
+                    <button class="btn btn-success w-100 fw-bold" disabled="@(quickBunchId == 0 || string.IsNullOrWhiteSpace(quickIssueTo))" @onclick="ProcessQuickIssue">
+                        Issue Bunch Instantly
+                    </button>
+                    @if (showQuickSuccess)
+                    {
+                        <div class="text-success small fw-bold text-center mt-2"><i class="bi bi-check-circle"></i> Issued successfully!</div>
+                    }
                 </div>
             </div>
         </div>
-        <div class="col-md-3">
-            <div class="card border-0 shadow-sm bg-info text-white h-100">
-                <div class="card-body">
-                    <h6 class="text-uppercase small opacity-75">Available (Loose)</h6>
-                    <h2 class="display-6 fw-bold">@AvailableKeys</h2>
-                    <div class="small"><i class="bi bi-inbox"></i> Ready to Issue</div>
+
+        <div class="col-lg-8">
+            <div class="card border-0 shadow-sm h-100 border-top border-primary border-4">
+                <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0 fw-bold text-primary"><i class="bi bi-calendar-event me-2"></i>Show Keys Required (Next 30 Days)</h5>
+                    <a href="/issue-return" class="btn btn-sm btn-outline-primary">Go to Key Desk</a>
                 </div>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card border-0 shadow-sm bg-secondary text-white h-100">
-                <div class="card-body">
-                    <h6 class="text-uppercase small opacity-75">Bound in Bunches</h6>
-                    <h2 class="display-6 fw-bold">@KeysInBunches</h2>
-                    <div class="small"><i class="bi bi-paperclip"></i> Attached Keys</div>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card border-0 shadow-sm bg-primary text-white h-100">
-                <div class="card-body">
-                    <h6 class="text-uppercase small opacity-75">Unique Locks</h6>
-                    <h2 class="display-6 fw-bold">@TotalLocks</h2>
-                    <div class="small"><i class="bi bi-door-closed"></i> Access Points</div>
+                <div class="card-body p-0 table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="bg-light small">
+                            <tr>
+                                <th class="ps-3">Show Date</th>
+                                <th>Crew Member</th>
+                                <th>Required Bunch</th>
+                                <th>Missing Context</th>
+                                <th class="text-end pe-3">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var req in UpcomingKeyRequirements)
+                            {
+                                <tr>
+                                    <td class="ps-3 fw-bold small">@req.Date.ToString("ddd dd MMM")</td>
+                                    <td>
+                                        <div class="fw-bold">@req.CrewName</div>
+                                        <div class="text-muted small">@req.ProductionName</div>
+                                    </td>
+                                    <td class="fw-bold text-primary">@req.TargetBunch.Name</td>
+                                    <td>
+                                        @if (req.MissingLocks.Count == 0)
+                                        {
+                                            <span class="badge bg-success opacity-75"><i class="bi bi-check-all"></i> Has equivalent keys</span>
+                                        }
+                                        else if (req.HeldLocks.Count > 0)
+                                        {
+                                            <span class="badge bg-warning text-dark"><i class="bi bi-exclamation-triangle"></i> Partial keys held</span>
+                                            <div class="small text-muted mt-1">Missing @req.MissingLocks.Count lock(s)</div>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-danger opacity-75"><i class="bi bi-x-circle"></i> Needs all keys</span>
+                                        }
+                                    </td>
+                                    <td class="text-end pe-3">
+    @if (req.IsAlreadyIssuedToThem)
+    {
+        <span class="badge bg-success px-3 py-2"><i class="bi bi-check-circle"></i> Bunch Issued</span>
+    }
+    else
+    {
+        @if (req.IsIssuedToSomeoneElse)
+        {
+            <div class="small fw-bold text-danger mb-1">Bunch with @req.CurrentHolder</div>
+        }
+        <button class="btn btn-sm btn-primary shadow-sm fw-bold" @onclick="() => OpenResolveModal(req)">Resolve</button>
+    }
+</td>
+                                </tr>
+                            }
+                            @if (!UpcomingKeyRequirements.Any())
+                            {
+                                <tr><td colspan="5" class="text-center py-4 text-muted fst-italic">No key handovers scheduled in the next 30 days.</td></tr>
+                            }
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </div>
     </div>
 
+    <!-- ROW 2: RESTORED ORIGINAL CONTENT -->
     <div class="row g-4">
         <div class="col-lg-7">
             <div class="card border-0 shadow-sm h-100">
                 <div class="card-header bg-white py-3">
                     <h5 class="mb-0 fw-bold">Recent Key Movements</h5>
                 </div>
-                <div class="card-body p-0">
+                <div class="card-body p-0 table-responsive">
                     <table class="table table-hover align-middle mb-0">
                         <thead class="bg-light small">
                             <tr>
@@ -97,7 +208,7 @@
                     {
                         <div class="text-center py-5 text-muted">
                             <i class="bi bi-check-circle h1 d-block mb-2"></i>
-                            All keys accounted for.
+                            All keys accounted for recently.
                         </div>
                     }
                     else
@@ -125,41 +236,373 @@
     </div>
 </div>
 
+<!-- SMART RESOLUTION MODAL -->
+@if (ShowResolveModal && ResolvingReq != null)
+{
+    <div class="modal fade show d-block" style="background-color: rgba(0,0,0,0.6);" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content shadow-lg border-primary">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title fw-bold"><i class="bi bi-shield-lock-fill me-2"></i>Resolve Keys for @ResolvingReq.CrewName</h5>
+                    <button type="button" class="btn-close btn-close-white" @onclick="() => ShowResolveModal = false"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <div class="row g-4">
+                        <div class="col-md-6">
+                            <h6 class="fw-bold text-success border-bottom pb-2"><i class="bi bi-check-circle me-1"></i> Keys Already Held</h6>
+                            <ul class="list-group list-group-flush mb-3">
+                                @foreach (var held in ResolvingReq.HeldLocks)
+                                {
+                                    <li class="list-group-item small py-1"><i class="bi bi-key text-success me-2"></i>@held.LockCode - @held.Name</li>
+                                }
+                                @if (!ResolvingReq.HeldLocks.Any()) { <li class="list-group-item small text-muted fst-italic py-1">None currently checked out.</li> }
+                            </ul>
+
+                            <h6 class="fw-bold text-danger border-bottom pb-2 mt-4"><i class="bi bi-x-circle me-1"></i> Locks They Are Missing</h6>
+                            <ul class="list-group list-group-flush">
+                                @foreach (var missing in ResolvingReq.MissingLocks)
+                                {
+                                    <li class="list-group-item small py-1"><i class="bi bi-door-closed text-danger me-2"></i>@missing.LockCode - @missing.Name</li>
+                                }
+                                @if (!ResolvingReq.MissingLocks.Any()) { <li class="list-group-item small text-muted fst-italic py-1">They hold equivalent keys for this entire bunch!</li> }
+                            </ul>
+                        </div>
+                        <div class="col-md-6 border-start">
+                            <h6 class="fw-bold text-dark border-bottom pb-2">Resolution Action</h6>
+                            
+                            <div class="d-grid gap-3 mt-3">
+                                <button class="btn btn-outline-dark fw-bold text-start" @onclick='() => ResolveMode = "Own"'>
+                                    <i class="bi bi-hand-thumbs-up me-2"></i> Mark as Resolved (Own Keys)
+                                    <div class="small fw-normal mt-1 opacity-75">Dismiss this requirement for the run.</div>
+                                </button>
+                                
+                                <button class="btn btn-outline-primary fw-bold text-start" @onclick='() => ResolveMode = "Bunch"'>
+                                    <i class="bi bi-collection me-2"></i> Issue Master Bunch Anyway
+                                    <div class="small fw-normal mt-1 opacity-75">Give them the full '@ResolvingReq.TargetBunch.Name' bunch.</div>
+                                </button>
+
+                                @if (ResolvingReq.MissingLocks.Any())
+                                {
+                                    <button class="btn btn-outline-success fw-bold text-start" @onclick='() => ResolveMode = "Loose"'>
+                                        <i class="bi bi-key me-2"></i> Issue Missing Loose Keys
+                                        <div class="small fw-normal mt-1 opacity-75">Select individual spare keys to fill their gaps.</div>
+                                    </button>
+                                }
+                            </div>
+                        </div>
+                    </div>
+
+                    @if (ResolveMode == "Loose")
+                    {
+                        <div class="mt-4 p-3 bg-light border rounded border-success">
+                            <h6 class="fw-bold mb-3">Select Loose Keys to Issue</h6>
+                            @foreach (var missing in ResolvingReq.MissingLocks)
+                            {
+                                <div class="mb-2">
+                                    <label class="small fw-bold">@missing.LockCode - @missing.Name</label>
+                                    <select class="form-select form-select-sm" @bind="SelectedMissingKeys[missing.Id]">
+                                        <option value="0">-- Do Not Issue --</option>
+                                        @if (LooseKeysForMissingLocks.ContainsKey(missing))
+                                        {
+                                            @foreach (var k in LooseKeysForMissingLocks[missing])
+                                            {
+                                                <option value="@k.Id">Seq #@k.SequenceNumber</option>
+                                            }
+                                        }
+                                    </select>
+                                </div>
+                            }
+                            <button class="btn btn-success fw-bold mt-3 w-100" @onclick="ExecuteIssueMissingKeys">Issue Selected & Mark Resolved</button>
+                        </div>
+                    }
+
+                    @if (ResolveMode == "Bunch")
+                    {
+                        <div class="mt-4 p-3 bg-light border rounded border-primary text-center">
+                            <p class="mb-3">This will instantly issue the <strong>@ResolvingReq.TargetBunch.Name</strong> to @ResolvingReq.CrewName.</p>
+                            <button class="btn btn-primary fw-bold" @onclick="ExecuteIssueBunchAnyway">Confirm Issue Master Bunch</button>
+                        </div>
+                    }
+                    
+                    @if (ResolveMode == "Own")
+                    {
+                        <div class="mt-4 p-3 bg-light border rounded border-dark text-center">
+                            <p class="mb-3">This will hide the requirement for the remainder of this show's run.</p>
+                            <button class="btn btn-dark fw-bold" @onclick="ExecuteMarkResolved">Confirm Resolution</button>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<style>
+    .hover-card { transition: transform 0.2s, box-shadow 0.2s; }
+    .hover-card:hover { transform: translateY(-3px); box-shadow: 0 .5rem 1rem rgba(0,0,0,.15)!important; }
+</style>
+
 @code {
     private int TotalKeys;
     private int AvailableKeys;
     private int KeysInBunches;
     private int TotalLocks;
+
+    private List<Bunch> AvailableBunchesList = new();
+    private List<Member> AllMembers = new();
+    private int quickBunchId = 0;
+    private string quickIssueTo = "";
+    private bool showQuickSuccess = false;
+
+    // Restored Lists
     private List<CheckoutTransaction> RecentTransactions = new();
     private List<CheckoutTransaction> StaleTransactions = new();
 
-    protected override async Task OnInitializedAsync()
+    // Modal State
+    private bool ShowResolveModal = false;
+    private KeyReqDto? ResolvingReq;
+    private string ResolveMode = "";
+    private Dictionary<int, int> SelectedMissingKeys = new();
+    private Dictionary<HardwareLock, List<KeyRecord>> LooseKeysForMissingLocks = new();
+
+    public class KeyReqDto
+    {
+        public int CrewId { get; set; }
+        public DateTime Date { get; set; }
+        public string CrewName { get; set; } = "";
+        public string ProductionName { get; set; } = "";
+        public Bunch TargetBunch { get; set; } = new();
+        public bool IsAlreadyIssuedToThem { get; set; }
+        public bool IsIssuedToSomeoneElse { get; set; }
+        public string CurrentHolder { get; set; } = "";
+        public List<HardwareLock> HeldLocks { get; set; } = new();
+        public List<HardwareLock> MissingLocks { get; set; } = new();
+    }
+    
+    private List<KeyReqDto> UpcomingKeyRequirements = new();
+
+    protected override async Task OnInitializedAsync() => await LoadData();
+
+    private async Task<string> GetStaffDisplayName()
+    {
+        using var context = await DbFactory.CreateDbContextAsync();
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        if (authState.User.Identity?.IsAuthenticated == true)
+        {
+            var appUser = await context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.UserName == authState.User.Identity.Name);
+            if (appUser != null && !string.IsNullOrWhiteSpace(appUser.FirstName)) return $"{appUser.FirstName} {appUser.LastName}".Trim();
+        }
+        return authState.User.Identity?.Name ?? "System";
+    }
+
+    private async Task LoadData()
     {
         using var context = await DbFactory.CreateDbContextAsync();
         
+        // Stats
         TotalKeys = await context.Keys.CountAsync();
         TotalLocks = await context.Locks.CountAsync();
         
-        var attachedIds = await context.KeyBunchAssignments
-            .Where(ka => ka.RemovedDate == null)
-            .Select(ka => ka.KeyRecordId)
-            .ToListAsync();
-            
+        var attachedIds = await context.KeyBunchAssignments.Where(ka => ka.RemovedDate == null).Select(ka => ka.KeyRecordId).ToListAsync();
         AvailableKeys = await context.Keys.CountAsync(k => k.Status == "In Stock" && !attachedIds.Contains(k.Id));
         KeysInBunches = attachedIds.Count;
 
+        AllMembers = await context.Members.AsNoTracking().ToListAsync();
+        AvailableBunchesList = await context.Bunches.AsNoTracking().Where(b => b.IsActive && !b.IsLost && string.IsNullOrEmpty(b.IssuedToName)).ToListAsync();
+
+        // Load Restored Tables
         RecentTransactions = await context.CheckoutTransactions
+            .AsNoTracking()
             .Include(t => t.KeyRecord).ThenInclude(k => k!.Lock)
             .Include(t => t.Bunch)
             .OrderByDescending(t => t.IssueDate)
             .Take(6)
             .ToListAsync();
 
-        var threshold = DateTime.Now.AddHours(-48);
+        var staleThreshold = DateTime.Now.AddHours(-48);
         StaleTransactions = await context.CheckoutTransactions
+            .AsNoTracking()
             .Include(t => t.KeyRecord).ThenInclude(k => k!.Lock)
             .Include(t => t.Bunch)
-            .Where(t => t.ReturnDate == null && t.IssueDate < threshold)
+            .Where(t => t.ReturnDate == null && t.IssueDate < staleThreshold)
             .ToListAsync();
+
+        // Load Upcoming Requirements
+        var threshold = DateTime.Today.AddDays(30);
+        var activeCrew = await context.ProductionCrews
+            .AsNoTracking()
+            .Include(c => c.Production).ThenInclude(p => p!.Performances)
+            .Include(c => c.Role)
+            .Include(c => c.Member)
+            .Include(c => c.DepMember)
+            .Where(c => c.Role!.LinkedKeyBunchId != null && !c.KeyRequirementResolved && c.Production!.Performances.Any(p => p.CurtainUp >= DateTime.Today && p.CurtainUp <= threshold))
+            .ToListAsync();
+
+        var activeCheckouts = await context.CheckoutTransactions
+            .AsNoTracking()
+            .Include(c => c.Bunch).ThenInclude(b => b!.KeyAssignments!).ThenInclude(a => a.KeyRecord).ThenInclude(k => k!.Lock)
+            .Include(c => c.KeyRecord).ThenInclude(k => k!.Lock)
+            .Where(c => c.ReturnDate == null)
+            .ToListAsync();
+
+        UpcomingKeyRequirements.Clear();
+        foreach (var crew in activeCrew)
+        {
+            var bunch = await context.Bunches.Include(b => b.KeyAssignments!).ThenInclude(a => a.KeyRecord).ThenInclude(k => k!.Lock).FirstOrDefaultAsync(b => b.Id == crew.Role!.LinkedKeyBunchId);
+            if (bunch == null) continue;
+
+            var crewName = crew.DepMember?.FullName ?? crew.Member?.FullName ?? crew.ExternalName ?? "Unknown";
+            
+            var firstPerf = crew.Production!.Performances.Where(p => p.CurtainUp >= DateTime.Today && p.CurtainUp <= threshold).OrderBy(p => p.CurtainUp).FirstOrDefault();
+            if (firstPerf == null) continue;
+
+            var userLockIds = new HashSet<int>();
+            var userTxs = activeCheckouts.Where(c => c.IssuedToName == crewName).ToList();
+            foreach (var tx in userTxs)
+            {
+                if (tx.KeyRecord != null) userLockIds.Add(tx.KeyRecord.LockId);
+                if (tx.Bunch?.KeyAssignments != null)
+                {
+                    foreach (var ka in tx.Bunch.KeyAssignments.Where(a => a.RemovedDate == null && a.KeyRecord != null))
+                        userLockIds.Add(ka.KeyRecord!.LockId);
+                }
+            }
+
+            var requiredLocks = bunch.KeyAssignments!.Where(ka => ka.RemovedDate == null && ka.KeyRecord != null).Select(ka => ka.KeyRecord!.Lock!).DistinctBy(l => l.Id).ToList();
+            var heldLocks = requiredLocks.Where(l => userLockIds.Contains(l.Id)).ToList();
+            var missingLocks = requiredLocks.Where(l => !userLockIds.Contains(l.Id)).ToList();
+
+            var bunchTx = activeCheckouts.FirstOrDefault(c => c.BunchId == bunch.Id);
+
+            UpcomingKeyRequirements.Add(new KeyReqDto
+            {
+                CrewId = crew.Id,
+                Date = firstPerf.CurtainUp,
+                CrewName = crewName,
+                ProductionName = crew.Production.Title,
+                TargetBunch = bunch,
+                IsAlreadyIssuedToThem = bunchTx != null && bunchTx.IssuedToName == crewName,
+                IsIssuedToSomeoneElse = bunchTx != null && bunchTx.IssuedToName != crewName,
+                CurrentHolder = bunchTx?.IssuedToName ?? "",
+                HeldLocks = heldLocks,
+                MissingLocks = missingLocks
+            });
+        }
+        
+        UpcomingKeyRequirements = UpcomingKeyRequirements.OrderBy(r => r.Date).ToList();
+    }
+
+    private async Task ProcessQuickIssue()
+    {
+        if (quickBunchId == 0 || string.IsNullOrWhiteSpace(quickIssueTo)) return;
+        using var context = await DbFactory.CreateDbContextAsync();
+        
+        var bunch = await context.Bunches.Include(b => b.KeyAssignments!).ThenInclude(a => a.KeyRecord).FirstOrDefaultAsync(b => b.Id == quickBunchId);
+        if (bunch != null)
+        {
+            var memberId = AllMembers.FirstOrDefault(m => m.FullName == quickIssueTo)?.Id;
+            var staffName = await GetStaffDisplayName();
+
+            bunch.IssuedToName = quickIssueTo; bunch.IssuedToMemberId = memberId; bunch.IssueDate = DateTime.Now;
+            context.CheckoutTransactions.Add(new CheckoutTransaction { BunchId = bunch.Id, IssuedToName = quickIssueTo, IssuedToMemberId = memberId, IssueDate = DateTime.Now, AuthorizedByUserName = staffName });
+            
+            foreach (var ka in bunch.KeyAssignments!.Where(a => a.RemovedDate == null)) { 
+                if (ka.KeyRecord != null) { ka.KeyRecord.Status = "Issued"; ka.KeyRecord.IssuedToName = quickIssueTo; ka.KeyRecord.IssuedToMemberId = memberId; } 
+            }
+            
+            var pendingCrew = await context.ProductionCrews.Where(c => !c.KeyRequirementResolved && (c.MemberId == memberId || c.DepMemberId == memberId || c.ExternalName == quickIssueTo)).ToListAsync();
+            foreach (var c in pendingCrew) c.KeyRequirementResolved = true;
+
+            await context.SaveChangesAsync();
+            showQuickSuccess = true;
+            quickBunchId = 0; quickIssueTo = "";
+            await LoadData();
+            
+            _ = Task.Delay(3000).ContinueWith(_ => InvokeAsync(() => { showQuickSuccess = false; StateHasChanged(); }));
+        }
+    }
+
+    private async Task OpenResolveModal(KeyReqDto req)
+    {
+        ResolvingReq = req;
+        ResolveMode = "";
+        SelectedMissingKeys.Clear();
+        LooseKeysForMissingLocks.Clear();
+
+        using var context = await DbFactory.CreateDbContextAsync();
+        var attachedIds = await context.KeyBunchAssignments.Where(ka => ka.RemovedDate == null).Select(ka => ka.KeyRecordId).ToListAsync();
+        
+        foreach(var l in req.MissingLocks)
+        {
+            var looseKeys = await context.Keys.Include(k => k.Lock).Where(k => k.LockId == l.Id && k.Status == "In Stock" && !attachedIds.Contains(k.Id)).ToListAsync();
+            LooseKeysForMissingLocks[l] = looseKeys;
+            SelectedMissingKeys[l.Id] = 0;
+        }
+        
+        ShowResolveModal = true;
+    }
+
+    private async Task ExecuteMarkResolved()
+    {
+        using var context = await DbFactory.CreateDbContextAsync();
+        var crew = await context.ProductionCrews.FindAsync(ResolvingReq!.CrewId);
+        if (crew != null) { crew.KeyRequirementResolved = true; await context.SaveChangesAsync(); }
+        ShowResolveModal = false; await LoadData();
+    }
+
+private async Task ExecuteIssueBunchAnyway()
+    {
+        using var context = await DbFactory.CreateDbContextAsync();
+        var bunch = await context.Bunches.Include(b => b.KeyAssignments!).ThenInclude(a => a.KeyRecord).FirstOrDefaultAsync(b => b.Id == ResolvingReq!.TargetBunch.Id);
+        var crew = await context.ProductionCrews.FindAsync(ResolvingReq!.CrewId);
+        var memberId = AllMembers.FirstOrDefault(m => m.FullName == ResolvingReq.CrewName)?.Id;
+        var staffName = await GetStaffDisplayName();
+
+        if (bunch != null)
+        {
+            // Close the previous transaction if someone else had it
+            var oldTx = await context.CheckoutTransactions.FirstOrDefaultAsync(t => t.BunchId == bunch.Id && t.ReturnDate == null);
+            if (oldTx != null) oldTx.ReturnDate = DateTime.Now;
+
+            bunch.IssuedToName = ResolvingReq.CrewName; 
+            bunch.IssuedToMemberId = memberId; 
+            bunch.IssueDate = DateTime.Now;
+            
+            context.CheckoutTransactions.Add(new CheckoutTransaction { BunchId = bunch.Id, IssuedToName = ResolvingReq.CrewName, IssuedToMemberId = memberId, IssueDate = DateTime.Now, AuthorizedByUserName = staffName });
+            
+            foreach (var ka in bunch.KeyAssignments!.Where(a => a.RemovedDate == null)) { 
+                if (ka.KeyRecord != null) { ka.KeyRecord.Status = "Issued"; ka.KeyRecord.IssuedToName = ResolvingReq.CrewName; ka.KeyRecord.IssuedToMemberId = memberId; } 
+            }
+        }
+        
+        if (crew != null) crew.KeyRequirementResolved = true;
+
+        await context.SaveChangesAsync();
+        ShowResolveModal = false; 
+        await LoadData();
+    }
+    private async Task ExecuteIssueMissingKeys()
+    {
+        using var context = await DbFactory.CreateDbContextAsync();
+        var crew = await context.ProductionCrews.FindAsync(ResolvingReq!.CrewId);
+        var staffName = await GetStaffDisplayName();
+        var memberId = AllMembers.FirstOrDefault(m => m.FullName == ResolvingReq.CrewName)?.Id;
+
+        foreach(var kvp in SelectedMissingKeys)
+        {
+            if (kvp.Value != 0)
+            {
+                var key = await context.Keys.FindAsync(kvp.Value);
+                if (key != null)
+                {
+                    key.Status = "Issued"; key.IssuedToName = ResolvingReq.CrewName; key.IssuedToMemberId = memberId;
+                    context.CheckoutTransactions.Add(new CheckoutTransaction { KeyRecordId = key.Id, IssuedToName = ResolvingReq.CrewName, IssuedToMemberId = memberId, IssueDate = DateTime.Now, AuthorizedByUserName = staffName });
+                }
+            }
+        }
+        
+        if (crew != null) crew.KeyRequirementResolved = true;
+        await context.SaveChangesAsync();
+        ShowResolveModal = false; await LoadData();
     }
 }

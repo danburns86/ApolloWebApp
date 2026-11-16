@@ -5,6 +5,9 @@
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Policy = SystemPermissions.ManageMaintenance)]
 @inject IMaintenanceService MaintenanceService
 @inject IJSRuntime JS
+@rendermode InteractiveServer
+
+<PageTitle>Completed Jobs Log</PageTitle>
 
 <div class="container-fluid px-4 py-4 d-print-none">
     <div class="d-flex justify-content-between align-items-center mb-4">
@@ -17,7 +20,10 @@
 </div>
 
 <div class="container-fluid px-4 print-area">
-    @if (isLoading) { <div class="text-center py-5 d-print-none"><div class="spinner-border text-success"></div></div> }
+    @if (isLoading)
+    {
+        <div class="text-center py-5 d-print-none"><div class="spinner-border text-success"></div></div>
+    }
     else
     {
         <div class="print-header d-none d-print-block mb-4">
@@ -44,8 +50,8 @@
                         <td class="fw-bold text-muted">#@issue.Id</td>
                         <td>@issue.ResolvedAt?.ToString("dd MMM yyyy")</td>
                         <td>
-                            <strong>@issue.Room?.Name</strong><br/>
-                            <small class="text-muted">@issue.Room?.Area?.Name</small>
+                            <strong>@(issue.Room?.Name ?? "Unknown Room")</strong><br/>
+                            <small class="text-muted">@(issue.Room?.Area?.Name ?? "Unknown Area")</small>
                         </td>
                         <td>
                             <div class="mb-1"><strong>Fault:</strong> @issue.Description</div>
@@ -56,7 +62,10 @@
                         </td>
                     </tr>
                 }
-                @if(!completed.Any()) { <tr><td colspan="4" class="text-center text-muted py-4 fst-italic">No completed jobs found.</td></tr> }
+                @if (!completed.Any())
+                {
+                    <tr><td colspan="4" class="text-center text-muted py-4 fst-italic">No completed jobs found.</td></tr>
+                }
             </tbody>
         </table>
     }

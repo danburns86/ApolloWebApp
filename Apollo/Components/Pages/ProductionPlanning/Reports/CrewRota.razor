@@ -1,0 +1,141 @@
+﻿@page "/reports/Production/CrewRota"
+@using Apollo.Models
+@using Apollo.Data
+@using Microsoft.EntityFrameworkCore
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject IJSRuntime JS
+@rendermode InteractiveServer
+
+<div class="container py-4 max-w-6xl d-print-none">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="fw-bold mb-0 text-primary"><i class="bi bi-people-fill me-2"></i>Master Crew Rota & Swaps</h2>
+            <p class="text-muted mb-0">Complete crew assignments including performance-specific cover swaps.</p>
+        </div>
+        <button class="btn btn-outline-dark fw-bold" @onclick="Print" disabled="@(selectedProd == null)"><i class="bi bi-printer me-2"></i>Print Rota</button>
+    </div>
+
+    <div class="card border-0 shadow-sm mb-4 bg-light">
+        <div class="card-body">
+            <label class="small fw-bold">Select Production</label>
+            <select class="form-select form-select-lg" @onchange="OnProductionSelected">
+                <option value="0">-- Select Production --</option>
+                @foreach (var p in productions)
+                {
+                    <option value="@p.Id">@p.Title (@p.StartDate.ToString("MMM yyyy"))</option>
+                }
+            </select>
+        </div>
+    </div>
+</div>
+
+@if (selectedProd != null)
+{
+    <div class="container max-w-6xl print-area mb-5">
+        <div class="d-none d-print-block mb-4 border-bottom pb-2">
+            <h2 class="fw-bold mb-0">@selectedProd.Title</h2>
+            <p class="text-muted mb-0">Master Crew Rota & Swaps</p>
+        </div>
+
+        <div class="card border-0 shadow-sm mb-4 printable-card">
+            <div class="card-header bg-dark text-white fw-bold">Master Team Assignments</div>
+            <div class="card-body p-0">
+                <table class="table table-bordered align-middle mb-0">
+                    <thead class="table-light small">
+                        <tr>
+                            <th class="ps-4">Role</th>
+                            <th>Master Assignee</th>
+                            <th>Dep / Cover</th>
+                            <th>Contact</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var c in selectedProd.CrewAssignments)
+                        {
+                            <tr>
+                                <td class="ps-4 fw-bold">@(c.Role?.Name ?? c.CustomRoleName)</td>
+                                <td>@(c.Member?.FullName ?? c.ExternalName ?? "VACANT")</td>
+                                <td>@(c.DepMember?.FullName ?? "—")</td>
+                                <td class="small text-muted">@(c.Member?.MobileNumber ?? c.CustomContactNumber ?? "—")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="card border-0 shadow-sm printable-card">
+            <div class="card-header bg-primary text-white fw-bold">Performance Date Specific Swaps</div>
+            <div class="card-body p-0">
+                <table class="table table-bordered align-middle mb-0">
+                    <thead class="table-light small">
+                        <tr>
+                            <th class="ps-4">Show Date</th>
+                            <th>Role</th>
+                            <th>Cover / Swap Assignee</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var perf in selectedProd.Performances)
+                        {
+                            @foreach (var over in perf.Overrides)
+                            {
+                                <tr>
+                                    <td class="ps-4 fw-bold">@perf.CurtainUp.ToString("ddd dd MMM HH:mm")</td>
+                                    <td>@(over.Role?.Name ?? over.CustomRoleName ?? "Crew")</td>
+                                    <td class="fw-bold">@(over.Member?.FullName ?? over.ExternalName)</td>
+                                </tr>
+                            }
+                        }
+                        @if (!selectedProd.Performances.Any(p => p.Overrides.Any()))
+                        {
+                            <tr><td colspan="3" class="text-center py-3 text-muted fst-italic">No date-specific crew swaps logged for this run.</td></tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+}
+
+<style>
+    @@media print {
+        body * { visibility: hidden; }
+        .print-area, .print-area * { visibility: visible; }
+        .print-area { position: absolute; left: 0; top: 0; width: 100%; }
+        .d-print-none { display: none !important; }
+        .printable-card { border: 1px solid #ddd !important; box-shadow: none !important; }
+        .bg-dark { background-color: #343a40 !important; color: white !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        .bg-primary { background-color: #0d6efd !important; color: white !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        .table-light { background-color: #f8f9fa !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    }
+</style>
+
+@code {
+    private List<Production> productions = new();
+    private Production? selectedProd;
+
+    protected override async Task OnInitializedAsync()
+    {
+        using var context = await DbFactory.CreateDbContextAsync();
+        productions = await context.Productions.Where(p => !p.IsArchived).ToListAsync();
+    }
+
+    private async Task OnProductionSelected(ChangeEventArgs e)
+    {
+        int id = int.Parse(e.Value?.ToString() ?? "0");
+        if (id == 0) { selectedProd = null; return; }
+
+        using var context = await DbFactory.CreateDbContextAsync();
+        selectedProd = await context.Productions
+            .AsNoTracking()
+            .Include(p => p.CrewAssignments).ThenInclude(c => c.Role)
+            .Include(p => p.CrewAssignments).ThenInclude(c => c.Member)
+            .Include(p => p.CrewAssignments).ThenInclude(c => c.DepMember)
+            .Include(p => p.Performances).ThenInclude(perf => perf.Overrides).ThenInclude(o => o.Member)
+            .FirstOrDefaultAsync(p => p.Id == id);
+    }
+
+    private async Task Print() => await JS.InvokeVoidAsync("window.print");
+}

@@ -1,0 +1,155 @@
+﻿<h3>NonMemberCastReport</h3>
+
+@code {
+
+}
+@page "/reports/Production/NonMemberCast"
+@using Apollo.Models
+@using Apollo.Data
+@using Microsoft.EntityFrameworkCore
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@rendermode InteractiveServer
+
+<div class="container py-4 max-w-6xl">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="fw-bold mb-0 text-warning"><i class="bi bi-person-exclamation me-2"></i>Non-Member Cast Roster</h2>
+            <p class="text-muted mb-0">Identify unlinked actors and reconcile temporary <code>*</code> records with MemberMojo accounts.</p>
+        </div>
+    </div>
+
+    <div class="card border-0 shadow-sm">
+        <div class="card-body p-0">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="bg-light small">
+                    <tr>
+                        <th class="ps-4">Actor Name</th>
+                        <th>Production</th>
+                        <th>Character</th>
+                        <th>Status</th>
+                        <th class="text-end pe-4">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var item in nonMembers)
+                    {
+                        <tr>
+                            <td class="ps-4 fw-bold">@item.ActorName</td>
+                            <td>@item.ProductionTitle</td>
+                            <td>@item.CharacterName</td>
+                            <td><span class="badge bg-warning text-dark">Non-Member / Temp</span></td>
+                            <td class="text-end pe-4">
+                                <button class="btn btn-sm btn-primary fw-bold" @onclick="() => OpenReconcileModal(item)">
+                                    <i class="bi bi-link-45deg me-1"></i>Link to Member Record
+                                </button>
+                            </td>
+                        </tr>
+                    }
+                    @if (!nonMembers.Any())
+                    {
+                        <tr><td colspan="5" class="text-center py-4 text-muted fst-italic">All cast members are linked to active MemberMojo records!</td></tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+@if (showModal && selectedItem != null)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow-lg">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title fw-bold">Reconcile Member Assignment</h5>
+                    <button type="button" class="btn-close btn-close-white" @onclick="() => showModal = false"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <p class="mb-3">Link <strong>@selectedItem.ActorName</strong> (Role: @selectedItem.CharacterName) to an official MemberMojo account:</p>
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">Select Active Member</label>
+                        <select class="form-select" @bind="targetMemberId">
+                            <option value="0">-- Choose Member --</option>
+                            @foreach (var m in allMembers)
+                            {
+                                <option value="@m.Id">@m.FullName (@m.Email)</option>
+                            }
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light">
+                    <button class="btn btn-secondary" @onclick="() => showModal = false">Cancel</button>
+                    <button class="btn btn-success px-4 fw-bold" @onclick="SaveLink" disabled="@(targetMemberId == 0)">Link & Merge History</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<NonMemberRecord> nonMembers = new();
+    private List<Member> allMembers = new();
+    private bool showModal = false;
+    private NonMemberRecord? selectedItem;
+    private int targetMemberId = 0;
+
+    protected override async Task OnInitializedAsync() => await LoadData();
+
+    private async Task LoadData()
+    {
+        using var context = await DbFactory.CreateDbContextAsync();
+        allMembers = await context.Members.Where(m => !m.IsTemporaryPlaceholder).OrderBy(m => m.LastName).ToListAsync();
+
+        nonMembers.Clear();
+        var castItems = await context.ProductionCasts
+            .Include(c => c.Member)
+            .Include(c => c.Production)
+            .Where(c => (c.MemberId != null && c.Member!.IsTemporaryPlaceholder) || (c.MemberId == null && !string.IsNullOrEmpty(c.ExternalName)))
+            .ToListAsync();
+
+        foreach (var c in castItems)
+        {
+            nonMembers.Add(new NonMemberRecord
+            {
+                CastId = c.Id,
+                ActorName = c.Member?.FullName ?? c.ExternalName ?? "Unknown",
+                ProductionTitle = c.Production?.Title ?? "",
+                CharacterName = c.CharacterName
+            });
+        }
+    }
+
+    private void OpenReconcileModal(NonMemberRecord item)
+    {
+        selectedItem = item;
+        targetMemberId = 0;
+        showModal = true;
+    }
+
+    private async Task SaveLink()
+    {
+        if (selectedItem == null || targetMemberId == 0) return;
+        using var context = await DbFactory.CreateDbContextAsync();
+
+        var dbCast = await context.ProductionCasts.FindAsync(selectedItem.CastId);
+        if (dbCast != null)
+        {
+            dbCast.MemberId = targetMemberId;
+            dbCast.ExternalName = null;
+            context.ProductionCasts.Update(dbCast);
+            await context.SaveChangesAsync();
+        }
+
+        showModal = false;
+        await LoadData();
+    }
+
+    public class NonMemberRecord
+    {
+        public int CastId { get; set; }
+        public string ActorName { get; set; } = string.Empty;
+        public string ProductionTitle { get; set; } = string.Empty;
+        public string CharacterName { get; set; } = string.Empty;
+    }
+}

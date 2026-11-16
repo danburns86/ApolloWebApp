@@ -1,0 +1,222 @@
+﻿@page "/admin/production/signin/{id:int}"
+@using Apollo.Models
+@using Apollo.Data
+@using Microsoft.EntityFrameworkCore
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject IJSRuntime JS
+@rendermode InteractiveServer
+
+<PageTitle>Sign-In Matrix - @(prod?.Title ?? "Loading...")</PageTitle>
+
+<div class="container-fluid py-4 max-w-7xl d-print-none">
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-3">
+        <div>
+            <a href="@($"/admin/production/hub/{id}")" class="text-decoration-none small text-muted">
+                <i class="bi bi-arrow-left"></i> Back to Production Hub
+            </a>
+            <h2 class="fw-bold mt-1 text-dark mb-0">
+                <i class="bi bi-clipboard-check text-success me-2"></i>Live Register & Full Run Matrix
+            </h2>
+            <p class="text-muted mb-0">@prod?.Title - Master Operational Roster</p>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+            <button class="btn btn-primary fw-bold shadow-sm" @onclick="PrintLandscapeMatrix">
+                <i class="bi bi-printer me-2"></i>Print Full Run Matrix (A4 Landscape)
+            </button>
+        </div>
+    </div>
+
+    <!-- DAILY LIVE REGISTER TABLE -->
+    <div class="card shadow-sm border-0 mb-4">
+        <div class="card-header bg-dark text-white fw-bold">Live Sign-In Register (Today)</div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="bg-light">
+                        <tr>
+                            <th class="ps-4" style="width: 25%;">Primary Assignee</th>
+                            <th style="width: 20%;">Dep / Cover</th>
+                            <th style="width: 20%;">Role / Character</th>
+                            <th style="width: 15%;">Contact</th>
+                            <th style="width: 10%;">Status</th>
+                            <th class="text-end pe-4" style="width: 10%;">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var person in dailyRegister)
+                        {
+                            <tr class="@(person.IsSignedIn ? "bg-success-subtle" : "")">
+                                <td class="ps-4 fw-bold fs-6">@person.MainName</td>
+                                <td>@(string.IsNullOrEmpty(person.DepName) ? "—" : person.DepName)</td>
+                                <td class="text-muted fw-bold">@person.RoleName</td>
+                                <td class="text-muted">@(string.IsNullOrEmpty(person.ContactNumber) ? "—" : person.ContactNumber)</td>
+                                <td>
+                                    @if (person.IsSignedIn) { <span class="badge bg-success fs-6">IN</span> }
+                                    else { <span class="badge bg-secondary fs-6">OUT</span> }
+                                </td>
+                                <td class="text-end pe-4">
+                                    <button class="btn btn-sm @(person.IsSignedIn ? "btn-outline-danger" : "btn-success") fw-bold w-100" @onclick="() => person.IsSignedIn = !person.IsSignedIn">
+                                        @(person.IsSignedIn ? "Sign Out" : "Sign In")
+                                    </button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- FULL SHOW SIGN IN SHEET (A4 LANDSCAPE PRINT AREA) -->
+<div class="d-none d-print-block print-landscape-area">
+    <div class="text-center mb-3">
+        <h2 class="fw-bold mb-0 text-uppercase">@(prod?.Title) - Sign In</h2>
+    </div>
+
+    <table class="table table-bordered table-sm align-middle text-center matrix-table" style="width: 100%; table-layout: fixed;">
+        <thead class="table-dark text-uppercase">
+            <tr>
+                <th class="text-start" style="width: 20%;">CHARACTER / ROLE</th>
+                <th class="text-start" style="width: 15%;">SURNAME</th>
+                <th class="text-start" style="width: 15%;">FIRST NAME</th>
+                <th style="width: 12%;">MOBILE</th>
+                @foreach (var perf in performances)
+                {
+                    <th style="width: auto;">@perf.CurtainUp.ToString("ddd").Substring(0, 2) @perf.CurtainUp.ToString("d/M")</th>
+                }
+            </tr>
+        </thead>
+        <tbody>
+            <!-- CAST -->
+            <tr class="table-secondary fw-bold text-start"><td colspan="@(4 + performances.Count)">CAST</td></tr>
+            @foreach (var c in castList)
+            {
+                var nameParts = SplitName(c.Member?.FullName ?? c.ExternalName ?? "VACANT");
+                <tr>
+                    <td class="text-start fw-bold">@c.CharacterName</td>
+                    <td class="text-start text-uppercase fw-bold">@nameParts.surname</td>
+                    <td class="text-start">@nameParts.firstName</td>
+                    <td class="small">@(c.Member?.MobileNumber ?? c.CustomContactNumber ?? "")</td>
+                    @foreach (var perf in performances) { <td></td> }
+                </tr>
+            }
+
+            <!-- GAP -->
+            <tr style="border-left: hidden; border-right: hidden;"><td colspan="@(4 + performances.Count)" style="height: 12px; border: none;"></td></tr>
+
+            <!-- CREW -->
+            <tr class="table-secondary fw-bold text-start"><td colspan="@(4 + performances.Count)">CREW</td></tr>
+            @foreach (var cr in crewList)
+            {
+                var nameParts = SplitName(cr.Member?.FullName ?? cr.ExternalName ?? "VACANT");
+                <tr>
+                    <td class="text-start fw-bold">@(cr.Role?.Name ?? cr.CustomRoleName ?? "Crew")</td>
+                    <td class="text-start text-uppercase fw-bold">@nameParts.surname</td>
+                    <td class="text-start">@nameParts.firstName</td>
+                    <td class="small">@(cr.Member?.MobileNumber ?? cr.CustomContactNumber ?? "")</td>
+                    @foreach (var perf in performances) { <td></td> }
+                </tr>
+            }
+        </tbody>
+        
+        <!-- TIMINGS GRID -->
+        <tfoot class="bg-light small">
+            <tr>
+                <td colspan="4" class="text-end fw-bold pe-3 text-uppercase">Show Start Time</td>
+                @foreach (var perf in performances) { <td class="fw-bold">@perf.CurtainUp.ToString("HH:mm")</td> }
+            </tr>
+            <tr>
+                <td colspan="4" class="text-end fw-bold pe-3 text-uppercase">Interval Start</td>
+                @foreach (var perf in performances) { 
+                    <td>@(perf.IntervalTime?.ToString("HH:mm") ?? "—")</td> 
+                }
+            </tr>
+            <tr>
+                <td colspan="4" class="text-end fw-bold pe-3 text-uppercase">Interval End</td>
+                @foreach (var perf in performances) { 
+                    var intEnd = perf.IntervalTime?.AddMinutes(prod?.IntervalMinutes > 0 ? prod.IntervalMinutes : 20);
+                    <td>@(intEnd?.ToString("HH:mm") ?? "—")</td> 
+                }
+            </tr>
+            <tr>
+                <td colspan="4" class="text-end fw-bold pe-3 text-uppercase">End Time</td>
+                @foreach (var perf in performances) { 
+                    <td>@(perf.EndTime?.ToString("HH:mm") ?? "—")</td> 
+                }
+            </tr>
+        </tfoot>
+    </table>
+</div>
+
+<style>
+    @@media print {
+        /* Force A4 Landscape */
+        @@page { size: A4 landscape; margin: 10mm; }
+        
+        /* Hide app UI, show only print area */
+        body * { visibility: hidden; }
+        .print-landscape-area, .print-landscape-area * { visibility: visible; }
+        .print-landscape-area { position: absolute; left: 0; top: 0; width: 100%; font-family: 'Segoe UI', Arial, sans-serif; }
+        .d-print-none { display: none !important; }
+        
+        /* Stop rows from cutting in half across pages */
+        table.matrix-table { page-break-inside: auto; border-collapse: collapse; }
+        tr { page-break-inside: avoid; page-break-after: auto; }
+        thead { display: table-header-group; }
+        tfoot { display: table-footer-group; }
+
+        /* Crisp black & white formatting */
+        .matrix-table th, .matrix-table td { border: 1px solid #000 !important; padding: 6px 4px !important; font-size: 11px !important; vertical-align: middle; }
+        .table-dark th { background-color: #e9ecef !important; color: #000 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        .table-secondary td { background-color: #f8f9fa !important; color: #000 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    }
+</style>
+
+@code {
+    [Parameter] public int id { get; set; }
+    private Production? prod;
+    private bool isLoading = true;
+    private List<SignInRecord> dailyRegister = new();
+    private List<Performance> performances = new();
+    private List<ProductionCast> castList = new();
+    private List<ProductionCrew> crewList = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        isLoading = true;
+        using var context = await DbFactory.CreateDbContextAsync();
+        prod = await context.Productions.FirstOrDefaultAsync(p => p.Id == id);
+        
+        if (prod != null)
+        {
+            performances = await context.Performances.Where(p => p.ProductionId == id).OrderBy(p => p.CurtainUp).ToListAsync();
+            castList = await context.ProductionCasts.Include(c => c.Member).Where(c => c.ProductionId == id).ToListAsync();
+            crewList = await context.ProductionCrews.Include(c => c.Role).Include(c => c.Member).Where(c => c.ProductionId == id).ToListAsync();
+
+            foreach (var c in castList) dailyRegister.Add(new SignInRecord { MainName = c.Member?.FullName ?? c.ExternalName ?? "VACANT", RoleName = c.CharacterName });
+            foreach (var c in crewList) dailyRegister.Add(new SignInRecord { MainName = c.Member?.FullName ?? c.ExternalName ?? "VACANT", RoleName = c.Role?.Name ?? "Crew" });
+        }
+        isLoading = false;
+    }
+
+    private (string firstName, string surname) SplitName(string fullName)
+    {
+        if (string.IsNullOrWhiteSpace(fullName)) return ("", "");
+        var parts = fullName.Trim().Split(' ', 2);
+        return parts.Length == 1 ? (parts[0], "") : (parts[0], parts[1]);
+    }
+
+    private async Task PrintLandscapeMatrix() => await JS.InvokeVoidAsync("window.print");
+    private async Task PrintStandardRegister() => await JS.InvokeVoidAsync("window.print");
+
+    public class SignInRecord
+    {
+        public string MainName { get; set; } = string.Empty;
+        public string DepName { get; set; } = string.Empty;
+        public string RoleName { get; set; } = string.Empty;
+        public string ContactNumber { get; set; } = string.Empty;
+        public bool IsSignedIn { get; set; }
+    }
+}

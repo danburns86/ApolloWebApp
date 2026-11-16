@@ -12,13 +12,11 @@
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
             <h2 class="fw-bold mb-0 text-primary">Role Templates</h2>
-            <p class="text-muted mb-0">Define which roles appear by default for each show type.</p>
+            <p class="text-muted mb-0">Define default crew roles for each production type.</p>
         </div>
-        <div class="d-flex gap-2">
-            <button class="btn btn-primary shadow-sm px-4 fw-bold" @onclick="() => OpenAddModal()">
-                <i class="bi bi-plus-lg me-2"></i>Create New Role
-            </button>
-        </div>
+        <button class="btn btn-primary shadow-sm px-4 fw-bold" @onclick="OpenAddModal">
+            <i class="bi bi-plus-lg me-2"></i>Create New Role
+        </button>
     </div>
 
     @if (isLoading)
@@ -41,14 +39,7 @@
                             {
                                 <li class="list-group-item d-flex justify-content-between align-items-center">
                                     <div>
-                                        @if (role.IsMandatory)
-                                        {
-                                            <i class="bi bi-exclamation-circle-fill text-danger me-2" title="Mandatory"></i>
-                                        }
-                                        else
-                                        {
-                                            <i class="bi bi-info-circle text-muted me-2" title="Optional"></i>
-                                        }
+                                        <i class="bi @(role.IsMandatory ? "bi-exclamation-circle-fill text-danger" : "bi-info-circle text-muted") me-2"></i>
                                         @role.Name
                                     </div>
                                     <div class="btn-group">
@@ -59,7 +50,7 @@
                             }
                             @if (!roles.Any(r => r.CategoryId == cat.Id))
                             {
-                                <li class="list-group-item text-center py-4 text-muted small italic">No roles defined for this type.</li>
+                                <li class="list-group-item text-center py-4 text-muted small fst-italic">No roles configured.</li>
                             }
                         </ul>
                     </div>
@@ -69,14 +60,13 @@
     }
 </div>
 
-@* MULTI-CATEGORY ROLE MODAL *@
 @if (showModal)
 {
-    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5); z-index: 1050;">
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
         <div class="modal-dialog modal-lg modal-dialog-centered">
             <div class="modal-content border-0 shadow-lg">
-                <div class="modal-header bg-light border-0">
-                    <h5 class="modal-title fw-bold">@(isEditMode ? "Edit Role" : "Create New Role Across Categories")</h5>
+                <div class="modal-header bg-light">
+                    <h5 class="modal-title fw-bold">@(isEditMode ? "Edit Role Template" : "Create New Role")</h5>
                     <button type="button" class="btn-close" @onclick="() => showModal = false"></button>
                 </div>
                 <div class="modal-body p-4">
@@ -85,49 +75,47 @@
                         <input type="text" class="form-control form-control-lg fw-bold" @bind="editingRoleName" placeholder="e.g. Stage Manager" />
                     </div>
 
-                    <h6 class="fw-bold mb-3 text-primary">Category Configuration</h6>
-                    <div class="table-responsive rounded border">
-                        <table class="table table-hover align-middle mb-0">
-                            <thead class="bg-light small text-uppercase">
-                                <tr>
-                                    <th>Event Type</th>
-                                    <th class="text-center">Enable for Type</th>
-                                    <th class="text-center">Is Mandatory?</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @foreach (var state in selectionStates)
-                                {
-                                    <tr class="@(state.IsIncluded ? "" : "opacity-50")">
-                                        <td class="fw-bold">
-                                            <i class="bi @state.Category.IconClass me-2"></i>@state.Category.Name
-                                        </td>
-                                        <td class="text-center">
-                                            <div class="form-check form-switch d-inline-block">
-                                                <input class="form-check-input" type="checkbox" @bind="state.IsIncluded" disabled="@(isEditMode)" />
-                                            </div>
-                                        </td>
-                                        <td class="text-center">
-                                            <div class="form-check form-switch d-inline-block">
-                                                <input class="form-check-input" type="checkbox" @bind="state.IsMandatory" disabled="@(!state.IsIncluded)" />
-                                            </div>
-                                        </td>
-                                    </tr>
-                                }
-                            </tbody>
-                        </table>
-                    </div>
-                    @if (isEditMode)
+                    @if (isEditMode && currentEditingRecord != null)
                     {
-                        <div class="alert alert-info mt-3 small mb-0">
-                            <i class="bi bi-info-circle me-2"></i> In edit mode, you can only change the name and mandatory status of the specific record you selected.
+                        <div class="form-check form-switch mb-3">
+                            <input class="form-check-input" type="checkbox" id="editMandatory" @bind="editingIsMandatory" />
+                            <label class="form-check-label fw-bold" for="editMandatory">Mark as Mandatory Role</label>
+                        </div>
+                    }
+                    else
+                    {
+                        <h6 class="fw-bold mb-3 text-primary">Category Assignment</h6>
+                        <div class="table-responsive rounded border">
+                            <table class="table table-hover align-middle mb-0">
+                                <thead class="bg-light small">
+                                    <tr>
+                                        <th>Category</th>
+                                        <th class="text-center">Include</th>
+                                        <th class="text-center">Mandatory?</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var state in selectionStates)
+                                    {
+                                        <tr class="@(state.IsIncluded ? "" : "opacity-50")">
+                                            <td class="fw-bold"><i class="bi @state.Category.IconClass me-2"></i>@state.Category.Name</td>
+                                            <td class="text-center">
+                                                <input class="form-check-input" type="checkbox" @bind="state.IsIncluded" />
+                                            </td>
+                                            <td class="text-center">
+                                                <input class="form-check-input" type="checkbox" @bind="state.IsMandatory" disabled="@(!state.IsIncluded)" />
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
                         </div>
                     }
                 </div>
                 <div class="modal-footer border-0">
                     <button class="btn btn-secondary" @onclick="() => showModal = false">Cancel</button>
-                    <button class="btn btn-primary px-4 fw-bold shadow-sm" @onclick="SaveRoles" disabled="@(string.IsNullOrEmpty(editingRoleName))">
-                        <i class="bi bi-check-lg me-2"></i>@(isEditMode ? "Save Changes" : "Create Roles")
+                    <button class="btn btn-primary px-4 fw-bold shadow-sm" @onclick="SaveRoles" disabled="@(string.IsNullOrWhiteSpace(editingRoleName))">
+                        Save Changes
                     </button>
                 </div>
             </div>
@@ -142,10 +130,10 @@
     private bool showModal = false;
     private bool isEditMode = false;
 
-    // Modal State
     private string editingRoleName = "";
-    private List<RoleSelectionState> selectionStates = new();
+    private bool editingIsMandatory = false;
     private ProductionRole? currentEditingRecord;
+    private List<RoleSelectionState> selectionStates = new();
 
     protected override async Task OnInitializedAsync() => await LoadData();
 
@@ -153,7 +141,7 @@
     {
         isLoading = true;
         using var context = await DbFactory.CreateDbContextAsync();
-        categories = await context.ProductionCategories.OrderBy(c => c.Name).ToListAsync();
+        categories = await context.ProductionCategories.OrderBy(c => c.SortOrder).ThenBy(c => c.Name).ToListAsync();
         roles = await context.ProductionRoles.Include(r => r.Category).ToListAsync();
         isLoading = false;
     }
@@ -171,14 +159,7 @@
         isEditMode = true;
         currentEditingRecord = role;
         editingRoleName = role.Name;
-        // In edit mode, we only show the one category it belongs to
-        selectionStates = new List<RoleSelectionState> {
-            new RoleSelectionState {
-                Category = role.Category!,
-                IsIncluded = true,
-                IsMandatory = role.IsMandatory
-            }
-        };
+        editingIsMandatory = role.IsMandatory;
         showModal = true;
     }
 
@@ -188,17 +169,16 @@
 
         if (isEditMode && currentEditingRecord != null)
         {
-            var record = await context.ProductionRoles.FindAsync(currentEditingRecord.Id);
-            if (record != null)
+            var dbRecord = await context.ProductionRoles.FindAsync(currentEditingRecord.Id);
+            if (dbRecord != null)
             {
-                record.Name = editingRoleName;
-                record.IsMandatory = selectionStates[0].IsMandatory;
-                context.ProductionRoles.Update(record);
+                dbRecord.Name = editingRoleName;
+                dbRecord.IsMandatory = editingIsMandatory;
+                context.ProductionRoles.Update(dbRecord);
             }
         }
         else
         {
-            // Create mode: Create a record for every "Included" category
             foreach (var state in selectionStates.Where(s => s.IsIncluded))
             {
                 context.ProductionRoles.Add(new ProductionRole
@@ -223,7 +203,6 @@
         await LoadData();
     }
 
-    // Helper class for the modal table
     public class RoleSelectionState
     {
         public ProductionCategory Category { get; set; } = null!;

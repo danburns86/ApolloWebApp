@@ -1,0 +1,197 @@
+﻿@page "/admin/production/callsheet/{id:int}"
+@using Apollo.Models
+@using Apollo.Data
+@using Microsoft.EntityFrameworkCore
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject IJSRuntime JS
+@rendermode InteractiveServer
+
+<PageTitle>Call Sheet - @(prod?.Title ?? "Production")</PageTitle>
+
+<div class="container-fluid px-4 py-3 d-print-none border-bottom bg-light mb-4">
+    <div class="d-flex justify-content-between align-items-center">
+        <a href="@($"/admin/production/hub/{id}")" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-arrow-left me-1"></i>Back to Production Hub
+        </a>
+        <div class="d-flex gap-2">
+            <button class="btn btn-dark btn-sm fw-bold shadow-sm" @onclick="PrintSheet">
+                <i class="bi bi-printer me-1"></i>Print / Export PDF Call Sheet
+            </button>
+        </div>
+    </div>
+</div>
+
+<div class="container-fluid px-4 print-area">
+    @if (isLoading)
+    {
+        <div class="text-center py-5 d-print-none"><div class="spinner-border text-primary"></div></div>
+    }
+    else if (prod == null)
+    {
+        <div class="alert alert-danger">Production not found.</div>
+    }
+    else
+    {
+        <!-- CALL SHEET HEADER -->
+        <div class="border-bottom border-dark pb-3 mb-3">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <h1 class="fw-bold mb-0 text-uppercase tracking-wide fs-2">@prod.Title</h1>
+                    <div class="text-uppercase fw-bold text-muted small">
+                        @prod.Category?.Name &bull; Official Production Call Sheet
+                    </div>
+                </div>
+                <div class="text-end small">
+                    <div><strong>Date Generated:</strong> @DateTime.Now.ToString("dd MMM yyyy HH:mm")</div>
+                    <div><strong>Running Time:</strong> @(prod.RunningTimeMinutes > 0 ? $"{prod.RunningTimeMinutes} mins" : "TBC")</div>
+                    <div><strong>Interval:</strong> @(prod.IntervalMinutes > 0 ? $"{prod.IntervalMinutes} mins" : "None")</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- KEY INFORMATION & TIMINGS -->
+        <div class="row g-3 mb-3 small">
+            <div class="col-6">
+                <div class="p-2 border rounded bg-light">
+                    <div class="fw-bold text-uppercase border-bottom pb-1 mb-1">Building Access & Key Holders</div>
+                    <div><strong>Unlocking Duty:</strong> @(unlockingMember?.FullName ?? "Unassigned")</div>
+                    <div><strong>Locking Duty:</strong> @(lockingMember?.FullName ?? "Unassigned")</div>
+                    @if (prod.Category?.IsExternal == true && !string.IsNullOrEmpty(prod.HirerName))
+                    {
+                        <div><strong>Hirer Contact:</strong> @prod.HirerName</div>
+                    }
+                </div>
+            </div>
+            <div class="col-6">
+                <div class="p-2 border rounded bg-light">
+                    <div class="fw-bold text-uppercase border-bottom pb-1 mb-1">Show Notes & Safety Warnings</div>
+                    <div><strong>Warnings:</strong> @(string.IsNullOrEmpty(prod.ContentWarnings) ? "None Logged" : prod.ContentWarnings)</div>
+                    <div><strong>FOH Notes:</strong> @(string.IsNullOrEmpty(prod.FOHNotes) ? "Standard Operation" : prod.FOHNotes)</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ROTA GRID: CREW & LOGISTICS -->
+        <div class="row g-3 mb-3">
+            <div class="col-7">
+                <h6 class="fw-bold text-uppercase border-bottom pb-1 mb-2 small">Technical & Production Crew</h6>
+                <table class="table table-sm table-bordered mb-0 small">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Role</th>
+                            <th>Assignee</th>
+                            <th>Dep / Cover</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var crew in crewList)
+                        {
+                            <tr>
+                                <td class="fw-bold">@(crew.Role?.Name ?? crew.CustomRoleName ?? "Crew")</td>
+                                <td>@(crew.Member?.FullName ?? crew.ExternalName ?? "TBC")</td>
+                                <td>@(crew.DepMember?.FullName ?? "—")</td>
+                            </tr>
+                        }
+                        @if (!crewList.Any())
+                        {
+                            <tr><td colspan="3" class="text-center text-muted fst-italic py-2">No crew assigned.</td></tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- UPCOMING REHEARSALS & SHOW RUN -->
+            <div class="col-5">
+                <h6 class="fw-bold text-uppercase border-bottom pb-1 mb-2 small">Upcoming Schedule</h6>
+                <table class="table table-sm table-bordered mb-0 small">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Date & Time</th>
+                            <th>Event / Performance</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var perf in performances.Take(5))
+                        {
+                            <tr>
+                                <td>@perf.CurtainUp.ToString("dd MMM HH:mm")</td>
+                                <td>@(string.IsNullOrEmpty(perf.PerformanceTitle) ? "Show Performance" : perf.PerformanceTitle)</td>
+                            </tr>
+                        }
+                        @if (!performances.Any())
+                        {
+                            <tr><td colspan="2" class="text-center text-muted fst-italic py-2">No performances scheduled.</td></tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- TECHNICAL NOTES -->
+        @if (!string.IsNullOrWhiteSpace(prod.TechRequirements))
+        {
+            <div class="border rounded p-2 bg-light small">
+                <div class="fw-bold text-uppercase border-bottom pb-1 mb-1">Technical Notes</div>
+                <div style="white-space: pre-line;">@prod.TechRequirements</div>
+            </div>
+        }
+    }
+</div>
+
+<style>
+    @@media print {
+        body * { visibility: hidden; }
+        .print-area, .print-area * { visibility: visible; }
+        .print-area { position: absolute; left: 0; top: 0; width: 100%; padding: 0 !important; }
+        .d-print-none { display: none !important; }
+        .table { border-color: #000 !important; }
+        th, td { border-color: #000 !important; padding: 4px 6px !important; }
+        @@page { size: A4 portrait; margin: 12mm; }
+    }
+</style>
+
+@code {
+    [Parameter] public int id { get; set; }
+    private Production? prod;
+    private Member? unlockingMember;
+    private Member? lockingMember;
+    private List<ProductionCrew> crewList = new();
+    private List<Performance> performances = new();
+    private bool isLoading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        isLoading = true;
+        using var context = await DbFactory.CreateDbContextAsync();
+
+        prod = await context.Productions
+            .Include(p => p.Category)
+            .FirstOrDefaultAsync(p => p.Id == id);
+
+        if (prod != null)
+        {
+            crewList = await context.ProductionCrews
+                .Include(c => c.Role)
+                .Include(c => c.Member)
+                .Include(c => c.DepMember)
+                .Where(c => c.ProductionId == id)
+                .ToListAsync();
+
+            performances = await context.Performances
+                .Where(p => p.ProductionId == id)
+                .OrderBy(p => p.CurtainUp)
+                .ToListAsync();
+
+            if (prod.UnlockingMemberId.HasValue)
+                unlockingMember = await context.Members.FindAsync(prod.UnlockingMemberId.Value);
+
+            if (prod.LockingMemberId.HasValue)
+                lockingMember = await context.Members.FindAsync(prod.LockingMemberId.Value);
+        }
+
+        isLoading = false;
+    }
+
+    private async Task PrintSheet() => await JS.InvokeVoidAsync("window.print");
+}

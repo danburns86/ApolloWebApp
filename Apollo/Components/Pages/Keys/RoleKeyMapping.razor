@@ -1,0 +1,116 @@
+﻿@page "/setup/role-keys"
+@using Apollo.Models
+@using Apollo.Data
+@using Microsoft.EntityFrameworkCore
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Administrator")]
+@rendermode InteractiveServer
+
+<PageTitle>Role & Key Mapping</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h2 class="fw-bold mb-0 text-primary"><i class="bi bi-diagram-3 me-2"></i>Production Role to Key Mapping</h2>
+        <p class="text-muted mb-0">Define which physical key bunches are required by default for specific production roles.</p>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0 mb-4 border-top border-primary border-4">
+    <div class="card-header bg-white py-3">
+        <div class="alert alert-info small py-2 mb-0">
+            <i class="bi bi-info-circle-fill me-2"></i>
+            When a role is mapped to a bunch here, the dashboard will automatically flag when a crew member needs those keys for an upcoming show.
+        </div>
+    </div>
+    <div class="card-body p-0 table-responsive">
+        @if (isLoading)
+        {
+            <div class="text-center py-5"><div class="spinner-border text-primary"></div></div>
+        }
+        else
+        {
+            <table class="table table-hover align-middle mb-0">
+                <thead class="bg-light small text-uppercase">
+                    <tr>
+                        <th class="ps-4" style="width: 40%;">Production Role (Template)</th>
+                        <th>Required Key Bunch</th>
+                        <th class="text-center" style="width: 15%;">Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var role in Roles.OrderBy(r => r.Name))
+                    {
+                        <tr>
+                            <td class="ps-4 fw-bold">@role.Name</td>
+                            <td>
+                                <select class="form-select shadow-sm" value="@(role.LinkedKeyBunchId ?? 0)" @onchange="(e) => SaveRoleMapping(role, e.Value)">
+                                    <option value="0">-- No Keys Required --</option>
+                                    @foreach (var b in AvailableBunches)
+                                    {
+                                        <option value="@b.Id">@b.Name</option>
+                                    }
+                                </select>
+                            </td>
+                            <td class="text-center">
+                                @if (role.LinkedKeyBunchId.HasValue)
+                                {
+                                    <span class="badge bg-success"><i class="bi bi-link"></i> Mapped</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-secondary opacity-50">Unmapped</span>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    </div>
+</div>
+
+@code {
+    private List<ProductionRole> Roles = new();
+    private List<Bunch> AvailableBunches = new();
+    private bool isLoading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        isLoading = true;
+        using var context = await DbFactory.CreateDbContextAsync();
+        
+        Roles = await context.Set<ProductionRole>().OrderBy(r => r.Name).ToListAsync();
+        
+        // Grab all active bunches
+        AvailableBunches = await context.Bunches
+            .AsNoTracking()
+            .Where(b => b.IsActive && !b.IsLost)
+            .OrderBy(b => b.Name)
+            .ToListAsync();
+            
+        isLoading = false;
+    }
+
+    private async Task SaveRoleMapping(ProductionRole role, object? value)
+    {
+        int bunchId = int.Parse(value?.ToString() ?? "0");
+        
+        using var context = await DbFactory.CreateDbContextAsync();
+        
+        // Fetch the tracked role from the database
+        var dbRole = await context.Set<ProductionRole>().FirstAsync(r => r.Id == role.Id);
+        
+        // Update its assignment
+        dbRole.LinkedKeyBunchId = bunchId == 0 ? null : bunchId;
+        
+        await context.SaveChangesAsync();
+        
+        // Refresh local UI state
+        role.LinkedKeyBunchId = dbRole.LinkedKeyBunchId;
+    }
+}

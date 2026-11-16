@@ -2,8 +2,9 @@
 @using Apollo.Models
 @using Apollo.Data
 @using Microsoft.EntityFrameworkCore
+@using Microsoft.AspNetCore.Components.Authorization
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
-@inject NavigationManager Nav
+@inject AuthenticationStateProvider AuthStateProvider
 @rendermode InteractiveServer
 
 <PageTitle>Manage Bunch Keys</PageTitle>
@@ -42,11 +43,15 @@ else
                                         <td class="ps-3 fw-bold">@ka.KeyRecord!.Lock!.LockCode @ka.KeyRecord.SequenceNumber</td>
                                         <td>@ka.KeyRecord.Lock.Name</td>
                                         <td class="text-end pe-3">
-                                            <button class="btn btn-sm btn-outline-danger" @onclick="() => RemoveKey(ka.Id)">
-                                                <i class="bi bi-trash"></i> Remove
+                                            <button class="btn btn-sm btn-outline-danger shadow-sm" @onclick="() => OpenUnlooseModal(ka)">
+                                                <i class="bi bi-unlock"></i> Unloose
                                             </button>
                                         </td>
                                     </tr>
+                                }
+                                @if (!TargetBunch.KeyAssignments.Any(a => a.RemovedDate == null))
+                                {
+                                    <tr><td colspan="3" class="text-center text-muted fst-italic py-4">No keys attached to this bunch.</td></tr>
                                 }
                             }
                         </tbody>
@@ -60,15 +65,15 @@ else
                 <div class="card-header bg-primary text-white fw-bold">Add Key to Bunch</div>
                 <div class="card-body">
                     <label class="form-label small fw-bold">Search Available Keys (In Stock Only)</label>
-                    <select class="form-select mb-3" @bind="SelectedKeyId">
+                    <select class="form-select mb-3 shadow-sm" @bind="SelectedKeyId">
                         <option value="0">-- Select a key --</option>
                         @foreach (var k in AvailableKeys)
                         {
                             <option value="@k.Id">@k.Lock!.LockCode @k.SequenceNumber - @k.Lock.Name</option>
                         }
                     </select>
-                    <button class="btn btn-primary w-100" @onclick="AddKey" disabled="@(SelectedKeyId == 0)">
-                        <i class="bi bi-plus-lg"></i> Add to Bunch
+                    <button class="btn btn-primary w-100 fw-bold shadow-sm" @onclick="AddKey" disabled="@(SelectedKeyId == 0)">
+                        <i class="bi bi-paperclip"></i> Clip to Bunch
                     </button>
                 </div>
             </div>
@@ -76,11 +81,71 @@ else
     </div>
 }
 
+<!-- UNLOOSE MODAL -->
+@if (ShowUnlooseModal && AssignmentToRemove != null)
+{
+    <div class="modal fade show d-block" style="background-color: rgba(0,0,0,0.6);" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content shadow-lg border-danger">
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title fw-bold"><i class="bi bi-unlock-fill me-2"></i>Unloose Key</h5>
+                    <button type="button" class="btn-close btn-close-white" @onclick="() => ShowUnlooseModal = false"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <p>You are removing <strong>@AssignmentToRemove.KeyRecord?.Lock?.LockCode @AssignmentToRemove.KeyRecord?.SequenceNumber</strong> from <strong>@TargetBunch?.Name</strong>.</p>
+                    <hr />
+                    <label class="fw-bold small mb-2 text-uppercase text-muted">What happens to this loose key now?</label>
+                    
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="radio" name="unlooseDest" id="destStock" checked="@(UnlooseDestination == "Stock")" @onchange='() => UnlooseDestination = "Stock"'>
+                            <label class="form-check-label fw-bold" for="destStock">Return to Box / Stock</label>
+                            <div class="small text-muted">Key goes back into the general cabinet.</div>
+                        </div>
+
+                        @if (!string.IsNullOrEmpty(TargetBunch?.IssuedToName))
+                        {
+                            <div class="form-check mb-3">
+                                <input class="form-check-input" type="radio" name="unlooseDest" id="destHolder" checked="@(UnlooseDestination == "Holder")" @onchange='() => UnlooseDestination = "Holder"'>
+                                    <label class="form-check-label fw-bold" for="destHolder">Leave with @TargetBunch.IssuedToName</label>
+                                    <div class="small text-muted">Key becomes an active loose checkout for the current bunch holder.</div>
+                                </div>
+                            }
+
+                            <div class="form-check mb-2">
+                                <input class="form-check-input" type="radio" name="unlooseDest" id="destNew" checked="@(UnlooseDestination == "New")" @onchange='() => UnlooseDestination = "New"'>
+                                    <label class="form-check-label fw-bold" for="destNew">Issue to New Holder</label>
+                                </div>
+                                @if (UnlooseDestination == "New")
+                                {
+                                    <input type="text" class="form-control form-control-sm ms-4 w-75 shadow-sm" list="allMembersList" placeholder="Search name..." @bind="NewHolderName" />
+                                    <datalist id="allMembersList">
+                                        @foreach (var m in AllMembers)
+                                        {
+                                            <option value="@m.FullName"></option>
+                                        }
+                                    </datalist>
+                                }
+                            </div>
+                            <div class="modal-footer bg-light">
+                                <button class="btn btn-secondary" @onclick="() => ShowUnlooseModal = false">Cancel</button>
+                                <button class="btn btn-danger px-4 fw-bold" @onclick="ConfirmUnloose">Unloose Key</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+
 @code {
     [Parameter] public int BunchId { get; set; }
     private Bunch? TargetBunch;
     private List<KeyRecord> AvailableKeys = new();
+    private List<Member> AllMembers = new();
     private int SelectedKeyId;
+
+    private bool ShowUnlooseModal = false;
+    private KeyBunchAssignment? AssignmentToRemove;
+    private string UnlooseDestination = "Stock";
+    private string NewHolderName = "";
 
     protected override async Task OnInitializedAsync() => await LoadData();
 
@@ -88,17 +153,14 @@ else
     {
         using var context = await DbFactory.CreateDbContextAsync();
 
+        AllMembers = await context.Members.AsNoTracking().ToListAsync();
+
         TargetBunch = await context.Bunches
             .AsNoTracking()
             .Include(b => b.KeyAssignments!).ThenInclude(ka => ka.KeyRecord).ThenInclude(k => k!.Lock)
             .FirstOrDefaultAsync(b => b.Id == BunchId);
 
-        // Keys must be "In Stock" and NOT already on another bunch
-        var keysOnOtherBunches = await context.KeyBunchAssignments
-            .AsNoTracking()
-            .Where(ka => ka.RemovedDate == null)
-            .Select(ka => ka.KeyRecordId)
-            .ToListAsync();
+        var keysOnOtherBunches = await context.KeyBunchAssignments.AsNoTracking().Where(ka => ka.RemovedDate == null).Select(ka => ka.KeyRecordId).ToListAsync();
 
         AvailableKeys = await context.Keys
             .AsNoTracking()
@@ -111,43 +173,84 @@ else
     private async Task AddKey()
     {
         if (SelectedKeyId == 0) return;
-
         using var context = await DbFactory.CreateDbContextAsync();
 
-        var assignment = new KeyBunchAssignment
-        {
-            BunchId = BunchId,
-            KeyRecordId = SelectedKeyId,
-            AssignedDate = DateTime.Now
-        };
-
-        // Update Key Status to match Bunch
         var key = await context.Keys.FindAsync(SelectedKeyId);
-        if (key != null) key.Status = "Issued";
-
-        context.KeyBunchAssignments.Add(assignment);
-        await context.SaveChangesAsync();
-        
-        SelectedKeyId = 0;
-        await LoadData();
+        if (key != null)
+        {
+            key.Status = "Issued"; // Key assumes the status of being attached to a bunch
+            context.KeyBunchAssignments.Add(new KeyBunchAssignment { BunchId = BunchId, KeyRecordId = SelectedKeyId, AssignedDate = DateTime.Now });
+            await context.SaveChangesAsync();
+        }
+        SelectedKeyId = 0; await LoadData();
     }
 
-    private async Task RemoveKey(int assignmentId)
+    private void OpenUnlooseModal(KeyBunchAssignment ka)
     {
+        AssignmentToRemove = ka;
+        UnlooseDestination = "Stock";
+        NewHolderName = "";
+        ShowUnlooseModal = true;
+    }
+
+    private async Task ConfirmUnloose()
+    {
+        if (AssignmentToRemove == null || TargetBunch == null) return;
+        
         using var context = await DbFactory.CreateDbContextAsync();
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var staffName = authState.User.Identity?.Name ?? "System";
 
-        var ka = await context.KeyBunchAssignments
-            .Include(a => a.KeyRecord)
-            .FirstOrDefaultAsync(a => a.Id == assignmentId);
-
+        var ka = await context.KeyBunchAssignments.Include(a => a.KeyRecord).FirstOrDefaultAsync(a => a.Id == AssignmentToRemove.Id);
         if (ka != null)
         {
             ka.RemovedDate = DateTime.Now;
-            if (ka.KeyRecord != null) ka.KeyRecord.Status = "In Stock";
-            
+
+            if (ka.KeyRecord != null)
+            {
+                if (UnlooseDestination == "Stock")
+                {
+                    ka.KeyRecord.Status = "In Stock";
+                    ka.KeyRecord.IssuedToName = null;
+                    ka.KeyRecord.IssuedToMemberId = null;
+                }
+                else if (UnlooseDestination == "Holder" && !string.IsNullOrEmpty(TargetBunch.IssuedToName))
+                {
+                    ka.KeyRecord.Status = "Issued";
+                    ka.KeyRecord.IssuedToName = TargetBunch.IssuedToName;
+                    ka.KeyRecord.IssuedToMemberId = TargetBunch.IssuedToMemberId;
+                    
+                    context.CheckoutTransactions.Add(new CheckoutTransaction
+                    {
+                        KeyRecordId = ka.KeyRecord.Id,
+                        IssuedToName = TargetBunch.IssuedToName,
+                        IssuedToMemberId = TargetBunch.IssuedToMemberId,
+                        IssueDate = DateTime.Now,
+                        AuthorizedByUserName = staffName
+                    });
+                }
+                else if (UnlooseDestination == "New" && !string.IsNullOrWhiteSpace(NewHolderName))
+                {
+                    var targetMember = AllMembers.FirstOrDefault(m => m.FullName.Equals(NewHolderName.Trim(), StringComparison.OrdinalIgnoreCase));
+                    
+                    ka.KeyRecord.Status = "Issued";
+                    ka.KeyRecord.IssuedToName = NewHolderName;
+                    ka.KeyRecord.IssuedToMemberId = targetMember?.Id;
+                    
+                    context.CheckoutTransactions.Add(new CheckoutTransaction
+                    {
+                        KeyRecordId = ka.KeyRecord.Id,
+                        IssuedToName = NewHolderName,
+                        IssuedToMemberId = targetMember?.Id,
+                        IssueDate = DateTime.Now,
+                        AuthorizedByUserName = staffName
+                    });
+                }
+            }
             await context.SaveChangesAsync();
         }
 
+        ShowUnlooseModal = false;
         await LoadData();
     }
 }

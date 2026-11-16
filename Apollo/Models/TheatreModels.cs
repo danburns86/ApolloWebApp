@@ -46,7 +46,7 @@ namespace Apollo.Models
         public string? CallPoints { get; set; }
         public string? FireActionNotes { get; set; }
         public string? SpecificAssemblyPoint { get; set; }
-        
+
         public int? MRBSRoomId { get; set; }
         public bool IsPublic { get; set; }
         public bool IsActive { get; set; } = true;
@@ -237,6 +237,7 @@ namespace Apollo.Models
         public DateTime LastChanged { get; set; } = DateTime.Now;
         public string? LocationDetail { get; set; } // e.g., "Panel in Stage Left Wing"
     }
+
     public class InspectionRecord
     {
         [Key]
@@ -349,6 +350,11 @@ namespace Apollo.Models
         public DateTime? LastSeenDate { get; set; }
         public DateTime? LastFormalAuditDate { get; set; }
         public string? IssuedToName { get; set; }
+
+        public int? IssuedToMemberId { get; set; }
+        [ForeignKey("IssuedToMemberId")]
+        public Member? IssuedToMember { get; set; }
+
         public bool IsLostLockout { get; set; } = false;
         public int LockId { get; set; }
         [ForeignKey("LockId")]
@@ -378,6 +384,11 @@ namespace Apollo.Models
         [ForeignKey("StorageLocationId")]
         public StorageLocation? StorageLocation { get; set; }
         public string? IssuedToName { get; set; }
+
+        public int? IssuedToMemberId { get; set; }
+        [ForeignKey("IssuedToMemberId")]
+        public Member? IssuedToMember { get; set; }
+
         public DateTime? IssueDate { get; set; }
         public DateTime? ReturnDate { get; set; }
         public ICollection<KeyBunchAssignment> KeyAssignments { get; set; } = new List<KeyBunchAssignment>();
@@ -471,10 +482,19 @@ namespace Apollo.Models
         public KeyRecord? KeyRecord { get; set; }
         [Required]
         public string IssuedToName { get; set; } = string.Empty;
+
+        public int? IssuedToMemberId { get; set; }
+        [ForeignKey("IssuedToMemberId")]
+        public Member? IssuedToMember { get; set; }
+
         [Required]
         public DateTime IssueDate { get; set; }
         public DateTime? ReturnDate { get; set; }
         public string? AuthorizedByUserName { get; set; }
+
+        public int? AuthorizedByMemberId { get; set; }
+        [ForeignKey("AuthorizedByMemberId")]
+        public Member? AuthorizedByMember { get; set; }
     }
 
     public class AuditCampaign
@@ -511,7 +531,7 @@ namespace Apollo.Models
 
         [Required]
         [StringLength(50)]
-        public string InspectionType { get; set; } = "PAT"; // "PAT", "LOLER", "Visual"
+        public string InspectionType { get; set; } = "PAT";
 
         public DateTime DateTested { get; set; } = DateTime.Now;
         public bool Passed { get; set; } = true;
@@ -528,7 +548,7 @@ namespace Apollo.Models
         public string LastName { get; set; } = string.Empty;
         public string? Email { get; set; }
         public string? MobileNumber { get; set; }
-        public string MembershipStatus { get; set; } = "Active"; // Active, Expired, etc.
+        public string MembershipStatus { get; set; } = "Active";
         public DateTime? ExpiryDate { get; set; }
 
         // Compliance Flags
@@ -537,7 +557,7 @@ namespace Apollo.Models
 
         public bool IsTechTeam { get; set; }
 
-        // Crewing & Technical Skills (Mapped from CSV)
+        // Crewing & Technical Skills
         public bool SkillActing { get; set; }
         public bool SkillDirector { get; set; }
         public bool SkillLXDesign { get; set; }
@@ -552,8 +572,10 @@ namespace Apollo.Models
         public bool SkillBar { get; set; }
 
         public string FullName => $"{FirstName} {LastName}";
-
+        [InverseProperty("Member")]
         public List<ProductionCrew> CrewingHistory { get; set; } = new();
+
+        public bool IsTemporaryPlaceholder { get; set; } = false;
     }
 
     public class ProductionCategory
@@ -561,14 +583,19 @@ namespace Apollo.Models
         public int Id { get; set; }
         public string Name { get; set; } = string.Empty;
         public string IconClass { get; set; } = "bi-star";
-        public bool IsExternal { get; set; } // <--- NEW FLAG
+        public bool IsExternal { get; set; }
+        public int SortOrder { get; set; } = 0;
     }
 
-    // 2. Manageable Event Types (Technical, Dress Rehearsal, etc.)
+    // Manageable Event Types (Technical, Dress Rehearsal, etc.)
     public class ProductionEventType
     {
         public int Id { get; set; }
         public string Name { get; set; } = string.Empty;
+
+        // Default Calendar Target Bools:
+        public bool DefaultToTechSchedule { get; set; } = true;
+        public bool DefaultToRehearsalSchedule { get; set; } = true;
     }
 
     public class Production
@@ -581,6 +608,7 @@ namespace Apollo.Models
         public DateTime StartDate { get; set; }
         public DateTime EndDate { get; set; }
         public string? TicketSourceId { get; set; }
+        public bool IsArchived { get; set; } = false;
 
         // --- LOGISTICS & HIRE ---
         public string? HirerName { get; set; }
@@ -589,7 +617,7 @@ namespace Apollo.Models
         public string? TechRequirements { get; set; }
         public bool OurCrew { get; set; }
 
-        // --- SECURITY (Linking to Members) ---
+        // --- SECURITY ---
         public int? UnlockingMemberId { get; set; }
         public Member? UnlockingMember { get; set; }
         public int? LockingMemberId { get; set; }
@@ -609,55 +637,176 @@ namespace Apollo.Models
         public List<ProductionCrew> CrewAssignments { get; set; } = new();
         public List<ProductionCredit> Credits { get; set; } = new();
         public List<ProductionEvent> Events { get; set; } = new();
+
+        // --- CONTENT WARNINGS ---
+        public bool WarnSmokeHaze { get; set; }
+        public bool WarnFlashingLights { get; set; }
+        public bool WarnGunshotsPyros { get; set; }
+        public bool WarnLoudNoises { get; set; }
+        public bool WarnSexualContent { get; set; }
+        public bool WarnViolenceGore { get; set; }
+        public bool WarnDistressingThemes { get; set; }
+        public bool WarnStageSmoking { get; set; }
+        public bool WarnAudienceInteraction { get; set; }
+
+        // Adult Language: 0 = None, 1 = Infrequent, 2 = Frequent
+        public int WarnAdultLanguageLevel { get; set; } = 0;
+        public string? CustomContentWarnings { get; set; }
     }
 
     public class Performance
     {
         public int Id { get; set; }
         public int ProductionId { get; set; }
-
-        // THIS LINE FIXES YOUR BUILD ERRORS:
         public Production? Production { get; set; }
 
         public DateTime CurtainUp { get; set; }
+        public DateTime? IntervalTime { get; set; } // Explicit interval time
+        public DateTime? EndTime { get; set; }      // Explicit end time
         public string? PerformanceTitle { get; set; }
         public string? ScheduleNotes { get; set; }
         public List<PerformanceCrewOverride> Overrides { get; set; } = new();
     }
+
     public class ProductionRole
     {
         public int Id { get; set; }
         public string Name { get; set; } = string.Empty;
-        public int CategoryId { get; set; } // Which category template this belongs to
+        public int CategoryId { get; set; }
         public ProductionCategory? Category { get; set; }
         public bool IsMandatory { get; set; }
         public int? LinkedKeyBunchId { get; set; }
+        [ForeignKey("LinkedKeyBunchId")]
+        public Bunch? LinkedKeyBunch { get; set; }
+    }
+
+    public class ProductionCast
+    {
+        public int Id { get; set; }
+        public int ProductionId { get; set; }
+        public Production? Production { get; set; }
+
+        public string CharacterName { get; set; } = string.Empty;
+
+        public int? MemberId { get; set; }
+        public Member? Member { get; set; }
+
+        public int? DepMemberId { get; set; }
+        public Member? DepMember { get; set; }
+
+        public string? ExternalName { get; set; }
+        public string? CustomContactNumber { get; set; }
+
+        public string? ScriptNumber { get; set; }
+    }
+
+    public class ContentWarningType
+    {
+        [Key]
+        public int Id { get; set; }
+
+        [Required]
+        public string Name { get; set; } = string.Empty;
+        public string IconClass { get; set; } = "bi-exclamation-triangle";
+
+        public bool ShowOnFoHReport { get; set; } = true;
+        public bool IsEnabled { get; set; } = true;
+        public int SortOrder { get; set; } = 0;
+    }
+
+    public class ProductionContentWarning
+    {
+        [Key]
+        public int Id { get; set; }
+
+        public int ProductionId { get; set; }
+        [ForeignKey("ProductionId")]
+        public Production? Production { get; set; }
+
+        public int WarningTypeId { get; set; }
+        [ForeignKey("WarningTypeId")]
+        public ContentWarningType? WarningType { get; set; }
+
+        public bool IsActiveForShow { get; set; }
+        public string? SpecificNotes { get; set; }
+    }
+
+    public class ProductionUnavailability
+    {
+        [Key]
+        public int Id { get; set; }
+
+        public int ProductionId { get; set; }
+        [ForeignKey("ProductionId")]
+        public Production? Production { get; set; }
+
+        public int MemberId { get; set; }
+        [ForeignKey("MemberId")]
+        public Member? Member { get; set; }
+
+        public DateTime StartDateTime { get; set; }
+        public DateTime EndDateTime { get; set; }
+        public string? Reason { get; set; }
     }
 
     public class ProductionCrew
     {
         public int Id { get; set; }
         public int ProductionId { get; set; }
+        public Production? Production { get; set; }
+
         public int? RoleId { get; set; }
         public ProductionRole? Role { get; set; }
-        public string? CustomRoleName { get; set; } // If RoleId is null
-        public bool IsRequired { get; set; }
+        public string? CustomRoleName { get; set; }
+
         public int? MemberId { get; set; }
         public Member? Member { get; set; }
-        public string? ExternalName { get; set; }
-        public bool IsFullRun { get; set; } = true;
 
-        public Production? Production { get; set; }
+        public int? DepMemberId { get; set; }
+        public Member? DepMember { get; set; }
+
+        public string? ExternalName { get; set; }
+        public string? CustomContactNumber { get; set; }
+        public bool IsRequired { get; set; }
+
+        public string? ScriptNumber { get; set; }
+
+        public bool KeyRequirementResolved { get; set; } = false;
     }
 
     public class ProductionEvent
     {
         public int Id { get; set; }
         public int ProductionId { get; set; }
-        public int EventTypeId { get; set; }
+        public Production? Production { get; set; }
+
+        public int? EventTypeId { get; set; }
         public ProductionEventType? EventType { get; set; }
-        public DateTime EventDate { get; set; }
-        public string? Notes { get; set; }
+
+        public DateTime StartTime { get; set; } = DateTime.Now;
+        public DateTime EndTime { get; set; } = DateTime.Now.AddHours(2);
+
+        public string Location { get; set; } = string.Empty;
+        public string Notes { get; set; } = string.Empty;
+        public string SectionCovered { get; set; } = string.Empty;
+        public string? CharactersRequired { get; set; }
+
+        // Schedule & Report Flags
+        public bool IsTechnicalDate { get; set; }
+        public bool IsCastNotRequired { get; set; }
+        public bool ShowOnSchedule { get; set; } = true;
+    }
+
+    public class ProductionDeadline
+    {
+        public int Id { get; set; }
+        public int ProductionId { get; set; }
+        public Production? Production { get; set; }
+
+        public string Title { get; set; } = string.Empty;
+        public DateTime DueDate { get; set; } = DateTime.Today.AddDays(14);
+        public bool IsCompleted { get; set; }
+        public bool ShowOnSchedule { get; set; } = true;
     }
 
     public class ProductionCredit
@@ -674,22 +823,18 @@ namespace Apollo.Models
         public int Id { get; set; }
         public int PerformanceId { get; set; }
 
-        // Changed to int? to allow nulls for custom roles
         public int? RoleId { get; set; }
         public ProductionRole? Role { get; set; }
 
-        // Added to support one-off role overrides
         public string? CustomRoleName { get; set; }
 
         public int? MemberId { get; set; }
         public Member? Member { get; set; }
         public string? ExternalName { get; set; }
     }
+
     #region HEALTH & SAFETY MODULE
-
     public enum RiskAssessmentType { General, Production, Fire, COSHH }
-
-    // --- INCIDENT LOG ENUMS ---
     public enum IncidentType { Accident, NearMiss, DangerousOccurrence, IllHealth }
     public enum IncidentStatus { Open, UnderInvestigation, Closed }
     public enum IncidentSeverity { NearMiss, Minor, FirstAid, Hospitalization, Major, RIDDOR }
@@ -762,7 +907,6 @@ namespace Apollo.Models
         public int ResidualSeverity { get; set; }
     }
 
-    // RESTORED: Missing class to fix build errors
     public class RiskAssessmentReview
     {
         [Key]
@@ -800,7 +944,6 @@ namespace Apollo.Models
         public string? ApprovedBy { get; set; }
     }
 
-    // RESTORED: Missing class to fix build errors
     public class FireRiskAssessmentDetails
     {
         [Key]
@@ -946,7 +1089,5 @@ namespace Apollo.Models
         public int RAWarningDays { get; set; } = 30;
         public int CoshhWarningDays { get; set; } = 30;
     }
-
     #endregion
-
 }

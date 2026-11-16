@@ -16,8 +16,8 @@
                 <li class="breadcrumb-item active" aria-current="page">Production</li>
               </ol>
             </nav>
-            <h2 class="fw-bold mb-0 text-dark">Production Reporting</h2>
-            <p class="text-muted mb-0">Operational, technical, and marketing exports.</p>
+            <h2 class="fw-bold mb-0 text-dark">Production Reporting Hub</h2>
+            <p class="text-muted mb-0">Operational, technical, compliance, and publicity exports.</p>
         </div>
         <div class="text-end">
             <i class="bi bi-file-earmark-bar-graph fs-1 text-primary opacity-25"></i>
@@ -37,9 +37,17 @@
                     <h6 class="fw-bold mb-1">Bulk Tech Overview</h6>
                     <p class="mb-0 small text-muted">Technical summaries for a date range.</p>
                 </a>
-                <a href="/reports/Production/Rota" class="list-group-item list-group-item-action p-3">
-                    <h6 class="fw-bold mb-1">Crew Rota & Deps</h6>
-                    <p class="mb-0 small text-muted">Master lists vs. nightly stand-ins.</p>
+                <a href="/reports/Production/CrewRota" class="list-group-item list-group-item-action p-3">
+                    <h6 class="fw-bold mb-1">Crew Rota & Swaps</h6>
+                    <p class="mb-0 small text-muted">Master lists vs. night-by-night stand-ins.</p>
+                </a>
+                <a href="/reports/Production/MyAssignments" class="list-group-item list-group-item-action p-3 border-start-info">
+                    <h6 class="fw-bold mb-1 text-info">My Personal Schedule</h6>
+                    <p class="mb-0 small text-muted">Individual crew/cast schedule sheet.</p>
+                </a>
+                <a href="/reports/Production/Scripts" class="list-group-item list-group-item-action p-3">
+                    <h6 class="fw-bold mb-1">Script Allocation Log</h6>
+                    <p class="mb-0 small text-muted">Track numbered scripts across cast/crew.</p>
                 </a>
                 <a href="/reports/Production/KeyIssueLog" class="list-group-item list-group-item-action p-3 bg-light-subtle">
                     <h6 class="fw-bold mb-1 text-primary">Key Issue Log</h6>
@@ -52,40 +60,33 @@
         <div class="col-md-4">
             <h6 class="fw-bold mb-3 text-uppercase small text-muted"><i class="bi bi-person-badge me-2"></i>FOH & Marketing</h6>
             <div class="list-group shadow-sm border-0">
-                <a href="/reports/Production/FOHBriefing" class="list-group-item list-group-item-action p-3 border-start-info">
+                <a href="/reports/Production/FoHBriefing" class="list-group-item list-group-item-action p-3 border-start-info">
                     <h6 class="fw-bold mb-1 text-info">FOH Briefing Sheet</h6>
-                    <p class="mb-0 small text-muted">Times, duration, and content warnings for Bar/Ushers.</p>
+                    <p class="mb-0 small text-muted">Timings, duration, warning grid & understudy exceptions.</p>
                 </a>
-                <a href="/reports/Production/Programme" class="list-group-item list-group-item-action p-3">
+                <a href="/reports/Production/ProgrammeExport" class="list-group-item list-group-item-action p-3">
                     <h6 class="fw-bold mb-1">Programme Export</h6>
-                    <p class="mb-0 small text-muted">Clean text list of credits for designers.</p>
+                    <p class="mb-0 small text-muted">Clean Word copy of credits for programme printing.</p>
                 </a>
             </div>
         </div>
 
         @* --- 3. MANAGEMENT & OVERSIGHT --- *@
         <div class="col-md-4">
-            <h6 class="fw-bold mb-3 text-uppercase small text-muted"><i class="bi bi-clipboard-data me-2"></i>Management</h6>
+            <h6 class="fw-bold mb-3 text-uppercase small text-muted"><i class="bi bi-clipboard-data me-2"></i>Management & Personnel</h6>
             <div class="list-group shadow-sm border-0">
                 <a href="/reports/Production/SeasonView" class="list-group-item list-group-item-action p-3">
                     <h6 class="fw-bold mb-1">Season Overview</h6>
                     <p class="mb-0 small text-muted">Combined headline list and crewing status.</p>
                 </a>
                 <a href="/reports/Production/Gaps" class="list-group-item list-group-item-action p-3 border-start-danger">
-                    <h6 class="fw-bold mb-1 text-danger">Gaps Report</h6>
+                    <h6 class="fw-bold mb-1 text-danger">Crew Gaps Report</h6>
                     <p class="mb-0 small text-muted">Identify uncrewed 'Required' roles.</p>
                 </a>
-            </div>
-        </div>
-    </div>
-
-    @* --- ROADMAP PREVIEW --- *@
-    <div class="mt-5 p-4 bg-light rounded-3 border border-dashed border-primary">
-        <div class="d-flex align-items-center">
-            <i class="bi bi-shield-lock-fill fs-3 text-primary me-3"></i>
-            <div>
-                <h6 class="fw-bold mb-0">Upcoming: Personnel Compliance Module</h6>
-                <p class="mb-0 small text-muted">Tracking DBS, Personal Licences, First Aid, and Training Expiry logs.</p>
+                <a href="/reports/Production/NonMemberCast" class="list-group-item list-group-item-action p-3 border-start-danger">
+                    <h6 class="fw-bold mb-1 text-warning">Non-Member Cast Roster</h6>
+                    <p class="mb-0 small text-muted">Identify unlinked actors & reconcile MemberMojo records.</p>
+                </a>
             </div>
         </div>
     </div>

@@ -308,6 +308,9 @@ namespace Apollo.Migrations
                     b.Property<DateTime?>("IssueDate")
                         .HasColumnType("datetime2");
 
+                    b.Property<int?>("IssuedToMemberId")
+                        .HasColumnType("int");
+
                     b.Property<string>("IssuedToName")
                         .HasColumnType("nvarchar(max)");
 
@@ -326,6 +329,8 @@ namespace Apollo.Migrations
 
                     b.HasIndex("DepartmentId");
 
+                    b.HasIndex("IssuedToMemberId");
+
                     b.HasIndex("StorageLocationId");
 
                     b.ToTable("Bunches");
@@ -339,6 +344,9 @@ namespace Apollo.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
+                    b.Property<int?>("AuthorizedByMemberId")
+                        .HasColumnType("int");
+
                     b.Property<string>("AuthorizedByUserName")
                         .HasColumnType("nvarchar(max)");
 
@@ -347,6 +355,9 @@ namespace Apollo.Migrations
 
                     b.Property<DateTime>("IssueDate")
                         .HasColumnType("datetime2");
+
+                    b.Property<int?>("IssuedToMemberId")
+                        .HasColumnType("int");
 
                     b.Property<string>("IssuedToName")
                         .IsRequired()
@@ -360,7 +371,11 @@ namespace Apollo.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("AuthorizedByMemberId");
+
                     b.HasIndex("BunchId");
+
+                    b.HasIndex("IssuedToMemberId");
 
                     b.HasIndex("KeyRecordId");
 
@@ -396,6 +411,36 @@ namespace Apollo.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("ComplianceConfigurations");
+                });
+
+            modelBuilder.Entity("Apollo.Models.ContentWarningType", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("IconClass")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<bool>("IsEnabled")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<bool>("ShowOnFoHReport")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("ContentWarningTypes");
                 });
 
             modelBuilder.Entity("Apollo.Models.ContractorRAMS", b =>
@@ -1011,6 +1056,9 @@ namespace Apollo.Migrations
                     b.Property<bool>("IsLostLockout")
                         .HasColumnType("bit");
 
+                    b.Property<int?>("IssuedToMemberId")
+                        .HasColumnType("int");
+
                     b.Property<string>("IssuedToName")
                         .HasColumnType("nvarchar(max)");
 
@@ -1038,6 +1086,8 @@ namespace Apollo.Migrations
                         .HasColumnType("int");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("IssuedToMemberId");
 
                     b.HasIndex("LastAuditCampaignId");
 
@@ -1200,6 +1250,9 @@ namespace Apollo.Migrations
                     b.Property<bool>("IsTechTeam")
                         .HasColumnType("bit");
 
+                    b.Property<bool>("IsTemporaryPlaceholder")
+                        .HasColumnType("bit");
+
                     b.Property<string>("LastName")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
@@ -1265,6 +1318,12 @@ namespace Apollo.Migrations
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
                     b.Property<DateTime>("CurtainUp")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("EndTime")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("IntervalTime")
                         .HasColumnType("datetime2");
 
                     b.Property<string>("PerformanceTitle")
@@ -1400,6 +1459,9 @@ namespace Apollo.Migrations
                     b.Property<string>("ContentWarnings")
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<string>("CustomContentWarnings")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<string>("DriveLink")
                         .HasColumnType("nvarchar(max)");
 
@@ -1420,6 +1482,9 @@ namespace Apollo.Migrations
 
                     b.Property<int>("IntervalMinutes")
                         .HasColumnType("int");
+
+                    b.Property<bool>("IsArchived")
+                        .HasColumnType("bit");
 
                     b.Property<int?>("LockingMemberId")
                         .HasColumnType("int");
@@ -1446,6 +1511,36 @@ namespace Apollo.Migrations
                     b.Property<int?>("UnlockingMemberId")
                         .HasColumnType("int");
 
+                    b.Property<int>("WarnAdultLanguageLevel")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("WarnAudienceInteraction")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("WarnDistressingThemes")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("WarnFlashingLights")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("WarnGunshotsPyros")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("WarnLoudNoises")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("WarnSexualContent")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("WarnSmokeHaze")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("WarnStageSmoking")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("WarnViolenceGore")
+                        .HasColumnType("bit");
+
                     b.HasKey("Id");
 
                     b.HasIndex("CategoryId");
@@ -1455,6 +1550,47 @@ namespace Apollo.Migrations
                     b.HasIndex("UnlockingMemberId");
 
                     b.ToTable("Productions");
+                });
+
+            modelBuilder.Entity("Apollo.Models.ProductionCast", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("CharacterName")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("CustomContactNumber")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int?>("DepMemberId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("ExternalName")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int?>("MemberId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("ProductionId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("ScriptNumber")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DepMemberId");
+
+                    b.HasIndex("MemberId");
+
+                    b.HasIndex("ProductionId");
+
+                    b.ToTable("ProductionCasts");
                 });
 
             modelBuilder.Entity("Apollo.Models.ProductionCategory", b =>
@@ -1476,9 +1612,41 @@ namespace Apollo.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("int");
+
                     b.HasKey("Id");
 
                     b.ToTable("ProductionCategories");
+                });
+
+            modelBuilder.Entity("Apollo.Models.ProductionContentWarning", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("IsActiveForShow")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("ProductionId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("SpecificNotes")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("WarningTypeId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProductionId");
+
+                    b.HasIndex("WarningTypeId");
+
+                    b.ToTable("ProductionContentWarnings");
                 });
 
             modelBuilder.Entity("Apollo.Models.ProductionCredit", b =>
@@ -1518,16 +1686,22 @@ namespace Apollo.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
+                    b.Property<string>("CustomContactNumber")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<string>("CustomRoleName")
                         .HasColumnType("nvarchar(max)");
+
+                    b.Property<int?>("DepMemberId")
+                        .HasColumnType("int");
 
                     b.Property<string>("ExternalName")
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<bool>("IsFullRun")
+                    b.Property<bool>("IsRequired")
                         .HasColumnType("bit");
 
-                    b.Property<bool>("IsRequired")
+                    b.Property<bool>("KeyRequirementResolved")
                         .HasColumnType("bit");
 
                     b.Property<int?>("MemberId")
@@ -1539,7 +1713,12 @@ namespace Apollo.Migrations
                     b.Property<int?>("RoleId")
                         .HasColumnType("int");
 
+                    b.Property<string>("ScriptNumber")
+                        .HasColumnType("nvarchar(max)");
+
                     b.HasKey("Id");
+
+                    b.HasIndex("DepMemberId");
 
                     b.HasIndex("MemberId");
 
@@ -1550,6 +1729,37 @@ namespace Apollo.Migrations
                     b.ToTable("ProductionCrews");
                 });
 
+            modelBuilder.Entity("Apollo.Models.ProductionDeadline", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("DueDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<bool>("IsCompleted")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("ProductionId")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("ShowOnSchedule")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProductionId");
+
+                    b.ToTable("ProductionDeadlines");
+                });
+
             modelBuilder.Entity("Apollo.Models.ProductionEvent", b =>
                 {
                     b.Property<int>("Id")
@@ -1558,17 +1768,41 @@ namespace Apollo.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
-                    b.Property<DateTime>("EventDate")
+                    b.Property<string>("CharactersRequired")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime>("EndTime")
                         .HasColumnType("datetime2");
 
-                    b.Property<int>("EventTypeId")
+                    b.Property<int?>("EventTypeId")
                         .HasColumnType("int");
 
+                    b.Property<bool>("IsCastNotRequired")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsTechnicalDate")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Location")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<string>("Notes")
+                        .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<int>("ProductionId")
                         .HasColumnType("int");
+
+                    b.Property<string>("SectionCovered")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<bool>("ShowOnSchedule")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime>("StartTime")
+                        .HasColumnType("datetime2");
 
                     b.HasKey("Id");
 
@@ -1586,6 +1820,12 @@ namespace Apollo.Migrations
                         .HasColumnType("int");
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("DefaultToRehearsalSchedule")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("DefaultToTechSchedule")
+                        .HasColumnType("bit");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -1621,7 +1861,41 @@ namespace Apollo.Migrations
 
                     b.HasIndex("CategoryId");
 
+                    b.HasIndex("LinkedKeyBunchId");
+
                     b.ToTable("ProductionRoles");
+                });
+
+            modelBuilder.Entity("Apollo.Models.ProductionUnavailability", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("EndDateTime")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("MemberId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("ProductionId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Reason")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime>("StartDateTime")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MemberId");
+
+                    b.HasIndex("ProductionId");
+
+                    b.ToTable("ProductionUnavailabilities");
                 });
 
             modelBuilder.Entity("Apollo.Models.RAHazard", b =>
@@ -2186,26 +2460,44 @@ namespace Apollo.Migrations
                         .WithMany()
                         .HasForeignKey("DepartmentId");
 
+                    b.HasOne("Apollo.Models.Member", "IssuedToMember")
+                        .WithMany()
+                        .HasForeignKey("IssuedToMemberId");
+
                     b.HasOne("Apollo.Models.StorageLocation", "StorageLocation")
                         .WithMany()
                         .HasForeignKey("StorageLocationId");
 
                     b.Navigation("Department");
 
+                    b.Navigation("IssuedToMember");
+
                     b.Navigation("StorageLocation");
                 });
 
             modelBuilder.Entity("Apollo.Models.CheckoutTransaction", b =>
                 {
+                    b.HasOne("Apollo.Models.Member", "AuthorizedByMember")
+                        .WithMany()
+                        .HasForeignKey("AuthorizedByMemberId");
+
                     b.HasOne("Apollo.Models.Bunch", "Bunch")
                         .WithMany()
                         .HasForeignKey("BunchId");
+
+                    b.HasOne("Apollo.Models.Member", "IssuedToMember")
+                        .WithMany()
+                        .HasForeignKey("IssuedToMemberId");
 
                     b.HasOne("Apollo.Models.KeyRecord", "KeyRecord")
                         .WithMany()
                         .HasForeignKey("KeyRecordId");
 
+                    b.Navigation("AuthorizedByMember");
+
                     b.Navigation("Bunch");
+
+                    b.Navigation("IssuedToMember");
 
                     b.Navigation("KeyRecord");
                 });
@@ -2361,6 +2653,10 @@ namespace Apollo.Migrations
 
             modelBuilder.Entity("Apollo.Models.KeyRecord", b =>
                 {
+                    b.HasOne("Apollo.Models.Member", "IssuedToMember")
+                        .WithMany()
+                        .HasForeignKey("IssuedToMemberId");
+
                     b.HasOne("Apollo.Models.AuditCampaign", "LastAuditCampaign")
                         .WithMany()
                         .HasForeignKey("LastAuditCampaignId");
@@ -2374,6 +2670,8 @@ namespace Apollo.Migrations
                     b.HasOne("Apollo.Models.StorageLocation", "StorageLocation")
                         .WithMany()
                         .HasForeignKey("StorageLocationId");
+
+                    b.Navigation("IssuedToMember");
 
                     b.Navigation("LastAuditCampaign");
 
@@ -2476,6 +2774,48 @@ namespace Apollo.Migrations
                     b.Navigation("UnlockingMember");
                 });
 
+            modelBuilder.Entity("Apollo.Models.ProductionCast", b =>
+                {
+                    b.HasOne("Apollo.Models.Member", "DepMember")
+                        .WithMany()
+                        .HasForeignKey("DepMemberId");
+
+                    b.HasOne("Apollo.Models.Member", "Member")
+                        .WithMany()
+                        .HasForeignKey("MemberId");
+
+                    b.HasOne("Apollo.Models.Production", "Production")
+                        .WithMany()
+                        .HasForeignKey("ProductionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("DepMember");
+
+                    b.Navigation("Member");
+
+                    b.Navigation("Production");
+                });
+
+            modelBuilder.Entity("Apollo.Models.ProductionContentWarning", b =>
+                {
+                    b.HasOne("Apollo.Models.Production", "Production")
+                        .WithMany()
+                        .HasForeignKey("ProductionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Apollo.Models.ContentWarningType", "WarningType")
+                        .WithMany()
+                        .HasForeignKey("WarningTypeId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Production");
+
+                    b.Navigation("WarningType");
+                });
+
             modelBuilder.Entity("Apollo.Models.ProductionCredit", b =>
                 {
                     b.HasOne("Apollo.Models.Production", null)
@@ -2487,6 +2827,10 @@ namespace Apollo.Migrations
 
             modelBuilder.Entity("Apollo.Models.ProductionCrew", b =>
                 {
+                    b.HasOne("Apollo.Models.Member", "DepMember")
+                        .WithMany()
+                        .HasForeignKey("DepMemberId");
+
                     b.HasOne("Apollo.Models.Member", "Member")
                         .WithMany("CrewingHistory")
                         .HasForeignKey("MemberId");
@@ -2501,6 +2845,8 @@ namespace Apollo.Migrations
                         .WithMany()
                         .HasForeignKey("RoleId");
 
+                    b.Navigation("DepMember");
+
                     b.Navigation("Member");
 
                     b.Navigation("Production");
@@ -2508,21 +2854,32 @@ namespace Apollo.Migrations
                     b.Navigation("Role");
                 });
 
+            modelBuilder.Entity("Apollo.Models.ProductionDeadline", b =>
+                {
+                    b.HasOne("Apollo.Models.Production", "Production")
+                        .WithMany()
+                        .HasForeignKey("ProductionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Production");
+                });
+
             modelBuilder.Entity("Apollo.Models.ProductionEvent", b =>
                 {
                     b.HasOne("Apollo.Models.ProductionEventType", "EventType")
                         .WithMany()
-                        .HasForeignKey("EventTypeId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .HasForeignKey("EventTypeId");
 
-                    b.HasOne("Apollo.Models.Production", null)
+                    b.HasOne("Apollo.Models.Production", "Production")
                         .WithMany("Events")
                         .HasForeignKey("ProductionId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
                     b.Navigation("EventType");
+
+                    b.Navigation("Production");
                 });
 
             modelBuilder.Entity("Apollo.Models.ProductionRole", b =>
@@ -2533,7 +2890,32 @@ namespace Apollo.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("Apollo.Models.Bunch", "LinkedKeyBunch")
+                        .WithMany()
+                        .HasForeignKey("LinkedKeyBunchId");
+
                     b.Navigation("Category");
+
+                    b.Navigation("LinkedKeyBunch");
+                });
+
+            modelBuilder.Entity("Apollo.Models.ProductionUnavailability", b =>
+                {
+                    b.HasOne("Apollo.Models.Member", "Member")
+                        .WithMany()
+                        .HasForeignKey("MemberId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Apollo.Models.Production", "Production")
+                        .WithMany()
+                        .HasForeignKey("ProductionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Member");
+
+                    b.Navigation("Production");
                 });
 
             modelBuilder.Entity("Apollo.Models.RAHazard", b =>

@@ -341,12 +341,6 @@
         UnusedPrefixes = alphabet.Except(usedLetters).ToList();
     }
 
-    private void SetLockCode(char letter)
-    {
-        NewLock.LockCode = letter.ToString();
-        CodeErrorMessage = null;
-    }
-
     private async Task AddLock()
     {
         CodeErrorMessage = null;
@@ -439,4 +433,6 @@
             await LoadLocks();
         }
     }
+
+    private void SetLockCode(char letter) { NewLock.LockCode = letter.ToString(); CodeErrorMessage = null; StateHasChanged(); }
 }

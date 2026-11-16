@@ -5,26 +5,23 @@
 @attribute [Microsoft.AspNetCore.Authorization.Authorize]
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject IJSRuntime JS
+@rendermode InteractiveServer
 
-<div class="container py-4 max-w-6xl no-print">
+<div class="container py-4 max-w-5xl d-print-none">
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
-            <h2 class="fw-bold mb-0">Tech Crib Sheet</h2>
-            <p class="text-muted">Generate a dedicated technical briefing for a specific production.</p>
+            <h2 class="fw-bold mb-0 text-primary"><i class="bi bi-journal-text me-2"></i>Tech Crib Sheet</h2>
+            <p class="text-muted mb-0">Master operational overview, rider, and access log for a single production.</p>
         </div>
-        <div class="d-flex gap-2">
-            <button class="btn btn-outline-dark" @onclick="Print"><i class="bi bi-printer me-2"></i>Print</button>
-            <button class="btn btn-outline-primary" @onclick="ExportToWord"><i class="bi bi-file-earmark-word me-2"></i>Word</button>
-            <a href="/reports/Production/CribBulk" class="btn btn-secondary">Switch to Bulk View</a>
-        </div>
+        <button class="btn btn-outline-dark fw-bold" @onclick="Print" disabled="@(selectedProd == null)"><i class="bi bi-printer me-2"></i>Print Crib Sheet</button>
     </div>
 
     <div class="card border-0 shadow-sm mb-4 bg-light">
         <div class="card-body">
             <label class="small fw-bold">Select Production</label>
             <select class="form-select form-select-lg" @onchange="OnProductionSelected">
-                <option value="0">-- Choose a Production --</option>
-                @foreach (var p in allProductions)
+                <option value="0">-- Select Production --</option>
+                @foreach (var p in productions)
                 {
                     <option value="@p.Id">@p.Title (@p.StartDate.ToString("MMM yyyy"))</option>
                 }
@@ -35,109 +32,114 @@
 
 @if (selectedProd != null)
 {
-    <div id="reportContent" class="report-paper shadow-lg p-5 mx-auto bg-white mb-5">
-        <div class="d-flex justify-content-between align-items-start border-bottom pb-3 mb-4">
+    <div class="report-paper shadow-sm p-5 mx-auto bg-white mb-5 border border-2">
+        <div class="border-bottom border-dark pb-3 mb-4 d-flex justify-content-between align-items-end">
             <div>
-                <h1 class="fw-bold mb-0">@selectedProd.Title</h1>
-                <h5 class="text-primary">@selectedProd.Category?.Name</h5>
+                <h1 class="fw-bold mb-0 text-uppercase">@selectedProd.Title</h1>
+                <p class="fs-5 text-muted mb-0">Tech & Operational Crib Sheet</p>
             </div>
             <div class="text-end">
-                <div class="fw-bold">@selectedProd.StartDate.ToString("dd MMM") - @selectedProd.EndDate.ToString("dd MMM yyyy")</div>
-                <div class="small text-muted">Generated: @DateTime.Now.ToString("g")</div>
+                <div class="fw-bold fs-6">Run Dates:</div>
+                <div>@selectedProd.StartDate.ToString("dd MMM") - @selectedProd.EndDate.ToString("dd MMM yyyy")</div>
             </div>
         </div>
 
-        @if (selectedProd.Category?.IsExternal == true)
-        {
-            <div class="alert alert-info border-0 rounded-0 mb-4 py-3">
-                <h6 class="fw-bold text-uppercase small mb-2"><i class="bi bi-info-circle me-2"></i>External Hire Details</h6>
-                <div class="row">
-                    <div class="col-4"><strong>Hirer:</strong> @selectedProd.HirerName</div>
-                    <div class="col-4"><strong>Access:</strong> @(selectedProd.AccessTime.HasValue ? selectedProd.AccessTime.Value.ToString("HH:mm") : "TBC")</div>
-                    <div class="col-4"><strong>Our Crew:</strong> @(selectedProd.OurCrew ? "YES" : "NO (Hirer Providing)")</div>
-                </div>
-            </div>
-        }
-
-        <div class="row g-4">
-            <div class="col-12">
-                <h6 class="fw-bold border-bottom pb-1 text-uppercase small">Technical Summary & Requirements</h6>
-                <div class="p-3 bg-light rounded" style="white-space: pre-wrap;">
-                    @(string.IsNullOrWhiteSpace(selectedProd.TechRequirements) ? "No specific technical notes provided." : selectedProd.TechRequirements)
+        <div class="row g-4 mb-4">
+            <!-- LOGISTICS & ACCESS -->
+            <div class="col-md-6">
+                <div class="card h-100 border-dark rounded-0">
+                    <div class="card-header bg-dark text-white fw-bold rounded-0">Access & Keyholders</div>
+                    <div class="card-body small">
+                        <table class="table table-sm table-borderless mb-0">
+                            <tr><td class="fw-bold w-50">Load-In / Access Time:</td><td>@(selectedProd.AccessTime?.ToString("ddd dd MMM - HH:mm") ?? "TBC")</td></tr>
+                            <tr><td class="fw-bold">Unlocking Keyholder:</td><td><span class="badge bg-warning text-dark fs-6">@(selectedProd.UnlockingMember?.FullName ?? "TBC")</span></td></tr>
+                            <tr><td class="fw-bold">Locking Keyholder:</td><td><span class="badge bg-dark fs-6">@(selectedProd.LockingMember?.FullName ?? "TBC")</span></td></tr>
+                            <tr><td class="fw-bold">In-House Crew Provided?</td><td>@(selectedProd.OurCrew ? "YES" : "NO")</td></tr>
+                        </table>
+                    </div>
                 </div>
             </div>
 
+            <!-- HIRER & TIMINGS -->
             <div class="col-md-6">
-                <h6 class="fw-bold border-bottom pb-1 text-uppercase small">Production Team / Crew</h6>
-                <table class="table table-sm small">
-                    <thead><tr><th>Role</th><th>Assignee</th><th>Contact</th></tr></thead>
-                    <tbody>
-                        @foreach (var crew in selectedProd.CrewAssignments)
-                        {
-                            <tr>
-                                <td class="fw-bold">@(crew.Role?.Name ?? crew.CustomRoleName)</td>
-                                <td>@(crew.Member?.FullName ?? crew.ExternalName ?? "VACANT")</td>
-                                <td>
-                                    @if (crew.Member != null)
-                                    {
-                                        <div class="x-small">@crew.Member.Email</div>
-                                        <div class="x-small">@crew.Member.MobileNumber</div>
-                                    }
-                                </td>
-                            </tr>
-                        }
-                    </tbody>
-                </table>
-            </div>
-
-            <div class="col-md-6">
-                <h6 class="fw-bold border-bottom pb-1 text-uppercase small">Schedule & Key Events</h6>
-                <table class="table table-sm small">
-                    <thead><tr><th>Date</th><th>Event</th><th>Note</th></tr></thead>
-                    <tbody>
-                        @foreach (var ev in selectedProd.Events.OrderBy(e => e.EventDate))
-                        {
-                            <tr>
-                                <td>@ev.EventDate.ToString("ddd dd MMM HH:mm")</td>
-                                <td class="fw-bold">@ev.EventType?.Name</td>
-                                <td>@ev.Notes</td>
-                            </tr>
-                        }
-                        @foreach (var perf in selectedProd.Performances.OrderBy(p => p.CurtainUp))
-                        {
-                            <tr class="table-primary">
-                                <td>@perf.CurtainUp.ToString("ddd dd MMM HH:mm")</td>
-                                <td class="fw-bold">SHOW: @perf.PerformanceTitle</td>
-                                <td>@perf.ScheduleNotes</td>
-                            </tr>
-                        }
-                    </tbody>
-                </table>
+                <div class="card h-100 border-dark rounded-0">
+                    <div class="card-header bg-dark text-white fw-bold rounded-0">Hirer & Timings</div>
+                    <div class="card-body small">
+                        <table class="table table-sm table-borderless mb-0">
+                            <tr><td class="fw-bold w-50">Hirer / Company:</td><td>@(selectedProd.HirerName ?? "In-House")</td></tr>
+                            <tr><td class="fw-bold">Hirer Contact:</td><td>@(selectedProd.HirerContact ?? "—")</td></tr>
+                            <tr><td class="fw-bold">Est. Total Run Time:</td><td>@selectedProd.RunningTimeMinutes mins</td></tr>
+                            <tr><td class="fw-bold">Interval Duration:</td><td>@selectedProd.IntervalMinutes mins</td></tr>
+                        </table>
+                    </div>
+                </div>
             </div>
         </div>
 
-        <div class="mt-5 pt-3 border-top small text-muted text-center">
-            Apollo Theatre Management System - Technical Department
+        <!-- TECH RIDER -->
+        <div class="card border-dark rounded-0 mb-4">
+            <div class="card-header bg-dark text-white fw-bold rounded-0">Technical Requirements & Spec Summary</div>
+            <div class="card-body">
+                <p class="mb-0" style="white-space: pre-wrap;">@(string.IsNullOrWhiteSpace(selectedProd.TechRequirements) ? "No technical requirements or rider provided." : selectedProd.TechRequirements)</p>
+            </div>
         </div>
+
+        <!-- FOH NOTES -->
+        <div class="card border-dark rounded-0 mb-4">
+            <div class="card-header bg-dark text-white fw-bold rounded-0">Front of House & Duty Manager Notes</div>
+            <div class="card-body">
+                <p class="mb-0" style="white-space: pre-wrap;">@(string.IsNullOrWhiteSpace(selectedProd.FOHNotes) ? "No specific FOH instructions." : selectedProd.FOHNotes)</p>
+            </div>
+        </div>
+
+        <!-- PERFORMANCE OVERVIEW -->
+        <h6 class="fw-bold border-bottom border-dark pb-1 text-uppercase mt-4 mb-3">Performance Schedule</h6>
+        <table class="table table-sm table-bordered border-dark text-center align-middle mb-4">
+            <thead class="table-light fw-bold">
+                <tr>
+                    <th class="text-start">Date</th>
+                    <th>Curtain Up</th>
+                    <th>Interval Start</th>
+                    <th>Show End</th>
+                    <th>Notes</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var perf in selectedProd.Performances.OrderBy(p => p.CurtainUp))
+                {
+                    <tr>
+                        <td class="text-start fw-bold">@perf.CurtainUp.ToString("ddd dd MMM")</td>
+                        <td>@perf.CurtainUp.ToString("HH:mm")</td>
+                        <td>@(perf.IntervalTime?.ToString("HH:mm") ?? "—")</td>
+                        <td>@(perf.EndTime?.ToString("HH:mm") ?? "—")</td>
+                        <td class="text-muted small">@perf.PerformanceTitle</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
     </div>
 }
 
 <style>
-    .report-paper { max-width: 210mm; min-height: 297mm; font-size: 14px; }
-    .x-small { font-size: 10px; color: #666; }
-    @@media print { .no-print { display: none !important; } .shadow-lg { box-shadow: none !important; } }
+    .report-paper { max-width: 210mm; min-height: 297mm; }
+    @@media print {
+        body * { visibility: hidden; }
+        .report-paper, .report-paper * { visibility: visible; }
+        .report-paper { position: absolute; left: 0; top: 0; width: 100%; border: none !important; box-shadow: none !important; }
+        .d-print-none { display: none !important; }
+        .bg-dark { background-color: #343a40 !important; color: white !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        .bg-warning { background-color: #ffc107 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    }
 </style>
 
 @code {
-    private List<Production> allProductions = new();
+    private List<Production> productions = new();
     private Production? selectedProd;
 
     protected override async Task OnInitializedAsync()
     {
         using var context = await DbFactory.CreateDbContextAsync();
-        allProductions = await context.Productions
-            .OrderByDescending(p => p.StartDate)
-            .ToListAsync();
+        productions = await context.Productions.Where(p => !p.IsArchived).OrderByDescending(p => p.StartDate).ToListAsync();
     }
 
     private async Task OnProductionSelected(ChangeEventArgs e)
@@ -147,30 +149,12 @@
 
         using var context = await DbFactory.CreateDbContextAsync();
         selectedProd = await context.Productions
-            .Include(p => p.Category)
-            .Include(p => p.CrewAssignments).ThenInclude(c => c.Role)
-            .Include(p => p.CrewAssignments).ThenInclude(c => c.Member)
-            .Include(p => p.Events).ThenInclude(ev => ev.EventType)
+            .AsNoTracking()
+            .Include(p => p.UnlockingMember)
+            .Include(p => p.LockingMember)
             .Include(p => p.Performances)
             .FirstOrDefaultAsync(p => p.Id == id);
     }
 
     private async Task Print() => await JS.InvokeVoidAsync("window.print");
-
-private async Task ExportToWord()
-{
-    var filename = $"{(selectedProd?.Title ?? "Production")}_Crib_Sheet.doc";
-    
-    // We use @ and triple-quotes to keep the JavaScript clean for the compiler
-    await JS.InvokeVoidAsync("eval", $@"
-        var header = '<html xmlns:o=""urn:schemas-microsoft-com:office:office"" xmlns:w=""urn:schemas-microsoft-com:office:word"" xmlns=""http://www.w3.org/TR/REC-html40""><head><meta charset=""utf-8""></head><body>';
-        var footer = '</body></html>';
-        var sourceHTML = header + document.getElementById('reportContent').innerHTML + footer;
-        var source = 'data:application/vnd.ms-word;charset=utf-8,' + encodeURIComponent(sourceHTML);
-        var fileLink = document.createElement('a');
-        fileLink.href = source;
-        fileLink.download = '{filename}';
-        fileLink.click();
-    ");
-}
 }

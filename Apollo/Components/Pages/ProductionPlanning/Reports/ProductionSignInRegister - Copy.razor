@@ -1,0 +1,212 @@
+﻿@page "/admin/production/signinv0/{id:int}"
+@using Apollo.Models
+@using Apollo.Data
+@using Microsoft.EntityFrameworkCore
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@inject IDbContextFactory<ApplicationDbContext> DbFactory
+@inject IJSRuntime JS
+@rendermode InteractiveServer
+
+<PageTitle>Sign-In & Call Sheet - @(prod?.Title ?? "Loading...")</PageTitle>
+
+<div class="container-fluid py-4 max-w-7xl d-print-none">
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-3">
+        <div>
+            <a href="@($"/admin/production/hub/{id}")" class="text-decoration-none small text-muted">
+                <i class="bi bi-arrow-left"></i> Back to Hub
+            </a>
+            <h2 class="fw-bold mt-1 text-dark mb-0">
+                <i class="bi bi-clipboard-check text-success me-2"></i>Live Register & Call Sheet
+            </h2>
+            <p class="text-muted mb-0">@prod?.Title - @DateTime.Now.ToString("dddd, dd MMMM yyyy")</p>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+            <button class="btn btn-outline-dark fw-bold shadow-sm" @onclick="PrintCallSheet">
+                <i class="bi bi-file-earmark-text me-2"></i>Print Call Sheet
+            </button>
+            <button class="btn btn-danger fw-bold shadow-sm" @onclick="PrintFireRollCall">
+                <i class="bi bi-fire me-2"></i>Print Fire Roll Call
+            </button>
+        </div>
+    </div>
+
+    @if (isLoading)
+    {
+        <div class="text-center py-5"><div class="spinner-border text-success"></div></div>
+    }
+    else
+    {
+        <div class="card shadow-sm border-0 mb-4">
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="bg-light">
+                            <tr>
+                                <th class="ps-4" style="width: 25%;">Primary Assignee</th>
+                                <th style="width: 20%;">Dep / Cover</th>
+                                <th style="width: 20%;">Role / Character</th>
+                                <th style="width: 15%;">Contact</th>
+                                <th style="width: 10%;">Status</th>
+                                <th class="text-end pe-4" style="width: 10%;">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var person in register)
+                            {
+                                <tr class="@(person.IsSignedIn ? "bg-success-subtle" : "")">
+                                    <td class="ps-4 fw-bold fs-6">@person.MainName</td>
+                                    <td>
+                                        @if (!string.IsNullOrEmpty(person.DepName))
+                                        {
+                                            <span class="badge bg-warning text-dark"><i class="bi bi-person-up me-1"></i>@person.DepName</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-muted small">—</span>
+                                        }
+                                    </td>
+                                    <td class="text-muted fw-bold">@person.RoleName</td>
+                                    <td class="text-muted">@(string.IsNullOrEmpty(person.ContactNumber) ? "—" : person.ContactNumber)</td>
+                                    <td>
+                                        @if (person.IsSignedIn)
+                                        {
+                                            <span class="badge bg-success fs-6"><i class="bi bi-check-circle-fill me-1"></i> IN</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-secondary fs-6"><i class="bi bi-dash-circle me-1"></i> OUT</span>
+                                        }
+                                    </td>
+                                    <td class="text-end pe-4">
+                                        <button class="btn btn-sm @(person.IsSignedIn ? "btn-outline-danger" : "btn-success") fw-bold w-100" @onclick="() => ToggleSignIn(person)">
+                                            @(person.IsSignedIn ? "Sign Out" : "Sign In")
+                                        </button>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+<!-- CALL SHEET PRINT VIEW -->
+<div class="d-none d-print-block print-area p-4">
+    <div class="text-center mb-4 border-bottom pb-3">
+        <h1 class="fw-bold">@prod?.Title - CALL SHEET</h1>
+        <p class="mb-0 fs-5">@DateTime.Now.ToString("dddd, dd MMMM yyyy")</p>
+    </div>
+
+    <div class="row mb-4">
+        <div class="col-6">
+            <h5 class="fw-bold border-bottom pb-1">Unlocking / Key Personnel</h5>
+            <p class="mb-1"><strong>Unlocking:</strong> @(prod?.UnlockingMember?.FullName ?? "TBC")</p>
+            <p class="mb-1"><strong>Locking:</strong> @(prod?.LockingMember?.FullName ?? "TBC")</p>
+        </div>
+        <div class="col-6">
+            <h5 class="fw-bold border-bottom pb-1">Show Logistics</h5>
+            <p class="mb-1"><strong>Running Time:</strong> @(prod?.RunningTimeMinutes) mins (Interval: @(prod?.IntervalMinutes) mins)</p>
+            <p class="mb-1"><strong>Warnings:</strong> @(string.IsNullOrEmpty(prod?.ContentWarnings) ? "None" : prod?.ContentWarnings)</p>
+        </div>
+    </div>
+
+    <h5 class="fw-bold border-bottom pb-1 mb-3">Cast & Crew Roster</h5>
+    <table class="table table-bordered table-sm">
+        <thead class="table-dark">
+            <tr>
+                <th>Role / Character</th>
+                <th>Primary Assignee</th>
+                <th>Dep / Cover</th>
+                <th>Contact</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var item in register)
+            {
+                <tr>
+                    <td class="fw-bold">@item.RoleName</td>
+                    <td>@item.MainName</td>
+                    <td>@(string.IsNullOrEmpty(item.DepName) ? "—" : item.DepName)</td>
+                    <td>@item.ContactNumber</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
+
+<style>
+    @@media print {
+        body * { visibility: hidden; }
+        .print-area, .print-area * { visibility: visible; }
+        .print-area { position: absolute; left: 0; top: 0; width: 100%; }
+        .d-print-none { display: none !important; }
+    }
+</style>
+
+@code {
+    [Parameter] public int id { get; set; }
+    private Production? prod;
+    private bool isLoading = true;
+    private List<SignInRecord> register = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        isLoading = true;
+        using var context = await DbFactory.CreateDbContextAsync();
+        
+        prod = await context.Productions
+            .Include(p => p.UnlockingMember)
+            .Include(p => p.LockingMember)
+            .FirstOrDefaultAsync(p => p.Id == id);
+        
+        if (prod != null)
+        {
+            var crew = await context.ProductionCrews
+                .Include(c => c.Role).Include(c => c.Member).Include(c => c.DepMember)
+                .Where(c => c.ProductionId == id).AsNoTracking().ToListAsync();
+
+            foreach (var c in crew)
+            {
+                register.Add(new SignInRecord
+                {
+                    MainName = c.Member?.FullName ?? c.ExternalName ?? "VACANT",
+                    DepName = c.DepMember?.FullName ?? "",
+                    RoleName = c.Role?.Name ?? c.CustomRoleName ?? "Crew",
+                    ContactNumber = !string.IsNullOrEmpty(c.CustomContactNumber) ? c.CustomContactNumber : (c.Member?.MobileNumber ?? "")
+                });
+            }
+
+            var cast = await context.ProductionCasts
+                .Include(c => c.Member).Include(c => c.DepMember)
+                .Where(c => c.ProductionId == id).AsNoTracking().ToListAsync();
+
+            foreach (var c in cast)
+            {
+                register.Add(new SignInRecord
+                {
+                    MainName = c.Member?.FullName ?? c.ExternalName ?? "VACANT",
+                    DepName = c.DepMember?.FullName ?? "",
+                    RoleName = $"Cast: {c.CharacterName}",
+                    ContactNumber = !string.IsNullOrEmpty(c.CustomContactNumber) ? c.CustomContactNumber : (c.Member?.MobileNumber ?? "")
+                });
+            }
+        }
+        
+        isLoading = false;
+    }
+
+    private void ToggleSignIn(SignInRecord r) => r.IsSignedIn = !r.IsSignedIn;
+    private async Task PrintCallSheet() => await JS.InvokeVoidAsync("window.print");
+    private async Task PrintFireRollCall() => await JS.InvokeVoidAsync("window.print");
+
+    public class SignInRecord
+    {
+        public string MainName { get; set; } = string.Empty;
+        public string DepName { get; set; } = string.Empty;
+        public string RoleName { get; set; } = string.Empty;
+        public string ContactNumber { get; set; } = string.Empty;
+        public bool IsSignedIn { get; set; }
+    }
+}

@@ -252,12 +252,9 @@
                     </div>
                 </div>
             </div>
-        </div> 
-        
-    }
+        </div>
     }
 
-    
 @code {
     private List<MaintenanceIssue> allIssues = new();
     private bool isLoading = true;
@@ -268,15 +265,16 @@
 
     // Modal State
     private MaintenanceIssue? selectedIssue;
+    private int selectedIssueId = 0;
     private SnagStatus newStatus;
-    private string editDescription = "";
-    private string? assignedTo = "";
-    private string? contractorName = "";
-    private string? quoteRef = "";
+    private string editDescription = string.Empty;
+    private string? assignedTo = string.Empty;
+    private string? contractorName = string.Empty;
+    private string? quoteRef = string.Empty;
 
     // Parts & Notes State
-    private string newNoteText = "";
-    private string newPartName = "";
+    private string newNoteText = string.Empty;
+    private string newPartName = string.Empty;
     private int newPartQty = 1;
     private bool newPartInStock = false;
 
@@ -299,26 +297,31 @@
     private void OpenModal(MaintenanceIssue issue)
     {
         selectedIssue = issue;
+        selectedIssueId = issue.Id;
         newStatus = issue.Status;
-        editDescription = issue.Description;
-        assignedTo = issue.AssignedTo;
-        contractorName = issue.ContractorCompany;
-        quoteRef = issue.QuoteReference;
+        editDescription = issue.Description ?? string.Empty;
+        assignedTo = issue.AssignedTo ?? string.Empty;
+        contractorName = issue.ContractorCompany ?? string.Empty;
+        quoteRef = issue.QuoteReference ?? string.Empty;
         
         // Reset inputs
-        newNoteText = "";
-        newPartName = "";
+        newNoteText = string.Empty;
+        newPartName = string.Empty;
         newPartQty = 1;
         newPartInStock = false;
     }
 
-    private void CloseModal() => selectedIssue = null;
+    private void CloseModal()
+    {
+        selectedIssue = null;
+        selectedIssueId = 0;
+    }
 
     private async Task SaveUpdate()
     {
-        if (selectedIssue != null)
+        if (selectedIssueId > 0)
         {
-            await MaintenanceService.UpdateSnagStatus(selectedIssue.Id, newStatus, null, assignedTo, contractorName, quoteRef, editDescription);
+            await MaintenanceService.UpdateSnagStatus(selectedIssueId, newStatus, null, assignedTo, contractorName, quoteRef, editDescription);
             await LoadData();
             CloseModal();
         }
@@ -326,10 +329,10 @@
 
     private async Task AddNote()
     {
-        if (selectedIssue != null && !string.IsNullOrWhiteSpace(newNoteText))
+        if (selectedIssueId > 0 && !string.IsNullOrWhiteSpace(newNoteText))
         {
-            await MaintenanceService.AddNoteAsync(selectedIssue.Id, newNoteText);
-            newNoteText = "";
+            await MaintenanceService.AddNoteAsync(selectedIssueId, newNoteText);
+            newNoteText = string.Empty;
             await RefreshSelectedIssue();
         }
     }
@@ -341,10 +344,10 @@
 
     private async Task AddPart()
     {
-        if (selectedIssue != null && !string.IsNullOrWhiteSpace(newPartName))
+        if (selectedIssueId > 0 && !string.IsNullOrWhiteSpace(newPartName))
         {
-            await MaintenanceService.AddPartAsync(selectedIssue.Id, newPartName, newPartQty, newPartInStock);
-            newPartName = "";
+            await MaintenanceService.AddPartAsync(selectedIssueId, newPartName, newPartQty, newPartInStock);
+            newPartName = string.Empty;
             newPartQty = 1;
             await RefreshSelectedIssue();
         }
@@ -352,13 +355,11 @@
 
     private async Task TogglePartStatus(MaintenancePart part)
     {
-        // Simple cycle: Needs Ordering -> Ordered -> In Stock -> Needs Ordering
         bool inStock = false;
         bool isOrdered = false;
 
         if (part.NeedsOrdering) { isOrdered = true; } // Move to Ordered
         else if (part.IsOrdered) { inStock = true; }  // Move to In Stock
-        // Else it goes back to NeedsOrdering (both false)
 
         await MaintenanceService.TogglePartStatusAsync(part.Id, inStock, isOrdered);
         await RefreshSelectedIssue();
@@ -366,9 +367,11 @@
 
     private async Task RefreshSelectedIssue()
     {
-        // Reload data to get updated lists, then re-attach the selected issue
         await LoadData();
-        selectedIssue = allIssues.FirstOrDefault(i => i.Id == selectedIssue?.Id);
+        if (selectedIssueId > 0)
+        {
+            selectedIssue = allIssues.FirstOrDefault(i => i.Id == selectedIssueId);
+        }
     }
 
     // Visual Helpers

@@ -76,13 +76,20 @@ namespace Apollo.Data
         public DbSet<ProductionCategory> ProductionCategories { get; set; }
         public DbSet<ProductionRole> ProductionRoles { get; set; }
         public DbSet<ProductionCrew> ProductionCrews { get; set; }
+        public DbSet<ProductionCast> ProductionCasts => Set<ProductionCast>();
 
         // Production Hub - Scheduling & Credits
         public DbSet<ProductionEventType> ProductionEventTypes { get; set; }
-        public DbSet<ProductionEvent> ProductionEvents { get; set; }
         public DbSet<ProductionCredit> ProductionCredits { get; set; }
 
+        public DbSet<ProductionEvent> ProductionEvents => Set<ProductionEvent>();
+        public DbSet<ProductionDeadline> ProductionDeadlines => Set<ProductionDeadline>();
+
         public DbSet<Performance> Performances { get; set; }
+
+        public DbSet<ProductionUnavailability> ProductionUnavailabilities { get; set; }
+        public DbSet<ContentWarningType> ContentWarningTypes { get; set; }
+        public DbSet<ProductionContentWarning> ProductionContentWarnings { get; set; }
 
         public DbSet<PerformanceCrewOverride> PerformanceCrewOverrides { get; set; }
 

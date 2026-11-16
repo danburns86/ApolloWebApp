@@ -5,10 +5,10 @@
 @inject IDbContextFactory<ApplicationDbContext> DbFactory
 @inject IJSRuntime JS
 
-<PageTitle>Lost & Found Report</PageTitle>
+<PageTitle>Lost & Damaged Report</PageTitle>
 
 <div class="d-flex justify-content-between align-items-center mb-3 d-print-none">
-    <h3>Lost & Found Registry</h3>
+    <h3>Lost & Damaged Registry</h3>
     <div>
         <button class="btn btn-outline-primary me-2" @onclick="ExportToCsv"><i class="bi bi-file-earmark-excel"></i> Export CSV</button>
         <button class="btn btn-outline-dark" onclick="window.print()"><i class="bi bi-printer"></i> Print PDF</button>
@@ -19,7 +19,7 @@
     <div class="col-12">
         <div class="card shadow-sm border-danger">
             <div class="card-header bg-danger text-white fw-bold">
-                <i class="bi bi-exclamation-octagon-fill me-2"></i> Currently Missing Inventory
+                <i class="bi bi-exclamation-octagon-fill me-2"></i> Currently Missing or Damaged Inventory
             </div>
             <div class="card-body p-0 table-responsive">
                 <table class="table table-hover align-middle mb-0">
@@ -27,6 +27,7 @@
                         <tr>
                             <th class="ps-3">Item ID</th>
                             <th>Description</th>
+                            <th>Status</th>
                             <th>Last Known Holder</th>
                             <th>Lock Name</th>
                         </tr>
@@ -34,7 +35,7 @@
                     <tbody>
                         @if (!MissingItems.Any())
                         {
-                            <tr><td colspan="4" class="text-center py-4 text-muted">Hooray! No items are currently marked as lost.</td></tr>
+                            <tr><td colspan="5" class="text-center py-4 text-muted">Hooray! No items are currently marked as lost or damaged.</td></tr>
                         }
                         @foreach (var item in MissingItems)
                         {
@@ -43,6 +44,9 @@
                                 <td>
                                     <span class="badge @(item.IsBunch ? "bg-dark" : "bg-secondary")">@(item.IsBunch ? "Bunch" : "Key")</span>
                                     <span class="ms-1">@item.Name</span>
+                                </td>
+                                <td>
+                                    <span class="badge @(item.Status == "Damaged" ? "bg-warning text-dark" : "bg-danger")">@item.Status</span>
                                 </td>
                                 <td class="text-primary fw-bold">@item.LastHolder</td>
                                 <td class="small text-muted">@item.LockName</td>
@@ -54,6 +58,7 @@
         </div>
     </div>
 
+    <!-- RECOVERY HISTORY HTML REMAINS UNCHANGED -->
     <div class="col-12 d-print-none">
         <div class="card shadow-sm border-success">
             <div class="card-header bg-success text-white fw-bold">
@@ -74,7 +79,7 @@
                             <tr>
                                 <td class="ps-3 fw-bold">@log.ItemDetails</td>
                                 <td>@log.Date.ToString("dd/MM/yy HH:mm")</td>
-                                <td class="small">Marked "Found" and returned to stock.</td>
+                                <td class="small">Marked "Found/Repaired" and returned to stock.</td>
                             </tr>
                         }
                     </tbody>
@@ -90,6 +95,7 @@
         public string Code { get; set; } = "";
         public string Name { get; set; } = "";
         public bool IsBunch { get; set; }
+        public string Status { get; set; } = "";
         public string LastHolder { get; set; } = "Unknown";
         public string LockName { get; set; } = "-";
     }
@@ -110,24 +116,15 @@
         using var context = await DbFactory.CreateDbContextAsync();
         MissingItems.Clear();
 
-        // 1. Missing Bunches
-        var lostBunches = await context.Bunches
-            .AsNoTracking()
-            .Where(b => b.IsActive && b.IsLost)
-            .ToListAsync();
-
+        // Bunches are usually just 'Lost' (no damaged flag on the Bunch object itself)
+        var lostBunches = await context.Bunches.AsNoTracking().Where(b => b.IsActive && b.IsLost).ToListAsync();
         foreach (var b in lostBunches)
         {
-            MissingItems.Add(new MissingItemDto { Code = "BUNCH", Name = b.Name, IsBunch = true, LastHolder = b.IssuedToName ?? "In Stock" });
+            MissingItems.Add(new MissingItemDto { Code = "BUNCH", Name = b.Name, IsBunch = true, Status = "Lost", LastHolder = b.IssuedToName ?? "In Stock" });
         }
 
-        // 2. Missing Keys
-        var lostKeys = await context.Keys
-            .AsNoTracking()
-            .Include(k => k.Lock)
-            .Where(k => k.Status == "Lost")
-            .ToListAsync();
-
+        // Keys can be Lost OR Damaged
+        var lostKeys = await context.Keys.AsNoTracking().Include(k => k.Lock).Where(k => k.Status == "Lost" || k.Status == "Damaged").ToListAsync();
         foreach (var k in lostKeys)
         {
             MissingItems.Add(new MissingItemDto
@@ -135,12 +132,12 @@
                 Code = $"{k.Lock!.LockCode} {k.SequenceNumber}",
                 Name = "Single Key",
                 IsBunch = false,
+                Status = k.Status,
                 LastHolder = k.IssuedToName ?? "In Stock",
                 LockName = k.Lock.Name
             });
         }
 
-        // 3. Recovery History (Fixed Join)
         var transactions = await context.CheckoutTransactions
             .AsNoTracking()
             .Include(t => t.Bunch)
@@ -152,8 +149,7 @@
 
         RecoveryLogs = transactions.Select(t => new RecoveryLogDto
         {
-            ItemDetails = t.Bunch != null ? t.Bunch.Name :
-                          (t.KeyRecord != null ? $"{t.KeyRecord.Lock!.LockCode} {t.KeyRecord.SequenceNumber}" : "Unknown"),
+            ItemDetails = t.Bunch != null ? t.Bunch.Name : (t.KeyRecord != null ? $"{t.KeyRecord.Lock!.LockCode} {t.KeyRecord.SequenceNumber}" : "Unknown"),
             Date = t.ReturnDate!.Value
         }).ToList();
     }
@@ -161,11 +157,11 @@
     private async Task ExportToCsv()
     {
         var sb = new System.Text.StringBuilder();
-        sb.AppendLine("CODE,TYPE,DESCRIPTION,LAST HOLDER,LOCK NAME");
-        foreach (var i in MissingItems) sb.AppendLine($"{i.Code},{(i.IsBunch ? "Bunch" : "Key")},\"{i.Name}\",\"{i.LastHolder}\",\"{i.LockName}\"");
+        sb.AppendLine("CODE,TYPE,DESCRIPTION,STATUS,LAST HOLDER,LOCK NAME");
+        foreach (var i in MissingItems) sb.AppendLine($"{i.Code},{(i.IsBunch ? "Bunch" : "Key")},\"{i.Name}\",\"{i.Status}\",\"{i.LastHolder}\",\"{i.LockName}\"");
         
         var fileBytes = System.Text.Encoding.UTF8.GetBytes(sb.ToString());
         using var streamRef = new DotNetStreamReference(new System.IO.MemoryStream(fileBytes));
-        await JS.InvokeVoidAsync("downloadFileFromStream", $"LostFound_{DateTime.Now:yyyyMMdd}.csv", streamRef);
+        await JS.InvokeVoidAsync("downloadFileFromStream", $"LostDamaged_{DateTime.Now:yyyyMMdd}.csv", streamRef);
     }
 }
